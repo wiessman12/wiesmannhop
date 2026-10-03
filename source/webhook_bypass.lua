@@ -113,6 +113,29 @@ local function teleportTo(target, offset)
     hrp.CFrame = CFrame.new(targetPart.Position + offset)
 end
 
+-- ====== ЭМУЛЯЦИЯ НАЖАТИЯ E ======
+local function pressE()
+    pcall(function()
+        local VirtualInputManager = game:GetService("VirtualInputManager")
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+        task.wait(0.1)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+    end)
+    pcall(function()
+        if keypress then
+            keypress(0x45)
+            task.wait(0.1)
+            keyrelease(0x45)
+        end
+    end)
+
+    pcall(function()
+        local VirtualUser = game:GetService("VirtualUser")
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton1(Vector2.new(0, 0))
+    end)
+end
+
 -- ====== МАНСИНГ ХОДЬБОЙ ======
 local function startWalkingMansing(bee)
     local char = player.Character
@@ -125,7 +148,8 @@ local function startWalkingMansing(bee)
     task.spawn(function()
         local angle = 0
         local radius = 15
-            while running do
+
+        while running do
             if not player.Character then break end
             local currentHumanoid = player.Character:FindFirstChildOfClass("Humanoid")
             if not currentHumanoid or currentHumanoid.Health <= 0 then break end
@@ -160,18 +184,39 @@ end
 local function huntViciousBee()
     local bee = findViciousBee()
     if not bee then
+        collectgarbage("collect")
         hopToRandomServer()
         return
     end
 
-    -- === НОВОЕ: ищем улей и телепортируемся к нему ===
+    -- Ищем улей
     local hive = findFreeHive()
     if hive then
-        print("[Hunt] Идём на улей:", hive.Name)
-        teleportTo(hive, Vector3.new(0, 5, 0))
-        task.wait(2) -- ждём, чтобы игра засчитала улей
+        local platform = hive:FindFirstChild("Platform")
+        if platform then
+            print("[Hunt] Занятие улья:", hive.Name)
+            teleportTo(platform, Vector3.new(0, 5, 0))
+            task.wait(2)
+
+            print("[Hunt] Нажимаем E...")
+            pressE()
+            task.wait(2)
+
+            local ownerName = hive.Gui.Display.Frame:FindFirstChild("OwnerName")
+            if ownerName and ownerName.Text == player.Name then
+                print("[Hunt] ✅ Улей занят:", hive.Name)
+            else
+                print("[Hunt] ⚠️ Улей не засчитан")
+                pressE()
+                task.wait(2)
+            end
+        else
+            teleportTo(hive, Vector3.new(0, 5, 0))
+            task.wait(2)
+            pressE()
+            task.wait(2)
+        end
     end
-    -- === КОНЕЦ НОВОГО ===
 
     -- Телепорт к пчеле
     teleportTo(bee, Vector3.new(0, 5, 15))
@@ -182,6 +227,7 @@ local function huntViciousBee()
     task.wait(25)
     if stopMansing then stopMansing() end
 
+    collectgarbage("collect")
     hopToRandomServer()
 end
 
@@ -194,4 +240,4 @@ task.spawn(function()
     end
 end)
 
-print("[Vicious Bee Hunter] Запущен. С поиском улья. Таймер: 25с.")
+print("[Vicious Bee Hunter] Запущен. Таймер: 25с.")
