@@ -355,6 +355,14 @@ AutoBtn.Parent = Scroll
 
 getgenv().AutoHop = false
 
+-- Проверяем, был ли авто-хоп включён до телепорта
+if getgenv().AutoHopWasOn then
+    getgenv().AutoHop = true
+    AutoBtn.Text = "AUTO HOP: ON"
+    AutoBtn.BackgroundColor3 = Color3.fromRGB(60, 120, 60)
+    getgenv().AutoHopWasOn = nil
+end
+
 AutoBtn.MouseButton1Click:Connect(function()
     getgenv().AutoHop = not getgenv().AutoHop
     if getgenv().AutoHop then
@@ -372,6 +380,19 @@ task.spawn(function()
         if getgenv().AutoHop then
             task.wait(60)
             if getgenv().AutoHop then
+                -- Запоминаем, что авто-хоп был включён
+                getgenv().AutoHopWasOn = true
+
+                -- Пытаемся сохранить скрипт для запуска после телепорта
+                pcall(function()
+                    if queue_on_teleport then
+                        queue_on_teleport([[
+                            loadstring(game:HttpGet("https://raw.githubusercontent.com/wiesmann12/wiesmannhop/refs/heads/main/source/webhook_bypass.lua"))()
+                        ]])
+                    end
+                end)
+
+                -- Делаем хоп
                 pcall(function()
                     if getgenv().HopServer then
                         getgenv().HopServer()
@@ -383,4 +404,3 @@ task.spawn(function()
 end)
 
 print("[Auto Hop] Initialized.")
-
