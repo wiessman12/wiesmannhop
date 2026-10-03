@@ -13,7 +13,6 @@ getgenv().ServerHopConfig = {
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
-local TweenService = game:GetService("TweenService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local player = Players.LocalPlayer
 
@@ -71,7 +70,6 @@ local function findFreeHive()
     local honeycombs = workspace:FindFirstChild("Honeycombs")
     if not honeycombs then return nil end
 
-    -- Ждём загрузки ульев (до 3 секунд)
     local tries = 0
     while tries < 10 do
         local hasHives = true
@@ -86,50 +84,33 @@ local function findFreeHive()
         tries = tries + 1
     end
 
-    -- Ищем наш улей (где OwnerName = наш ник)
+    -- Наш улей
     for i = 1, 6 do
         local hive = honeycombs:FindFirstChild("Hive" .. i)
-        if hive then
-            local gui = hive:FindFirstChild("Gui")
-            if gui then
-                local display = gui:FindFirstChild("Display")
-                if display then
-                    local frame = display:FindFirstChild("Frame")
-                    if frame then
-                        local ownerName = frame:FindFirstChild("OwnerName")
-                        if ownerName and ownerName.Text == player.Name then
-                            return hive
-                        end
-                    end
-                end
+        if hive and hive:FindFirstChild("Gui") and hive.Gui:FindFirstChild("Display") and hive.Gui.Display:FindFirstChild("Frame") then
+            local ownerName = hive.Gui.Display.Frame:FindFirstChild("OwnerName")
+            if ownerName and ownerName.Text == player.Name then
+                return hive
             end
         end
     end
 
-    -- Ищем свободный (OwnerName = "")
+    -- Свободный
     for i = 1, 6 do
         local hive = honeycombs:FindFirstChild("Hive" .. i)
-        if hive then
-            local gui = hive:FindFirstChild("Gui")
-            if gui then
-                local display = gui:FindFirstChild("Display")
-                if display then
-                    local frame = display:FindFirstChild("Frame")
-                    if frame then
-                        local ownerName = frame:FindFirstChild("OwnerName")
-                        if ownerName and (ownerName.Text == "" or ownerName.Text == nil) then
-                            return hive
-                        end
-                    end
-                end
+        if hive and hive:FindFirstChild("Gui") and hive.Gui:FindFirstChild("Display") and hive.Gui.Display:FindFirstChild("Frame") then
+            local ownerName = hive.Gui.Display.Frame:FindFirstChild("OwnerName")
+            if ownerName and (ownerName.Text == "" or ownerName.Text == nil) then
+                return hive
             end
         end
     end
 
-    -- Фолбэк: Hive1
+    -- Фолбэк
     return honeycombs:FindFirstChild("Hive1")
 end
--- ====== ПОЛУЧЕНИЕ ЦЕЛИ ======
+
+-- ====== ТЕЛЕПОРТ ======
 local function getTargetPart(target)
     if not target then return nil end
     if target:IsA("Model") then
@@ -140,29 +121,15 @@ local function getTargetPart(target)
     return nil
 end
 
--- ====== БЫСТРЫЙ ТВИН (полёт) ======
-local function flyTo(target, offset)
+local function teleportTo(target, offset)
     local char = player.Character
     if not char then return false end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return false end
-
     local targetPart = getTargetPart(target)
     if not targetPart then return false end
-
     offset = offset or Vector3.new(0, 5, 0)
-    local targetPos = targetPart.Position + offset
-    local distance = (hrp.Position - targetPos).Magnitude
-    local speed = 200
-    local duration = math.clamp(distance / speed, 0.3, 1.5)
-
-    local tween = TweenService:Create(
-        hrp,
-        TweenInfo.new(duration, Enum.EasingStyle.Linear),
-        { CFrame = CFrame.new(targetPos) }
-    )
-    tween:Play()
-    tween.Completed:Wait()
+    hrp.CFrame = CFrame.new(targetPart.Position + offset)
     return true
 end
 
@@ -175,7 +142,7 @@ local function pressE()
     end)
 end
 
--- ====== МАНСИНГ (быстрый, резкий) ======
+-- ====== МАНСИНГ ======
 local function startWalkingMansing(bee)
     local char = player.Character
     if not char then return end
@@ -238,7 +205,7 @@ local function huntViciousBee()
         print("[Hunt] Улей найден:", hive.Name)
         local platform = hive:FindFirstChild("Platform")
         if platform then
-            flyTo(platform, Vector3.new(0, 5, 0))
+            teleportTo(platform, Vector3.new(0, 5, 0))
             task.wait(2)
             pressE()
             task.wait(2)
@@ -253,7 +220,7 @@ local function huntViciousBee()
                 return
             end
         else
-            flyTo(hive, Vector3.new(0, 5, 0))
+            teleportTo(hive, Vector3.new(0, 5, 0))
             task.wait(2)
             pressE()
             task.wait(2)
@@ -264,9 +231,9 @@ local function huntViciousBee()
         return
     end
 
-    -- Летим к пчеле
+    -- Телепорт к пчеле
     print("[Hunt] Летим к пчеле...")
-    flyTo(bee, Vector3.new(0, 5, 15))
+    teleportTo(bee, Vector3.new(0, 5, 15))
     task.wait(0.5)
 
     -- Мансинг
