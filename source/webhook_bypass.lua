@@ -116,59 +116,61 @@ local function findFreeHive()
     return nil
 end
 
--- ====== ТЕЛЕПОРТ ======
+-- ====== ТЕЛЕПОРТ (с pcall — видны ошибки) ======
 local function teleportTo(target, offset)
-    print("[Teleport] Вызван teleportTo")
-    print("[Teleport] target:", target)
-    
-    local char = player.Character
-    if not char then 
-        print("[Teleport] ❌ Character = nil")
-        return false 
-    end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then 
-        print("[Teleport] ❌ HumanoidRootPart = nil")
-        return false 
-    end
-    if not target then 
-        print("[Teleport] ❌ target = nil")
-        return false 
-    end
-    offset = offset or Vector3.new(0, 3, 0)
-    local targetPos
+    local success, err = pcall(function()
+        print("[Teleport] Вызван teleportTo")
+        print("[Teleport] target:", target)
 
-    if target:IsA("Model") then
-        print("[Teleport] target это Model")
-        if target.PrimaryPart then
-            targetPos = target.PrimaryPart.Position
-            print("[Teleport] PrimaryPart:", target.PrimaryPart.Name, "| Pos:", targetPos)
-        else
-            for _, part in ipairs(target:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    targetPos = part.Position
-                    print("[Teleport] Первая BasePart:", part.Name, "| Pos:", targetPos)
-                    break
+        local char = player.Character
+        print("[Teleport] Character:", char)
+        if not char then return false end
+
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        print("[Teleport] HumanoidRootPart:", hrp)
+        if not hrp then return false end
+            if not target then return false end
+
+        offset = offset or Vector3.new(0, 3, 0)
+        local targetPos
+
+        if target:IsA("Model") then
+            print("[Teleport] target это Model")
+            if target.PrimaryPart then
+                targetPos = target.PrimaryPart.Position
+                print("[Teleport] PrimaryPart:", target.PrimaryPart.Name, "| Pos:", targetPos)
+            else
+                for _, part in ipairs(target:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        targetPos = part.Position
+                        print("[Teleport] Первая BasePart:", part.Name, "| Pos:", targetPos)
+                        break
+                    end
                 end
             end
+        elseif target:IsA("BasePart") then
+            print("[Teleport] target это BasePart")
+            targetPos = target.Position
+        else
+            print("[Teleport] ❌ target не Model и не BasePart")
+            return false
         end
-    elseif target:IsA("BasePart") then
-        print("[Teleport] target это BasePart")
-        targetPos = target.Position
-    else
-        print("[Teleport] ❌ target не Model и не BasePart. Class:", target.ClassName)
-        return false
-    end
 
-    if not targetPos then 
-        print("[Teleport] ❌ targetPos = nil")
-        return false 
+        if not targetPos then
+            print("[Teleport] ❌ targetPos = nil")
+            return false
+        end
+
+        print("[Teleport] Финальная позиция:", targetPos + offset)
+        hrp.CFrame = CFrame.new(targetPos + offset)
+        print("[Teleport] ✅ Телепорт выполнен")
+        return true
+    end)
+
+    if not success then
+        print("[Teleport] ❌ ОШИБКА:", err)
     end
-    
-    print("[Teleport] Финальная позиция:", targetPos + offset)
-    hrp.CFrame = CFrame.new(targetPos + offset)
-    print("[Teleport] ✅ Телепорт выполнен")
-    return true
+    return success
 end
 
 -- ====== НАЖАТИЕ E ======
@@ -251,28 +253,32 @@ local function huntViciousBee()
     end
     print("[Hunt] ✅ Выбран улей:", hive.Name)
 
-    -- === ТЕЛЕПОРТ К УЛЬЮ (с логами) ===
+    -- === ТЕЛЕПОРТ К УЛЬЮ ===
     print("[Hunt] === ПОДГОТОВКА ТЕЛЕПОРТА ===")
     local platform = hive:FindFirstChild("Platform")
     print("[Hunt] Platform:", platform)
-    if platform then
-        print("[Hunt] Platform.Value:", platform.Value)
-        if platform.Value then
-            print("[Hunt] Platform.Value.ClassName:", platform.Value.ClassName)
-        end
-    end
     if platform and platform.Value then
         print("[Hunt] Телепорт к платформе...")
         local result = teleportTo(platform.Value, Vector3.new(0, 3, 0))
         print("[Hunt] Результат телепорта:", result)
     else
-        print("[Hunt] Platform.Value = nil. Телепорт к улью...")
+        print("[Hunt] Телепорт к улью...")
         local result = teleportTo(hive, Vector3.new(0, 3, 0))
         print("[Hunt] Результат телепорта:", result)
     end
 
+    -- Проверяем, что телепорт сработал
+    task.wait(0.5)
+    local charCheck = player.Character
+    if charCheck then
+        local hrpCheck = charCheck:FindFirstChild("HumanoidRootPart")
+        if hrpCheck then
+            print("[Hunt] Позиция после телепорта:", hrpCheck.Position)
+        end
+    end
+
     -- Нажимаем E
-    task.wait(0.8)
+    task.wait(0.5)
     print("[Hunt] Нажимаем E...")
     pressE()
     task.wait(0.8)
