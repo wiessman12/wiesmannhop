@@ -342,3 +342,45 @@ Main:GetPropertyChangedSignal("Visible"):Connect(function()
 end)
 
 print("[ServerHop Menu] Loaded. Insert = toggle.")
+-- ====== AUTO HOP BUTTON ======
+local AutoBtn = Instance.new("TextButton")
+AutoBtn.Size = UDim2.new(1, 0, 0, 34)
+AutoBtn.BackgroundColor3 = Color3.fromRGB(120, 80, 60)
+AutoBtn.BorderSizePixel = 0
+AutoBtn.Text = "AUTO HOP: OFF"
+AutoBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+AutoBtn.Font = Enum.Font.GothamBold
+AutoBtn.TextSize = 13
+AutoBtn.Parent = Scroll
+
+getgenv().AutoHop = false
+
+AutoBtn.MouseButton1Click:Connect(function()
+    getgenv().AutoHop = not getgenv().AutoHop
+    if getgenv().AutoHop then
+        AutoBtn.Text = "AUTO HOP: ON"
+        AutoBtn.BackgroundColor3 = Color3.fromRGB(60, 120, 60)
+    else
+        AutoBtn.Text = "AUTO HOP: OFF"
+        AutoBtn.BackgroundColor3 = Color3.fromRGB(120, 80, 60)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(1)
+        if getgenv().AutoHop then
+            task.wait(60)
+            if getgenv().AutoHop then
+                pcall(function()
+                    if getgenv().HopServer then
+                        getgenv().HopServer()
+                    end
+                end)
+            end
+        end
+    end
+end)
+
+print("[Auto Hop] Initialized.")
+
