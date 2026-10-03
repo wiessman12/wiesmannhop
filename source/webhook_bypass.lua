@@ -63,12 +63,11 @@ local function findViciousBee()
     return nil
 end
 
--- ====== ПОИСК УЛЬЯ (по Owner.Value) ======
+-- ====== ПОИСК УЛЬЯ ======
 local function findFreeHive()
     local honeycombs = workspace:FindFirstChild("Honeycombs")
     if not honeycombs then return nil end
 
-    -- Ждём прогрузки ульев и Owner
     local tries = 0
     while tries < 20 do
         local allReady = true
@@ -84,7 +83,6 @@ local function findFreeHive()
         tries = tries + 1
     end
 
-    -- Ищем свободный
     for i = 1, 6 do
         local hive = honeycombs:FindFirstChild("Hive" .. i)
         if hive then
@@ -130,14 +128,14 @@ local function teleportTo(target, offset)
     hrp.CFrame = CFrame.new(targetPos + offset)
     return true
 end
--- ====== FLY (для пчелы) ======
+
+-- ====== FLY ======
 local function flyTo(target, offset)
     local char = player.Character
     if not char then return false end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return false end
     if not target then return false end
-
     local targetPos
     if target:IsA("Model") then
         if target.PrimaryPart then
@@ -262,7 +260,6 @@ local function huntViciousBee()
 
     print("[Hunt] ✅ Пчела найдена:", bee.Name)
 
-    -- Ищем свободный улей
     local hive = findFreeHive()
     if not hive then
         print("[Hunt] ❌ Улей не найден. Хоп...")
@@ -270,6 +267,7 @@ local function huntViciousBee()
         hopToRandomServer()
         return
     end
+
     print("[Hunt] Летим к улью:", hive.Name)
     local platform = hive:FindFirstChild("Platform")
     if platform and platform.Value then
@@ -285,12 +283,10 @@ local function huntViciousBee()
     task.wait(2)
     print("[Hunt] ✅ Улей занят:", hive.Name)
 
-    -- Летим к пчеле
     print("[Hunt] Летим к пчеле...")
     flyTo(bee, Vector3.new(0, 5, 15))
     task.wait(0.5)
 
-    -- Мансинг 35 секунд
     print("[Hunt] Мансинг 35 сек...")
     local stopMansing = startWalkingMansing(bee)
     task.wait(35)
@@ -301,13 +297,14 @@ local function huntViciousBee()
     hopToRandomServer()
 end
 
--- ====== АВТО-ЗАПУСК ======
+-- ====== АВТО-ЗАПУСК (без pcall — видны ошибки) ======
 task.spawn(function()
     task.wait(5)
     while true do
-        pcall(huntViciousBee)
+        huntViciousBee()
         task.wait(5)
     end
 end)
 
 print("[Vicious Bee Hunter] Запущен.")
+    
