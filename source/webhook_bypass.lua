@@ -5,9 +5,9 @@ local TeleportService = game:GetService("TeleportService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local player = Players.LocalPlayer
 
--- ====== ХОП (задержка 5 секунд — защита от Error 267) ======
+-- ====== ХОП (задержка 3 секунды) ======
 local function hopToRandomServer()
-    task.wait(5)
+    task.wait(3)
     local success, servers = pcall(function()
         return HttpService:JSONDecode(
             game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")
@@ -34,7 +34,6 @@ local function hopToRandomServer()
     end
 
     local chosen = candidates[math.random(1, #candidates)]
-    task.wait(1)
     TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, player)
 end
 
@@ -68,19 +67,14 @@ local function findMondoChick()
     return nil
 end
 
--- ====== ПРОВЕРКА: VICIOUS BEE РЯДОМ С MONDO (радиус 200) ======
+-- ====== ПРОВЕРКА: VICIOUS BEE РЯДОМ С MONDO ======
 local function isViciousBeeNearMondo(bee)
     local mondo = findMondoChick()
-    if not mondo then
-        print("[Hunt] Mondo Chick нет — Vicious Bee на поле")
-        return false
-    end
+    if not mondo then return false end
 
     local beePos = bee:GetPivot().Position
     local mondoPos = mondo:GetPivot().Position
     local distance = (beePos - mondoPos).Magnitude
-
-    print("[Hunt] Расстояние Vicious Bee ↔ Mondo Chick:", distance)
 
     return distance < 200
 end
@@ -90,6 +84,23 @@ local function findFreeHive()
     local honeycombs = workspace:FindFirstChild("Honeycombs")
     if not honeycombs then return nil end
 
+    -- Ждём прогрузки Owner (до 3 секунд)
+    local tries = 0
+    while tries < 15 do
+        local allLoaded = true
+        for i = 1, 6 do
+            local hive = honeycombs:FindFirstChild("Hive" .. i)
+            if hive and not hive:FindFirstChild("Owner") then
+                allLoaded = false
+                break
+            end
+        end
+        if allLoaded then break end
+        task.wait(0.2)
+        tries = tries + 1
+    end
+
+    -- Ищем свободный улей
     for i = 1, 6 do
         local hive = honeycombs:FindFirstChild("Hive" .. i)
         if hive then
@@ -97,15 +108,17 @@ local function findFreeHive()
             if owner and owner.Value == nil then
                 print("[Hunt] ✅ Свободный улей:", hive.Name)
                 return hive
+            else
+                print("[Hunt] ⚠️ Занятый улей:", hive.Name)
             end
         end
     end
 
-    print("[Hunt] ⚠️ Свободных ульев нет")
+    print("[Hunt] ❌ Свободных ульев нет")
     return nil
 end
 
--- ====== ТЕЛЕПОРТ (offset = 3 studs, чтобы стоять НА платформе) ======
+-- ====== ТЕЛЕПОРТ ======
 local function teleportTo(target, offset)
     local char = player.Character
     if not char then return false end
@@ -115,7 +128,6 @@ local function teleportTo(target, offset)
 
     offset = offset or Vector3.new(0, 3, 0)
     local targetPos
-
     if target:IsA("Model") then
         if target.PrimaryPart then
             targetPos = target.PrimaryPart.Position
@@ -140,12 +152,12 @@ end
 local function pressE()
     pcall(function()
         VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-        task.wait(0.1)
+        task.wait(0.05)
         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
     end)
 end
 
--- ====== МАНСИНГ (с проверкой от пчелы) ======
+-- ====== МАНСИНГ ======
 local function startMansing(bee)
     local running = true
 
@@ -167,9 +179,8 @@ local function startMansing(bee)
             if hrp then
                 local distance = (hrp.Position - beeHrp.Position).Magnitude
                 if distance > 50 then
-                    print("[Hunt] ⚠️ Далеко от пчелы. Возвращаемся...")
                     hrp.CFrame = CFrame.new(beeHrp.Position + Vector3.new(radius, 5, 0))
-                    task.wait(0.3)
+                    task.wait(0.2)
                 end
             end
 
@@ -179,7 +190,7 @@ local function startMansing(bee)
             local targetPos = beeHrp.Position + Vector3.new(offsetX, 0, offsetZ)
 
             humanoid:MoveTo(targetPos)
-            task.wait(0.3)
+            task.wait(0.2)
         end
     end)
 
@@ -191,7 +202,10 @@ end
 -- ====== ОСНОВНАЯ ЛОГИКА ======
 local function huntViciousBee()
     print("[Hunt] === НОВЫЙ СЕРВЕР ===")
-    task.wait(3)
+    
+    -- Ждём прогрузки сервера
+    print("[Hunt] Ждём прогрузки сервера...")
+    task.wait(4)
 
     -- 1. Ищем пчелу
     print("[Hunt] Поиск пчелы...")
@@ -203,9 +217,9 @@ local function huntViciousBee()
     end
     print("[Hunt] ✅ Пчела найдена:", bee.Name)
 
-    -- 2. Проверяем, не на горе ли пчела
+    -- 2. Проверяем Mondo
     if isViciousBeeNearMondo(bee) then
-        print("[Hunt] ⚠️ Vicious Bee на горе. Хоп...")
+        print("[Hunt] ⚠️ Пчела на горе. Хоп...")
         hopToRandomServer()
         return
     end
@@ -218,29 +232,25 @@ local function huntViciousBee()
         hopToRandomServer()
         return
     end
-    print("[Hunt] ✅ Улей найден:", hive.Name)
+    print("[Hunt] ✅ Выбран улей:", hive.Name)
 
-    -- 4. Телепорт к платформе (offset 3, чтобы стоять НА платформе)
+    -- 4. Телепорт к улью
     local platform = hive:FindFirstChild("Platform")
     if platform and platform.Value then
-        print("[Hunt] Телепорт к платформе...")
         teleportTo(platform.Value, Vector3.new(0, 3, 0))
     else
-        print("[Hunt] Телепорт к улью...")
         teleportTo(hive, Vector3.new(0, 3, 0))
     end
 
     -- 5. Нажимаем E
-    task.wait(2)
-    print("[Hunt] Нажимаем E...")
+    task.wait(0.8)
     pressE()
-    task.wait(2)
+    task.wait(0.8)
     print("[Hunt] ✅ Улей занят")
 
     -- 6. Телепорт к пчеле
-    print("[Hunt] Телепорт к пчеле...")
     teleportTo(bee, Vector3.new(0, 5, 15))
-    task.wait(0.5)
+    task.wait(0.3)
 
     -- 7. Мансинг
     print("[Hunt] Мансинг вокруг пчелы...")
@@ -252,11 +262,12 @@ local function huntViciousBee()
     local waited = 0
 
     while waited < maxWait do
-        task.wait(0.5)
-        waited = waited + 0.5
+        task.wait(0.3)
+        waited = waited + 0.3
 
         local humanoid = bee:FindFirstChild("Humanoid")
         local beeDead = false
+
         if not bee.Parent then
             beeDead = true
         elseif not humanoid then
@@ -264,7 +275,6 @@ local function huntViciousBee()
         elseif humanoid.Health <= 0 then
             beeDead = true
         end
-
         if beeDead then
             print("[Hunt] ✅ Пчела убита! Хоп...")
             break
@@ -290,7 +300,7 @@ end
 task.wait(5)
 while true do
     huntViciousBee()
-    task.wait(3)
+    task.wait(1.5)
 end
         
-            
+    
