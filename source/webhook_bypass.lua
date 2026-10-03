@@ -168,4 +168,3 @@ task.spawn(function()
 end)
 
 print("[Vicious Bee Hunter] Запущен. Мансинг ходьбой. Таймер: 25с.")
-    
