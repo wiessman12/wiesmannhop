@@ -63,7 +63,7 @@ local function findViciousBee()
     return nil
 end
 
--- ====== ПОИСК УЛЬЯ ======
+-- ====== ПОИСК УЛЬЯ (по Owner.Value) ======
 local function findFreeHive()
     local honeycombs = workspace:FindFirstChild("Honeycombs")
     if not honeycombs then return nil end
@@ -221,20 +221,58 @@ local function startWalkingMansing(bee)
     end
 end
 
--- ====== ОСНОВНАЯ ЛОГИКА (ТЕСТ ХОПА) ======
+-- ====== ОСНОВНАЯ ЛОГИКА ======
 local function huntViciousBee()
     print("[Hunt] === НОВЫЙ СЕРВЕР ===")
-    print("[Hunt] Тестовый хоп...")
+    task.wait(3) -- ждём загрузки
 
-    local success, err = pcall(function()
-        TeleportService:Teleport(game.PlaceId, player)
-    end)
+    print("[Hunt] Поиск пчелы...")
+    local bee = findViciousBee()
+    if not bee then
+        print("[Hunt] ❌ Пчела не найдена. Хоп...")
+        hopToRandomServer()
+        return
+    end
 
-    print("[Hunt] Хоп отправлен. Успех:", success, "| Ошибка:", err)
+    print("[Hunt] ✅ Пчела найдена:", bee.Name)
 
-    task.wait(10)
+    -- Ищем свободный улей
+    local hive = findFreeHive()
+    if hive then
+        print("[Hunt] Летим к улью:", hive.Name)
+        local platform = hive:FindFirstChild("Platform")
+        if platform then
+            local platformPart = platform.Value
+            if platformPart then
+                teleportTo(platformPart, Vector3.new(0, 5, 0))
+            else
+                teleportTo(hive, Vector3.new(0, 5, 0))
+            end
+        else
+            teleportTo(hive, Vector3.new(0, 5, 0))
+        end
+        task.wait(1.5)
+        pressE()
+        task.wait(2)
+        print("[Hunt] ✅ Улей занят:", hive.Name)
+    else
+        print("[Hunt] ⚠️ Улей не найден, но летим к пчеле...")
+    end
+
+    -- Летим к пчеле
+    print("[Hunt] Летим к пчеле...")
+    flyTo(bee, Vector3.new(0, 5, 15))
+    task.wait(0.5)
+
+    -- Мансинг 35 секунд
+    print("[Hunt] Мансинг 35 сек...")
+    local stopMansing = startWalkingMansing(bee)
+    task.wait(35)
+    if stopMansing then stopMansing() end
+
+    print("[Hunt] Завершено. Хоп...")
+    hopToRandomServer()
 end
-
 -- ====== АВТО-ЗАПУСК ======
 task.spawn(function()
     task.wait(5)
