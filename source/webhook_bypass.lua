@@ -16,7 +16,7 @@ local TeleportService = game:GetService("TeleportService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local player = Players.LocalPlayer
 
--- ====== ХОП (исправленный) ======
+-- ====== ХОП ======
 local function hopToRandomServer()
     task.wait(2)
     local success, servers = pcall(function()
@@ -63,7 +63,7 @@ local function findViciousBee()
     return nil
 end
 
--- ====== ПОИСК УЛЬЯ (по Owner.Value) ======
+-- ====== ПОИСК УЛЬЯ ======
 local function findFreeHive()
     local honeycombs = workspace:FindFirstChild("Honeycombs")
     if not honeycombs then return nil end
@@ -133,8 +133,6 @@ local function flyTo(target, offset)
     offset = offset or Vector3.new(0, 5, 0)
     local targetPos = targetPart.Position + offset
     local startPos = hrp.Position
-
-    local flyHeight = 45
     local waypoints = {
         Vector3.new(startPos.X, startPos.Y + flyHeight, startPos.Z),
         Vector3.new(targetPos.X, targetPos.Y + flyHeight, targetPos.Z),
@@ -223,67 +221,31 @@ local function startWalkingMansing(bee)
     end
 end
 
--- ====== ОСНОВНАЯ ЛОГИКА ======
+-- ====== ОСНОВНАЯ ЛОГИКА (ТЕСТ ХОПА) ======
 local function huntViciousBee()
-    print("[Hunt] Новый сервер. Поиск пчелы...")
+    print("[Hunt] === НОВЫЙ СЕРВЕР ===")
+    print("[Hunt] Тестовый хоп...")
 
-    local bee = findViciousBee()
-    if not bee then
-        print("[Hunt] Пчела не найдена. Хоп...")
-        collectgarbage("collect")
-        hopToRandomServer()
-        return
-    end
+    local success, err = pcall(function()
+        TeleportService:Teleport(game.PlaceId, player)
+    end)
 
-    print("[Hunt] ✅ Пчела найдена:", bee.Name)
+    print("[Hunt] Хоп отправлен. Успех:", success, "| Ошибка:", err)
 
-    local hive = findFreeHive()
-    if hive then
-        print("[Hunt] Летим к улью:", hive.Name)
-        local platform = hive:FindFirstChild("Platform")
-        if platform then
-            local platformPart = platform.Value
-            if platformPart then
-                teleportTo(platformPart, Vector3.new(0, 5, 0))
-            else
-                teleportTo(hive, Vector3.new(0, 5, 0))
-            end
-        else
-            teleportTo(hive, Vector3.new(0, 5, 0))
-        end
-        task.wait(1.5)
-        pressE()
-        task.wait(2)
-        print("[Hunt] ✅ Улей занят:", hive.Name)
-    else
-        print("[Hunt] ⚠️ Улей не найден. Хоп...")
-        collectgarbage("collect")
-        hopToRandomServer()
-        return
-    end
-
-    print("[Hunt] Летим к пчеле...")
-    flyTo(bee, Vector3.new(0, 5, 15))
-    task.wait(0.5)
-
-    print("[Hunt] Мансинг 35 сек...")
-    local stopMansing = startWalkingMansing(bee)
-    task.wait(35)
-    if stopMansing then stopMansing() end
-
-    print("[Hunt] Завершено. Хоп...")
-    collectgarbage("collect")
-    hopToRandomServer()
+    task.wait(10)
 end
+
 -- ====== АВТО-ЗАПУСК ======
 task.spawn(function()
     task.wait(5)
     while true do
         pcall(huntViciousBee)
-        task.wait(3)
+        task.wait(5)
     end
 end)
 
 print("[Vicious Bee Hunter] Запущен.")
 
     
+
+    local flyHeight = 45
