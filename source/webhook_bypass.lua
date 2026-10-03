@@ -63,6 +63,35 @@ local function findViciousBee()
     return nil
 end
 
+-- ====== ПОИСК УЛЬЯ ======
+local function findFreeHive()
+    local honeycombs = workspace:FindFirstChild("Honeycombs")
+    if not honeycombs then return nil end
+
+    -- Сначала ищем наш улей
+    for i = 1, 6 do
+        local hive = honeycombs:FindFirstChild("Hive" .. i)
+        if hive and hive:FindFirstChild("Gui") and hive.Gui:FindFirstChild("Display") and hive.Gui.Display:FindFirstChild("Frame") then
+            local ownerName = hive.Gui.Display.Frame:FindFirstChild("OwnerName")
+            if ownerName and ownerName.Text == player.Name then
+                return hive
+            end
+        end
+    end
+
+    -- Потом свободный
+    for i = 1, 6 do
+        local hive = honeycombs:FindFirstChild("Hive" .. i)
+        if hive and hive:FindFirstChild("Gui") and hive.Gui:FindFirstChild("Display") and hive.Gui.Display:FindFirstChild("Frame") then
+            local ownerName = hive.Gui.Display.Frame:FindFirstChild("OwnerName")
+            if ownerName and ownerName.Text == "" then
+                return hive
+            end
+        end
+    end
+    return nil
+end
+
 -- ====== ТЕЛЕПОРТ ======
 local function getTargetPart(target)
     if target:IsA("Model") then
@@ -96,8 +125,7 @@ local function startWalkingMansing(bee)
     task.spawn(function()
         local angle = 0
         local radius = 15
-
-        while running do
+            while running do
             if not player.Character then break end
             local currentHumanoid = player.Character:FindFirstChildOfClass("Humanoid")
             if not currentHumanoid or currentHumanoid.Health <= 0 then break end
@@ -130,18 +158,32 @@ end
 
 -- ====== ОСНОВНАЯ ЛОГИКА ======
 local function huntViciousBee()
+    -- 1. Ищем пчелу
     local bee = findViciousBee()
     if not bee then
+        collectgarbage("collect")
         hopToRandomServer()
         return
     end
+
+    -- 2. Ищем улей (свой или свободный)
+    local hive = findFreeHive()
+    if hive then
+        teleportTo(hive, Vector3.new(0, 5, 0))
+        task.wait(2)
+    end
+
+    -- 3. Телепорт к пчеле
     teleportTo(bee, Vector3.new(0, 5, 15))
     task.wait(0.5)
 
+    -- 4. Мансинг 35 секунд
     local stopMansing = startWalkingMansing(bee)
     task.wait(35)
     if stopMansing then stopMansing() end
 
+    -- 5. Хоп
+    collectgarbage("collect")
     hopToRandomServer()
 end
 
@@ -155,4 +197,3 @@ task.spawn(function()
 end)
 
 print("[Vicious Bee Hunter] Запущен. Таймер: 35с.")
-    
