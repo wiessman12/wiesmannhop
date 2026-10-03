@@ -180,7 +180,6 @@ local function startMansing(bee)
         local maxDistance = 45
 
         while running do
-            -- Берём АКТУАЛЬНОГО игрока и персонажа (даже после респавна)
             local currentPlayer = game:GetService("Players").LocalPlayer
             if not currentPlayer then
                 task.wait(0.3)
@@ -205,7 +204,6 @@ local function startMansing(bee)
                 continue
             end
 
-            -- Проверяем, что пчела ещё жива
             if not bee.Parent then break end
             local beeHumanoid = bee:FindFirstChild("Humanoid")
             if not beeHumanoid or beeHumanoid.Health <= 0 then break end
@@ -216,7 +214,6 @@ local function startMansing(bee)
                 continue
             end
 
-            -- Проверка: далеко ли от пчелы
             local distance = (hrp.Position - beeHrp.Position).Magnitude
             if distance > maxDistance then
                 print("[Hunt] ⚠️ Далеко от пчелы (", math.floor(distance), "studs). Возвращаемся...")
@@ -224,7 +221,6 @@ local function startMansing(bee)
                 task.wait(0.3)
             end
 
-            -- Круговое движение
             angle = angle + math.rad(120)
             local offsetX = math.cos(angle) * radius
             local offsetZ = math.sin(angle) * radius
@@ -259,6 +255,7 @@ local function huntViciousBee()
         hopToRandomServer()
         return
     end
+
     print("[Hunt] Поиск улья...")
     local hive = findFreeHive()
     if not hive then
@@ -267,7 +264,6 @@ local function huntViciousBee()
         return
     end
     print("[Hunt] ✅ Выбран улей:", hive.Name)
-
     -- Телепорт к улью
     local platform = hive:FindFirstChild("Platform")
     if platform and platform.Value then
@@ -277,11 +273,32 @@ local function huntViciousBee()
     end
 
     -- Нажимаем E
-    task.wait(0.8)
+    task.wait(1)
     print("[Hunt] Нажимаем E...")
     pressE()
-    task.wait(0.8)
-    print("[Hunt] ✅ Улей занят")
+    task.wait(1.5)
+
+    -- === ПРОВЕРКА: засчитался ли улей ===
+    local currentPlayer = game:GetService("Players").LocalPlayer
+    local owner = hive:FindFirstChild("Owner")
+
+    if owner and owner.Value == currentPlayer then
+        print("[Hunt] ✅ Улей успешно занят:", hive.Name)
+    else
+        print("[Hunt] ❌ Улей НЕ засчитан (Owner:", owner and tostring(owner.Value) or "nil", "). Повторяем E...")
+        task.wait(0.5)
+        pressE()
+        task.wait(1.5)
+
+        owner = hive:FindFirstChild("Owner")
+        if owner and owner.Value == currentPlayer then
+            print("[Hunt] ✅ Улей занят со 2-й попытки")
+        else
+            print("[Hunt] ❌ Улей не засчитан. Хоп...")
+            hopToRandomServer()
+            return
+        end
+    end
 
     -- Телепорт к пчеле
     print("[Hunt] Телепорт к пчеле...")
@@ -301,7 +318,6 @@ local function huntViciousBee()
         task.wait(0.3)
         waited = waited + 0.3
 
-        -- Проверка смерти пчелы
         local humanoid = bee:FindFirstChild("Humanoid")
         local beeDead = false
 
@@ -319,10 +335,7 @@ local function huntViciousBee()
         end
     end
 
-    -- Останавливаем мансинг
     if stopMansing then stopMansing() end
-
-    -- Хоп
     print("[Hunt] Хоп на другой сервер...")
     hopToRandomServer()
 end
@@ -333,3 +346,4 @@ while true do
     huntViciousBee()
     task.wait(1.5)
 end
+    
