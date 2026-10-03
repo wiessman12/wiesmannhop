@@ -84,7 +84,6 @@ local function findFreeHive()
         tries = tries + 1
     end
 
-    -- Наш улей
     for i = 1, 6 do
         local hive = honeycombs:FindFirstChild("Hive" .. i)
         if hive and hive:FindFirstChild("Gui") and hive.Gui:FindFirstChild("Display") and hive.Gui.Display:FindFirstChild("Frame") then
@@ -95,7 +94,6 @@ local function findFreeHive()
         end
     end
 
-    -- Свободный
     for i = 1, 6 do
         local hive = honeycombs:FindFirstChild("Hive" .. i)
         if hive and hive:FindFirstChild("Gui") and hive.Gui:FindFirstChild("Display") and hive.Gui.Display:FindFirstChild("Frame") then
@@ -106,11 +104,10 @@ local function findFreeHive()
         end
     end
 
-    -- Фолбэк
     return honeycombs:FindFirstChild("Hive1")
 end
 
--- ====== ТЕЛЕПОРТ ======
+-- ====== ПОЛУЧЕНИЕ ЦЕЛИ ======
 local function getTargetPart(target)
     if not target then return nil end
     if target:IsA("Model") then
@@ -121,7 +118,8 @@ local function getTargetPart(target)
     return nil
 end
 
-local function teleportTo(target, offset)
+-- ====== FLY (полёт к цели) ======
+local function flyTo(target, offset)
     local char = player.Character
     if not char then return false end
     local hrp = char:FindFirstChild("HumanoidRootPart")
@@ -129,7 +127,31 @@ local function teleportTo(target, offset)
     local targetPart = getTargetPart(target)
     if not targetPart then return false end
     offset = offset or Vector3.new(0, 5, 0)
-    hrp.CFrame = CFrame.new(targetPart.Position + offset)
+    local targetPos = targetPart.Position + offset
+
+    -- Создаём BodyVelocity для полёта
+    local bv = Instance.new("BodyVelocity")
+    bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    bv.P = 10000
+    bv.Parent = hrp
+
+    local startTime = tick()
+    local maxTime = 4 -- максимум 4 секунды полёта
+
+    while tick() - startTime < maxTime do
+        if not hrp or not hrp.Parent then break end
+        if not player.Character then break end
+
+        local distance = (hrp.Position - targetPos).Magnitude
+        if distance < 5 then break end
+
+        local direction = (targetPos - hrp.Position).Unit
+        bv.Velocity = direction * 250 -- СКОРОСТЬ полёта (250 studs/сек)
+
+        task.wait(0.05)
+    end
+
+    bv:Destroy()
     return true
 end
 
@@ -205,25 +227,19 @@ local function huntViciousBee()
         print("[Hunt] Улей найден:", hive.Name)
         local platform = hive:FindFirstChild("Platform")
         if platform then
-            teleportTo(platform, Vector3.new(0, 5, 0))
-            task.wait(2)
+            print("[Hunt] Летим к улью...")
+            flyTo(platform, Vector3.new(0, 5, 0))
+            task.wait(1)
+            print("[Hunt] Нажимаем E...")
             pressE()
-            task.wait(2)
-
-            local gui = hive:FindFirstChild("Gui")
-            local ownerName = gui and gui:FindFirstChild("Display") and gui.Display:FindFirstChild("Frame") and gui.Display.Frame:FindFirstChild("OwnerName")
-            if ownerName and ownerName.Text == player.Name then
-                print("[Hunt] ✅ Улей занят")
-            else
-                print("[Hunt] ⚠️ Улей не засчитан. Хоп...")
-                hopToRandomServer()
-                return
-            end
+            task.wait(3)
+            print("[Hunt] ✅ Улей занят (по нажатию E)")
         else
-            teleportTo(hive, Vector3.new(0, 5, 0))
-            task.wait(2)
+            flyTo(hive, Vector3.new(0, 5, 0))
+            task.wait(1)
             pressE()
-            task.wait(2)
+            task.wait(3)
+            print("[Hunt] ✅ Улей занят (по нажатию E)")
         end
     else
         print("[Hunt] ⚠️ Улей не найден. Хоп...")
@@ -231,9 +247,9 @@ local function huntViciousBee()
         return
     end
 
-    -- Телепорт к пчеле
+    -- Летим к пчеле
     print("[Hunt] Летим к пчеле...")
-    teleportTo(bee, Vector3.new(0, 5, 15))
+    flyTo(bee, Vector3.new(0, 5, 15))
     task.wait(0.5)
 
     -- Мансинг
@@ -255,4 +271,4 @@ task.spawn(function()
     end
 end)
 
-print("[Vicious Bee Hunter] Запущен.")
+print("[Vicious Bee Hunter] Запущен. С Fly.")
