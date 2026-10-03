@@ -184,7 +184,6 @@ end
 local function huntViciousBee()
     local bee = findViciousBee()
     if not bee then
-        collectgarbage("collect")
         hopToRandomServer()
         return
     end
@@ -227,7 +226,6 @@ local function huntViciousBee()
     task.wait(25)
     if stopMansing then stopMansing() end
 
-    collectgarbage("collect")
     hopToRandomServer()
 end
 
