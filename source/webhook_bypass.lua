@@ -13,6 +13,7 @@ getgenv().ServerHopConfig = {
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
+local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 
 -- ====== ХОП НА РАЗНЫЕ СЕРВЕРА ======
@@ -63,36 +64,7 @@ local function findViciousBee()
     return nil
 end
 
--- ====== ПОИСК УЛЬЯ ======
-local function findFreeHive()
-    local honeycombs = workspace:FindFirstChild("Honeycombs")
-    if not honeycombs then return nil end
-
-    -- Сначала ищем наш улей
-    for i = 1, 6 do
-        local hive = honeycombs:FindFirstChild("Hive" .. i)
-        if hive and hive:FindFirstChild("Gui") and hive.Gui:FindFirstChild("Display") and hive.Gui.Display:FindFirstChild("Frame") then
-            local ownerName = hive.Gui.Display.Frame:FindFirstChild("OwnerName")
-            if ownerName and ownerName.Text == player.Name then
-                return hive
-            end
-        end
-    end
-
-    -- Потом свободный
-    for i = 1, 6 do
-        local hive = honeycombs:FindFirstChild("Hive" .. i)
-        if hive and hive:FindFirstChild("Gui") and hive.Gui:FindFirstChild("Display") and hive.Gui.Display:FindFirstChild("Frame") then
-            local ownerName = hive.Gui.Display.Frame:FindFirstChild("OwnerName")
-            if ownerName and ownerName.Text == "" then
-                return hive
-            end
-        end
-    end
-    return nil
-end
-
--- ====== ТЕЛЕПОРТ ======
+-- ====== ТЕЛЕПОРТ К ЦЕЛИ (один раз, чтобы добраться до пчелы) ======
 local function getTargetPart(target)
     if target:IsA("Model") then
         return target:FindFirstChild("HumanoidRootPart") or target.PrimaryPart
@@ -124,8 +96,10 @@ local function startWalkingMansing(bee)
 
     task.spawn(function()
         local angle = 0
-        local radius = 15
-            while running do
+        local radius = 15 -- радиус круга
+
+        while running do
+            -- Проверка: жив ли персонаж и пчела
             if not player.Character then break end
             local currentHumanoid = player.Character:FindFirstChildOfClass("Humanoid")
             if not currentHumanoid or currentHumanoid.Health <= 0 then break end
@@ -134,23 +108,26 @@ local function startWalkingMansing(bee)
             local beeHrp = bee:FindFirstChild("HumanoidRootPart")
             if not beeHrp then break end
 
-            angle = angle + math.rad(90)
+            -- Вычисляем точку на круге вокруг пчелы
+            angle = angle + math.rad(90) -- каждый шаг — 90 градусов
             local offsetX = math.cos(angle) * radius
             local offsetZ = math.sin(angle) * radius
             local targetPos = beeHrp.Position + Vector3.new(offsetX, 0, offsetZ)
 
+            -- Заставляем персонажа идти к этой точке
             currentHumanoid:MoveTo(targetPos)
-            task.wait(0.4)
+
+            task.wait(0.4) -- обновляем точку каждые 0.4 секунды
         end
     end)
-
+    -- Функция остановки
     return function()
         running = false
         local char = player.Character
         if char then
             local humanoid = char:FindFirstChildOfClass("Humanoid")
             if humanoid then
-                humanoid:MoveTo(char.HumanoidRootPart.Position)
+                humanoid:MoveTo(char.HumanoidRootPart.Position) -- стоп
             end
         end
     end
@@ -158,32 +135,26 @@ end
 
 -- ====== ОСНОВНАЯ ЛОГИКА ======
 local function huntViciousBee()
-    -- 1. Ищем пчелу
     local bee = findViciousBee()
     if not bee then
-        collectgarbage("collect")
         hopToRandomServer()
         return
     end
 
-    -- 2. Ищем улей (свой или свободный)
-    local hive = findFreeHive()
-    if hive then
-        teleportTo(hive, Vector3.new(0, 5, 0))
-        task.wait(2)
-    end
-
-    -- 3. Телепорт к пчеле
+    -- Телепорт к пчеле (один раз, чтобы рядом был)
     teleportTo(bee, Vector3.new(0, 5, 15))
     task.wait(0.5)
 
-    -- 4. Мансинг 35 секунд
+    -- Запуск мансинга ходьбой
     local stopMansing = startWalkingMansing(bee)
-    task.wait(35)
+
+    -- Ждём 25 секунд
+    task.wait(25)
+
+    -- Останавливаем мансинг
     if stopMansing then stopMansing() end
 
-    -- 5. Хоп
-    collectgarbage("collect")
+    -- Хоп на другой сервер
     hopToRandomServer()
 end
 
@@ -196,4 +167,5 @@ task.spawn(function()
     end
 end)
 
-print("[Vicious Bee Hunter] Запущен. Таймер: 35с.")
+print("[Vicious Bee Hunter] Запущен. Мансинг ходьбой. Таймер: 25с.")
+    
