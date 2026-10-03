@@ -118,7 +118,7 @@ local function startMansing(bee)
 
     task.spawn(function()
         local angle = 0
-        local radius = 20
+        local radius = 30
 
         while running do
             if not player.Character then break end
