@@ -63,21 +63,18 @@ local function findViciousBee()
     return nil
 end
 
--- ====== ПОИСК УЛЬЯ ======
+-- ====== ПОИСК УЛЬЯ (по Owner.Value) ======
 local function findFreeHive()
     local honeycombs = workspace:FindFirstChild("Honeycombs")
     if not honeycombs then return nil end
 
+    -- Ждём прогрузки ульев и Owner
     local tries = 0
     while tries < 20 do
         local allReady = true
         for i = 1, 6 do
             local hive = honeycombs:FindFirstChild("Hive" .. i)
-            if not hive then
-                allReady = false
-                break
-            end
-            if not hive:FindFirstChild("Owner") then
+            if not hive or not hive:FindFirstChild("Owner") then
                 allReady = false
                 break
             end
@@ -87,6 +84,7 @@ local function findFreeHive()
         tries = tries + 1
     end
 
+    -- Ищем свободный
     for i = 1, 6 do
         local hive = honeycombs:FindFirstChild("Hive" .. i)
         if hive then
@@ -129,11 +127,10 @@ local function teleportTo(target, offset)
     end
 
     if not targetPos then return false end
-
     hrp.CFrame = CFrame.new(targetPos + offset)
     return true
 end
--- ====== FLY ======
+-- ====== FLY (для пчелы) ======
 local function flyTo(target, offset)
     local char = player.Character
     if not char then return false end
@@ -249,7 +246,7 @@ local function startWalkingMansing(bee)
     end
 end
 
--- ====== ОСНОВНАЯ ЛОГИКА (ТЕСТ) ======
+-- ====== ОСНОВНАЯ ЛОГИКА ======
 local function huntViciousBee()
     print("[Hunt] === НОВЫЙ СЕРВЕР ===")
     task.wait(3)
@@ -258,11 +255,49 @@ local function huntViciousBee()
     local bee = findViciousBee()
     if not bee then
         print("[Hunt] ❌ Пчела не найдена. Хоп...")
+        collectgarbage("collect")
         hopToRandomServer()
         return
     end
+
     print("[Hunt] ✅ Пчела найдена:", bee.Name)
-    task.wait(5)
+
+    -- Ищем свободный улей
+    local hive = findFreeHive()
+    if not hive then
+        print("[Hunt] ❌ Улей не найден. Хоп...")
+        collectgarbage("collect")
+        hopToRandomServer()
+        return
+    end
+    print("[Hunt] Летим к улью:", hive.Name)
+    local platform = hive:FindFirstChild("Platform")
+    if platform and platform.Value then
+        print("[Hunt] Телепорт к платформе...")
+        teleportTo(platform.Value, Vector3.new(0, 5, 0))
+    else
+        print("[Hunt] Платформа не найдена, телепорт к улью...")
+        teleportTo(hive, Vector3.new(0, 5, 0))
+    end
+    task.wait(2)
+    print("[Hunt] Нажимаем E...")
+    pressE()
+    task.wait(2)
+    print("[Hunt] ✅ Улей занят:", hive.Name)
+
+    -- Летим к пчеле
+    print("[Hunt] Летим к пчеле...")
+    flyTo(bee, Vector3.new(0, 5, 15))
+    task.wait(0.5)
+
+    -- Мансинг 35 секунд
+    print("[Hunt] Мансинг 35 сек...")
+    local stopMansing = startWalkingMansing(bee)
+    task.wait(35)
+    if stopMansing then stopMansing() end
+
+    print("[Hunt] Завершено. Хоп...")
+    collectgarbage("collect")
     hopToRandomServer()
 end
 
