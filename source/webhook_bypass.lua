@@ -116,40 +116,29 @@ local function findFreeHive()
     return nil
 end
 
--- ====== ТЕЛЕПОРТ (берёт АКТУАЛЬНОГО LocalPlayer) ======
+-- ====== ТЕЛЕПОРТ ======
 local function teleportTo(target, offset)
     local success, err = pcall(function()
-        print("[Teleport] Вызван teleportTo")
-
         local currentPlayer = game:GetService("Players").LocalPlayer
-        print("[Teleport] currentPlayer:", currentPlayer)
+        if not currentPlayer then return false end
 
-        if not currentPlayer then
-            print("[Teleport] ❌ currentPlayer = nil")
-            return false
-        end
-            local char = currentPlayer.Character
-        print("[Teleport] Character:", char)
+        local char = currentPlayer.Character
         if not char then return false end
 
         local hrp = char:FindFirstChild("HumanoidRootPart")
-        print("[Teleport] HumanoidRootPart:", hrp)
         if not hrp then return false end
 
         if not target then return false end
 
         offset = offset or Vector3.new(0, 3, 0)
         local targetPos
-
-        if target:IsA("Model") then
+            if target:IsA("Model") then
             if target.PrimaryPart then
                 targetPos = target.PrimaryPart.Position
-                print("[Teleport] PrimaryPart:", target.PrimaryPart.Name, "| Pos:", targetPos)
             else
                 for _, part in ipairs(target:GetDescendants()) do
                     if part:IsA("BasePart") then
                         targetPos = part.Position
-                        print("[Teleport] Первая BasePart:", part.Name, "| Pos:", targetPos)
                         break
                     end
                 end
@@ -157,21 +146,13 @@ local function teleportTo(target, offset)
         elseif target:IsA("BasePart") then
             targetPos = target.Position
         else
-            print("[Teleport] ❌ target не Model и не BasePart")
             return false
         end
 
-        if not targetPos then
-            print("[Teleport] ❌ targetPos = nil")
-            return false
-        end
-
-        print("[Teleport] Финальная позиция:", targetPos + offset)
+        if not targetPos then return false end
         hrp.CFrame = CFrame.new(targetPos + offset)
-        print("[Teleport] ✅ Телепорт выполнен")
         return true
     end)
-
     if not success then
         print("[Teleport] ❌ ОШИБКА:", err)
     end
@@ -187,13 +168,14 @@ local function pressE()
     end)
 end
 
--- ====== МАНСИНГ ======
+-- ====== МАНСИНГ (радиус 30, возврат если далеко) ======
 local function startMansing(bee)
     local running = true
 
     task.spawn(function()
         local angle = 0
-        local radius = 25
+        local radius = 30 -- РАДИУС 30
+        local maxDistance = 40 -- если дальше — телепорт обратно
 
         while running do
             if not player.Character then break end
@@ -205,15 +187,18 @@ local function startMansing(bee)
             local beeHrp = bee:FindFirstChild("HumanoidRootPart")
             if not beeHrp then break end
 
+            -- Проверяем расстояние до пчелы
             local hrp = char:FindFirstChild("HumanoidRootPart")
             if hrp then
                 local distance = (hrp.Position - beeHrp.Position).Magnitude
-                if distance > 50 then
+                if distance > maxDistance then
+                    print("[Hunt] ⚠️ Далеко от пчелы (", math.floor(distance), "studs). Возвращаемся...")
                     hrp.CFrame = CFrame.new(beeHrp.Position + Vector3.new(radius, 5, 0))
-                    task.wait(0.2)
+                    task.wait(0.3)
                 end
             end
 
+            -- Вычисляем точку на круге радиусом 30
             angle = angle + math.rad(90)
             local offsetX = math.cos(angle) * radius
             local offsetZ = math.sin(angle) * radius
@@ -257,6 +242,7 @@ local function huntViciousBee()
         return
     end
     print("[Hunt] ✅ Выбран улей:", hive.Name)
+
     -- Телепорт к улью
     local platform = hive:FindFirstChild("Platform")
     if platform and platform.Value then
@@ -278,9 +264,8 @@ local function huntViciousBee()
     print("[Hunt] Телепорт к пчеле...")
     teleportTo(bee, Vector3.new(0, 5, 15))
     task.wait(0.3)
-
     -- Мансинг
-    print("[Hunt] Мансинг вокруг пчелы...")
+    print("[Hunt] Мансинг вокруг пчелы (радиус 30)...")
     local stopMansing = startMansing(bee)
 
     print("[Hunt] Ждём убийства пчелы...")
@@ -326,4 +311,3 @@ while true do
     huntViciousBee()
     task.wait(1.5)
 end
-    
