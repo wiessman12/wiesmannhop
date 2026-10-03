@@ -16,16 +16,16 @@ local TeleportService = game:GetService("TeleportService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local player = Players.LocalPlayer
 
--- ====== ХОП (задержка 3 секунды) ======
+-- ====== ХОП (исправленный) ======
 local function hopToRandomServer()
-    task.wait(3) -- задержка для стабильности
+    task.wait(2)
     local success, servers = pcall(function()
         return HttpService:JSONDecode(
             game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")
         )
     end)
 
-    if not success or not servers or not servers.data then
+    if not success or not servers or not servers.data or #servers.data == 0 then
         TeleportService:Teleport(game.PlaceId, player)
         return
     end
@@ -34,9 +34,7 @@ local function hopToRandomServer()
     local candidates = {}
 
     for _, server in ipairs(servers.data) do
-        if server.id ~= currentJobId
-           and server.playing < server.maxPlayers
-           and server.playing >= 1 then
+        if server.id ~= currentJobId and server.playing < server.maxPlayers then
             table.insert(candidates, server)
         end
     end
@@ -70,7 +68,6 @@ local function findFreeHive()
     local honeycombs = workspace:FindFirstChild("Honeycombs")
     if not honeycombs then return nil end
 
-    -- Ждём загрузки ульев
     local tries = 0
     while tries < 10 do
         local hasHives = true
@@ -85,7 +82,6 @@ local function findFreeHive()
         tries = tries + 1
     end
 
-    -- Ищем свободный улей (Owner.Value == nil)
     for i = 1, 6 do
         local hive = honeycombs:FindFirstChild("Hive" .. i)
         if hive then
@@ -133,12 +129,12 @@ local function flyTo(target, offset)
     if not hrp then return false end
     local targetPart = getTargetPart(target)
     if not targetPart then return false end
+
     offset = offset or Vector3.new(0, 5, 0)
     local targetPos = targetPart.Position + offset
     local startPos = hrp.Position
 
     local flyHeight = 45
-
     local waypoints = {
         Vector3.new(startPos.X, startPos.Y + flyHeight, startPos.Z),
         Vector3.new(targetPos.X, targetPos.Y + flyHeight, targetPos.Z),
@@ -183,7 +179,7 @@ local function pressE()
     end)
 end
 
--- ====== МАНСИНГ (быстрый, резкий) ======
+-- ====== МАНСИНГ ======
 local function startWalkingMansing(bee)
     local char = player.Character
     if not char then return end
@@ -241,11 +237,9 @@ local function huntViciousBee()
 
     print("[Hunt] ✅ Пчела найдена:", bee.Name)
 
-    -- Ищем свободный улей
     local hive = findFreeHive()
     if hive then
         print("[Hunt] Летим к улью:", hive.Name)
-
         local platform = hive:FindFirstChild("Platform")
         if platform then
             local platformPart = platform.Value
@@ -257,7 +251,6 @@ local function huntViciousBee()
         else
             teleportTo(hive, Vector3.new(0, 5, 0))
         end
-
         task.wait(1.5)
         pressE()
         task.wait(2)
@@ -269,11 +262,10 @@ local function huntViciousBee()
         return
     end
 
-    -- Летим к пчеле
     print("[Hunt] Летим к пчеле...")
     flyTo(bee, Vector3.new(0, 5, 15))
     task.wait(0.5)
-    -- Мансинг 35 секунд
+
     print("[Hunt] Мансинг 35 сек...")
     local stopMansing = startWalkingMansing(bee)
     task.wait(35)
@@ -283,15 +275,15 @@ local function huntViciousBee()
     collectgarbage("collect")
     hopToRandomServer()
 end
-
 -- ====== АВТО-ЗАПУСК ======
 task.spawn(function()
     task.wait(5)
     while true do
         pcall(huntViciousBee)
-        task.wait(5) -- задержка между циклами (для стабильности)
+        task.wait(3)
     end
 end)
 
 print("[Vicious Bee Hunter] Запущен.")
+
     
