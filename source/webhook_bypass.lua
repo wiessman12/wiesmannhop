@@ -15,35 +15,41 @@ local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local player = Players.LocalPlayer
 
--- ====== WEBHOOK BYPASS ======
-local function isWebhook(url)
-    if type(url) ~= "string" then return false end
-    return url:find("discord.com/api/webhooks") or url:find("discordapp.com/api/webhooks")
-end
-
-local fakeResponse = { StatusCode = 200, StatusMessage = "OK", Headers = {}, Body = '{"success":true}' }
-
-if request then
-    local oldRequest = request
-    request = function(options)
-        if type(options) == "table" and isWebhook(options.Url or options.url) then
-            return fakeResponse
-        end
-        return oldRequest(options)
-    end
-end
-
-local function sendLog(text)
-    local url = getgenv().ServerHopConfig.WebhookURL
-    if not url or url == "" then return end
-    pcall(function()
-        request({
-            Url = url,
-            Method = "POST",
-            Headers = { ["Content-Type"] = "application/json" },
-            Body = HttpService:JSONEncode({ content = text, username = "Vicious Bee Hunter" })
-        })
+-- ====== ФУНКЦИЯ ХОПА НА РАЗНЫЕ СЕРВЕРА ======
+local function hopToRandomServer()
+    -- Если мы на ВИП-сервере — выходим из него на публичный
+    local success, servers = pcall(function()
+        return HttpService:JSONDecode(
+            game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")
+        )
     end)
+
+    if not success or not servers or not servers.data then
+        -- Если не получилось получить список — перезаходим на тот же
+        TeleportService:Teleport(game.PlaceId, player)
+        return
+    end
+
+    local currentJobId = game.JobId
+    local candidates = {}
+
+    for _, server in ipairs(servers.data) do
+        if server.id ~= currentJobId
+           and server.playing < server.maxPlayers
+           and server.playing >= 1 then
+            table.insert(candidates, server)
+        end
+    end
+
+    if #candidates == 0 then
+        -- Если нет подходящих — перезаходим на тот же
+        TeleportService:Teleport(game.PlaceId, player)
+        return
+    end
+
+    -- Выбираем случайный сервер из списка
+    local chosen = candidates[math.random(1, #candidates)]
+    TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, player)
 end
 
 -- ====== ПОИСК VICIOUS BEE ======
@@ -79,22 +85,22 @@ end
 
 -- ====== ОСНОВНАЯ ЛОГИКА ======
 local function huntViciousBee()
-    sendLog("[Hunt] Поиск Vicious Bee...")
     local bee = findViciousBee()
     if not bee then
-        sendLog("[Hunt] Пчела не найдена. Перезаход...")
-        task.wait(2)
-        TeleportService:Teleport(game.PlaceId, player)
+        -- Пчелы нет — хопаем на другой сервер
+        hopToRandomServer()
         return
     end
-    sendLog("[Hunt] Пчела найдена! Телепорт...")
+
+    -- Пчела есть — телепортируемся и ждём
     teleportTo(bee)
     task.wait(1)
-    sendLog("[Hunt] Атака... Ждём 45 сек.")
+
+    -- Ждём 45 секунд (пока пчёлы убьют)
     task.wait(45)
-    sendLog("[Hunt] Завершено. Перезаход...")
-    task.wait(2)
-    TeleportService:Teleport(game.PlaceId, player)
+
+    -- Перезаход на другой сервер
+    hopToRandomServer()
 end
 
 -- ====== АВТО-ЗАПУСК ======
@@ -106,4 +112,4 @@ task.spawn(function()
     end
 end)
 
-print("[Vicious Bee Hunter] Запущен.")
+print("[Vicious Bee Hunter] Запущен. Будет хопать на разные сервера.")
