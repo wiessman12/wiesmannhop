@@ -116,26 +116,32 @@ local function findFreeHive()
     return nil
 end
 
--- ====== ТЕЛЕПОРТ (с pcall — видны ошибки) ======
+-- ====== ТЕЛЕПОРТ (берёт АКТУАЛЬНОГО LocalPlayer) ======
 local function teleportTo(target, offset)
     local success, err = pcall(function()
         print("[Teleport] Вызван teleportTo")
-        print("[Teleport] target:", target)
 
-        local char = player.Character
+        local currentPlayer = game:GetService("Players").LocalPlayer
+        print("[Teleport] currentPlayer:", currentPlayer)
+
+        if not currentPlayer then
+            print("[Teleport] ❌ currentPlayer = nil")
+            return false
+        end
+            local char = currentPlayer.Character
         print("[Teleport] Character:", char)
         if not char then return false end
 
         local hrp = char:FindFirstChild("HumanoidRootPart")
         print("[Teleport] HumanoidRootPart:", hrp)
         if not hrp then return false end
-            if not target then return false end
+
+        if not target then return false end
 
         offset = offset or Vector3.new(0, 3, 0)
         local targetPos
 
         if target:IsA("Model") then
-            print("[Teleport] target это Model")
             if target.PrimaryPart then
                 targetPos = target.PrimaryPart.Position
                 print("[Teleport] PrimaryPart:", target.PrimaryPart.Name, "| Pos:", targetPos)
@@ -149,7 +155,6 @@ local function teleportTo(target, offset)
                 end
             end
         elseif target:IsA("BasePart") then
-            print("[Teleport] target это BasePart")
             targetPos = target.Position
         else
             print("[Teleport] ❌ target не Model и не BasePart")
@@ -252,33 +257,18 @@ local function huntViciousBee()
         return
     end
     print("[Hunt] ✅ Выбран улей:", hive.Name)
-
-    -- === ТЕЛЕПОРТ К УЛЬЮ ===
-    print("[Hunt] === ПОДГОТОВКА ТЕЛЕПОРТА ===")
+    -- Телепорт к улью
     local platform = hive:FindFirstChild("Platform")
-    print("[Hunt] Platform:", platform)
     if platform and platform.Value then
         print("[Hunt] Телепорт к платформе...")
-        local result = teleportTo(platform.Value, Vector3.new(0, 3, 0))
-        print("[Hunt] Результат телепорта:", result)
+        teleportTo(platform.Value, Vector3.new(0, 3, 0))
     else
         print("[Hunt] Телепорт к улью...")
-        local result = teleportTo(hive, Vector3.new(0, 3, 0))
-        print("[Hunt] Результат телепорта:", result)
-    end
-
-    -- Проверяем, что телепорт сработал
-    task.wait(0.5)
-    local charCheck = player.Character
-    if charCheck then
-        local hrpCheck = charCheck:FindFirstChild("HumanoidRootPart")
-        if hrpCheck then
-            print("[Hunt] Позиция после телепорта:", hrpCheck.Position)
-        end
+        teleportTo(hive, Vector3.new(0, 3, 0))
     end
 
     -- Нажимаем E
-    task.wait(0.5)
+    task.wait(0.8)
     print("[Hunt] Нажимаем E...")
     pressE()
     task.wait(0.8)
