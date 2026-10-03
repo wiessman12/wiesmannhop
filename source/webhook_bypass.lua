@@ -105,7 +105,7 @@ local function findFreeHive()
     return nil
 end
 
--- ====== ТЕЛЕПОРТ ======
+-- ====== ТЕЛЕПОРТ (offset = 3 studs, чтобы стоять НА платформе) ======
 local function teleportTo(target, offset)
     local char = player.Character
     if not char then return false end
@@ -113,7 +113,7 @@ local function teleportTo(target, offset)
     if not hrp then return false end
     if not target then return false end
 
-    offset = offset or Vector3.new(0, 5, 0)
+    offset = offset or Vector3.new(0, 3, 0)
     local targetPos
 
     if target:IsA("Model") then
@@ -130,6 +130,7 @@ local function teleportTo(target, offset)
     elseif target:IsA("BasePart") then
         targetPos = target.Position
     end
+
     if not targetPos then return false end
     hrp.CFrame = CFrame.new(targetPos + offset)
     return true
@@ -187,11 +188,12 @@ local function startMansing(bee)
     end
 end
 
--- ====== ОСНОВНАЯ ЛОГИКА (с диагностикой) ======
+-- ====== ОСНОВНАЯ ЛОГИКА ======
 local function huntViciousBee()
     print("[Hunt] === НОВЫЙ СЕРВЕР ===")
     task.wait(3)
 
+    -- 1. Ищем пчелу
     print("[Hunt] Поиск пчелы...")
     local bee = findViciousBee()
     if not bee then
@@ -201,12 +203,14 @@ local function huntViciousBee()
     end
     print("[Hunt] ✅ Пчела найдена:", bee.Name)
 
+    -- 2. Проверяем, не на горе ли пчела
     if isViciousBeeNearMondo(bee) then
         print("[Hunt] ⚠️ Vicious Bee на горе. Хоп...")
         hopToRandomServer()
         return
     end
 
+    -- 3. Ищем улей
     print("[Hunt] Поиск улья...")
     local hive = findFreeHive()
     if not hive then
@@ -216,59 +220,77 @@ local function huntViciousBee()
     end
     print("[Hunt] ✅ Улей найден:", hive.Name)
 
-    -- === ДИАГНОСТИКА ===
-    local char = player.Character
-    print("[Hunt] Character:", char)
-    if char then
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        print("[Hunt] HumanoidRootPart:", hrp)
-        if hrp then
-            print("[Hunt] Текущая позиция:", hrp.Position)
-        end
-    end
-
+    -- 4. Телепорт к платформе (offset 3, чтобы стоять НА платформе)
     local platform = hive:FindFirstChild("Platform")
-    print("[Hunt] Platform (ObjectValue):", platform)
-    if platform then
-        print("[Hunt] Platform.Value:", platform.Value)
-        if platform.Value then
-            print("[Hunt] Platform.Value Class:", platform.Value.ClassName)
-        end
-    end
-
-    -- === ТЕЛЕПОРТ К УЛЬЮ ===
     if platform and platform.Value then
         print("[Hunt] Телепорт к платформе...")
-        local result = teleportTo(platform.Value, Vector3.new(0, 5, 0))
-        print("[Hunt] Результат телепорта:", result)
+        teleportTo(platform.Value, Vector3.new(0, 3, 0))
     else
-        print("[Hunt] Platform.Value = nil. Телепорт к улью...")
-        local result = teleportTo(hive, Vector3.new(0, 5, 0))
-        print("[Hunt] Результат телепорта:", result)
+        print("[Hunt] Телепорт к улью...")
+        teleportTo(hive, Vector3.new(0, 3, 0))
     end
 
+    -- 5. Нажимаем E
     task.wait(2)
     print("[Hunt] Нажимаем E...")
     pressE()
     task.wait(2)
+    print("[Hunt] ✅ Улей занят")
 
-    -- === ТЕЛЕПОРТ К ПЧЕЛЕ ===
+    -- 6. Телепорт к пчеле
     print("[Hunt] Телепорт к пчеле...")
-    local result2 = teleportTo(bee, Vector3.new(0, 5, 15))
-    print("[Hunt] Результат телепорта к пчеле:", result2)
+    teleportTo(bee, Vector3.new(0, 5, 15))
     task.wait(0.5)
 
-    -- === МАНСИНГ ===
-    print("[Hunt] Мансинг...")
+    -- 7. Мансинг
+    print("[Hunt] Мансинг вокруг пчелы...")
     local stopMansing = startMansing(bee)
-    task.wait(60)
+
+    -- 8. Ждём убийства пчелы
+    print("[Hunt] Ждём убийства пчелы...")
+    local maxWait = 60
+    local waited = 0
+
+    while waited < maxWait do
+        task.wait(0.5)
+        waited = waited + 0.5
+
+        local humanoid = bee:FindFirstChild("Humanoid")
+        local beeDead = false
+        if not bee.Parent then
+            beeDead = true
+        elseif not humanoid then
+            beeDead = true
+        elseif humanoid.Health <= 0 then
+            beeDead = true
+        end
+
+        if beeDead then
+            print("[Hunt] ✅ Пчела убита! Хоп...")
+            break
+        end
+
+        if not player.Character then break end
+        local myHumanoid = player.Character:FindFirstChildOfClass("Humanoid")
+        if not myHumanoid or myHumanoid.Health <= 0 then
+            print("[Hunt] ⚠️ Мы умерли. Хоп...")
+            break
+        end
+    end
+
+    -- 9. Останавливаем мансинг
     if stopMansing then stopMansing() end
 
+    -- 10. Хоп
+    print("[Hunt] Хоп на другой сервер...")
     hopToRandomServer()
 end
+
 -- ====== БЕСКОНЕЧНЫЙ ЦИКЛ ======
 task.wait(5)
 while true do
     huntViciousBee()
     task.wait(3)
 end
+        
+            
