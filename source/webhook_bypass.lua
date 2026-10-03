@@ -18,7 +18,7 @@ local player = Players.LocalPlayer
 
 -- ====== ХОП ======
 local function hopToRandomServer()
-    task.wait(5) -- задержка 5 секунд перед хопом
+    task.wait(5)
     local success, servers = pcall(function()
         return HttpService:JSONDecode(
             game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")
@@ -65,33 +65,69 @@ local function findViciousBee()
     return nil
 end
 
--- ====== ПОИСК УЛЬЯ ======
+-- ====== ПОИСК УЛЬЯ (надёжный) ======
 local function findFreeHive()
     local honeycombs = workspace:FindFirstChild("Honeycombs")
     if not honeycombs then return nil end
 
+    -- Ждём загрузки ульев (до 3 секунд)
+    local tries = 0
+    while tries < 10 do
+        local hasHives = true
+        for i = 1, 6 do
+            if not honeycombs:FindFirstChild("Hive" .. i) then
+                hasHives = false
+                break
+            end
+        end
+        if hasHives then break end
+        task.wait(0.3)
+        tries = tries + 1
+    end
+
+    -- Ищем наш улей (где OwnerName = наш ник)
     for i = 1, 6 do
         local hive = honeycombs:FindFirstChild("Hive" .. i)
-        if hive and hive:FindFirstChild("Gui") and hive.Gui:FindFirstChild("Display") and hive.Gui.Display:FindFirstChild("Frame") then
-            local ownerName = hive.Gui.Display.Frame:FindFirstChild("OwnerName")
-            if ownerName and ownerName.Text == player.Name then
-                return hive
+        if hive then
+            local gui = hive:FindFirstChild("Gui")
+            if gui then
+                local display = gui:FindFirstChild("Display")
+                if display then
+                    local frame = display:FindFirstChild("Frame")
+                    if frame then
+                        local ownerName = frame:FindFirstChild("OwnerName")
+                        if ownerName and ownerName.Text == player.Name then
+                            return hive
+                        end
+                    end
+                end
             end
         end
     end
 
+    -- Ищем свободный (OwnerName = "")
     for i = 1, 6 do
         local hive = honeycombs:FindFirstChild("Hive" .. i)
-        if hive and hive:FindFirstChild("Gui") and hive.Gui:FindFirstChild("Display") and hive.Gui.Display:FindFirstChild("Frame") then
-            local ownerName = hive.Gui.Display.Frame:FindFirstChild("OwnerName")
-            if ownerName and ownerName.Text == "" then
-                return hive
+        if hive then
+            local gui = hive:FindFirstChild("Gui")
+            if gui then
+                local display = gui:FindFirstChild("Display")
+                if display then
+                    local frame = display:FindFirstChild("Frame")
+                    if frame then
+                        local ownerName = frame:FindFirstChild("OwnerName")
+                        if ownerName and (ownerName.Text == "" or ownerName.Text == nil) then
+                            return hive
+                        end
+                    end
+                end
             end
         end
     end
-    return nil
+
+    -- Фолбэк: Hive1
+    return honeycombs:FindFirstChild("Hive1")
 end
-
 -- ====== ПОЛУЧЕНИЕ ЦЕЛИ ======
 local function getTargetPart(target)
     if not target then return nil end
@@ -116,8 +152,9 @@ local function flyTo(target, offset)
     offset = offset or Vector3.new(0, 5, 0)
     local targetPos = targetPart.Position + offset
     local distance = (hrp.Position - targetPos).Magnitude
-    local speed = 200 -- быстрый полёт (200 studs/сек)
+    local speed = 200
     local duration = math.clamp(distance / speed, 0.3, 1.5)
+
     local tween = TweenService:Create(
         hrp,
         TweenInfo.new(duration, Enum.EasingStyle.Linear),
@@ -156,7 +193,7 @@ local function startWalkingMansing(bee)
 
     task.spawn(function()
         local angle = 0
-        local radius = 20 -- УВЕЛИЧЕН радиус
+        local radius = 20
 
         while running do
             if not player.Character then break end
@@ -167,13 +204,13 @@ local function startWalkingMansing(bee)
             local beeHrp = bee:FindFirstChild("HumanoidRootPart")
             if not beeHrp then break end
 
-            angle = angle + math.rad(120) -- БОЛЕЕ РЕЗКИЕ движения (120° за шаг)
+            angle = angle + math.rad(120)
             local offsetX = math.cos(angle) * radius
             local offsetZ = math.sin(angle) * radius
             local targetPos = beeHrp.Position + Vector3.new(offsetX, 0, offsetZ)
 
             currentHumanoid:MoveTo(targetPos)
-            task.wait(0.25) -- БЫСТРЕЕ (0.25 сек вместо 0.4)
+            task.wait(0.25)
         end
     end)
 
@@ -205,7 +242,7 @@ local function huntViciousBee()
     -- Ищем улей
     local hive = findFreeHive()
     if hive then
-        print("[Hunt] Улей:", hive.Name)
+        print("[Hunt] Улей найден:", hive.Name)
         local platform = hive:FindFirstChild("Platform")
         if platform then
             flyTo(platform, Vector3.new(0, 5, 0))
@@ -213,13 +250,14 @@ local function huntViciousBee()
             pressE()
             task.wait(2)
 
-            local ownerName = hive.Gui.Display.Frame:FindFirstChild("OwnerName")
+            local gui = hive:FindFirstChild("Gui")
+            local ownerName = gui and gui:FindFirstChild("Display") and gui.Display:FindFirstChild("Frame") and gui.Display.Frame:FindFirstChild("OwnerName")
             if ownerName and ownerName.Text == player.Name then
                 print("[Hunt] ✅ Улей занят")
             else
-                print("[Hunt] ⚠️ Улей не засчитан")
-                pressE()
-                task.wait(2)
+                print("[Hunt] ⚠️ Улей не засчитан. Хоп...")
+                hopToRandomServer()
+                return
             end
         else
             flyTo(hive, Vector3.new(0, 5, 0))
@@ -228,7 +266,9 @@ local function huntViciousBee()
             task.wait(2)
         end
     else
-        print("[Hunt] ⚠️ Улей не найден")
+        print("[Hunt] ⚠️ Улей не найден. Хоп...")
+        hopToRandomServer()
+        return
     end
 
     -- Летим к пчеле
@@ -251,7 +291,7 @@ task.spawn(function()
     task.wait(5)
     while true do
         pcall(huntViciousBee)
-        task.wait(5) -- задержка 5 секунд между циклами
+        task.wait(5)
     end
 end)
 
