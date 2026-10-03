@@ -5,7 +5,7 @@ local TeleportService = game:GetService("TeleportService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local player = Players.LocalPlayer
 
--- ====== ХОП (задержка 3 секунды) ======
+-- ====== ХОП ======
 local function hopToRandomServer()
     task.wait(3)
     local success, servers = pcall(function()
@@ -84,9 +84,8 @@ local function findFreeHive()
     local honeycombs = workspace:FindFirstChild("Honeycombs")
     if not honeycombs then return nil end
 
-    -- Ждём прогрузки Owner (до 3 секунд)
     local tries = 0
-    while tries < 15 do
+    while tries < 10 do
         local allLoaded = true
         for i = 1, 6 do
             local hive = honeycombs:FindFirstChild("Hive" .. i)
@@ -100,7 +99,6 @@ local function findFreeHive()
         tries = tries + 1
     end
 
-    -- Ищем свободный улей
     for i = 1, 6 do
         local hive = honeycombs:FindFirstChild("Hive" .. i)
         if hive then
@@ -120,31 +118,56 @@ end
 
 -- ====== ТЕЛЕПОРТ ======
 local function teleportTo(target, offset)
+    print("[Teleport] Вызван teleportTo")
+    print("[Teleport] target:", target)
+    
     local char = player.Character
-    if not char then return false end
+    if not char then 
+        print("[Teleport] ❌ Character = nil")
+        return false 
+    end
     local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return false end
-    if not target then return false end
-
+    if not hrp then 
+        print("[Teleport] ❌ HumanoidRootPart = nil")
+        return false 
+    end
+    if not target then 
+        print("[Teleport] ❌ target = nil")
+        return false 
+    end
     offset = offset or Vector3.new(0, 3, 0)
     local targetPos
+
     if target:IsA("Model") then
+        print("[Teleport] target это Model")
         if target.PrimaryPart then
             targetPos = target.PrimaryPart.Position
+            print("[Teleport] PrimaryPart:", target.PrimaryPart.Name, "| Pos:", targetPos)
         else
             for _, part in ipairs(target:GetDescendants()) do
                 if part:IsA("BasePart") then
                     targetPos = part.Position
+                    print("[Teleport] Первая BasePart:", part.Name, "| Pos:", targetPos)
                     break
                 end
             end
         end
     elseif target:IsA("BasePart") then
+        print("[Teleport] target это BasePart")
         targetPos = target.Position
+    else
+        print("[Teleport] ❌ target не Model и не BasePart. Class:", target.ClassName)
+        return false
     end
 
-    if not targetPos then return false end
+    if not targetPos then 
+        print("[Teleport] ❌ targetPos = nil")
+        return false 
+    end
+    
+    print("[Teleport] Финальная позиция:", targetPos + offset)
     hrp.CFrame = CFrame.new(targetPos + offset)
+    print("[Teleport] ✅ Телепорт выполнен")
     return true
 end
 
@@ -202,12 +225,8 @@ end
 -- ====== ОСНОВНАЯ ЛОГИКА ======
 local function huntViciousBee()
     print("[Hunt] === НОВЫЙ СЕРВЕР ===")
-    
-    -- Ждём прогрузки сервера
-    print("[Hunt] Ждём прогрузки сервера...")
-    task.wait(4)
+    task.wait(2)
 
-    -- 1. Ищем пчелу
     print("[Hunt] Поиск пчелы...")
     local bee = findViciousBee()
     if not bee then
@@ -217,14 +236,12 @@ local function huntViciousBee()
     end
     print("[Hunt] ✅ Пчела найдена:", bee.Name)
 
-    -- 2. Проверяем Mondo
     if isViciousBeeNearMondo(bee) then
         print("[Hunt] ⚠️ Пчела на горе. Хоп...")
         hopToRandomServer()
         return
     end
 
-    -- 3. Ищем улей
     print("[Hunt] Поиск улья...")
     local hive = findFreeHive()
     if not hive then
@@ -234,29 +251,42 @@ local function huntViciousBee()
     end
     print("[Hunt] ✅ Выбран улей:", hive.Name)
 
-    -- 4. Телепорт к улью
+    -- === ТЕЛЕПОРТ К УЛЬЮ (с логами) ===
+    print("[Hunt] === ПОДГОТОВКА ТЕЛЕПОРТА ===")
     local platform = hive:FindFirstChild("Platform")
+    print("[Hunt] Platform:", platform)
+    if platform then
+        print("[Hunt] Platform.Value:", platform.Value)
+        if platform.Value then
+            print("[Hunt] Platform.Value.ClassName:", platform.Value.ClassName)
+        end
+    end
     if platform and platform.Value then
-        teleportTo(platform.Value, Vector3.new(0, 3, 0))
+        print("[Hunt] Телепорт к платформе...")
+        local result = teleportTo(platform.Value, Vector3.new(0, 3, 0))
+        print("[Hunt] Результат телепорта:", result)
     else
-        teleportTo(hive, Vector3.new(0, 3, 0))
+        print("[Hunt] Platform.Value = nil. Телепорт к улью...")
+        local result = teleportTo(hive, Vector3.new(0, 3, 0))
+        print("[Hunt] Результат телепорта:", result)
     end
 
-    -- 5. Нажимаем E
+    -- Нажимаем E
     task.wait(0.8)
+    print("[Hunt] Нажимаем E...")
     pressE()
     task.wait(0.8)
     print("[Hunt] ✅ Улей занят")
 
-    -- 6. Телепорт к пчеле
+    -- Телепорт к пчеле
+    print("[Hunt] Телепорт к пчеле...")
     teleportTo(bee, Vector3.new(0, 5, 15))
     task.wait(0.3)
 
-    -- 7. Мансинг
+    -- Мансинг
     print("[Hunt] Мансинг вокруг пчелы...")
     local stopMansing = startMansing(bee)
 
-    -- 8. Ждём убийства пчелы
     print("[Hunt] Ждём убийства пчелы...")
     local maxWait = 60
     local waited = 0
@@ -275,6 +305,7 @@ local function huntViciousBee()
         elseif humanoid.Health <= 0 then
             beeDead = true
         end
+
         if beeDead then
             print("[Hunt] ✅ Пчела убита! Хоп...")
             break
@@ -288,10 +319,7 @@ local function huntViciousBee()
         end
     end
 
-    -- 9. Останавливаем мансинг
     if stopMansing then stopMansing() end
-
-    -- 10. Хоп
     print("[Hunt] Хоп на другой сервер...")
     hopToRandomServer()
 end
@@ -302,5 +330,4 @@ while true do
     huntViciousBee()
     task.wait(1.5)
 end
-        
     
