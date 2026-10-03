@@ -63,25 +63,32 @@ local function findViciousBee()
     return nil
 end
 
--- ====== ПОИСК УЛЬЯ (по Owner.Value) ======
+-- ====== ПОИСК УЛЬЯ (с ожиданием прогрузки) ======
 local function findFreeHive()
     local honeycombs = workspace:FindFirstChild("Honeycombs")
     if not honeycombs then return nil end
 
+    -- Ждём прогрузки ульев И Owner (до 5 секунд)
     local tries = 0
-    while tries < 10 do
-        local hasHives = true
+    while tries < 20 do
+        local allReady = true
         for i = 1, 6 do
-            if not honeycombs:FindFirstChild("Hive" .. i) then
-                hasHives = false
+            local hive = honeycombs:FindFirstChild("Hive" .. i)
+            if not hive then
+                allReady = false
+                break
+            end
+            if not hive:FindFirstChild("Owner") then
+                allReady = false
                 break
             end
         end
-        if hasHives then break end
-        task.wait(0.3)
+        if allReady then break end
+        task.wait(0.25)
         tries = tries + 1
     end
 
+    -- Ищем свободный улей
     for i = 1, 6 do
         local hive = honeycombs:FindFirstChild("Hive" .. i)
         if hive then
@@ -97,42 +104,65 @@ local function findFreeHive()
     return nil
 end
 
--- ====== ПОЛУЧЕНИЕ ЦЕЛИ ======
-local function getTargetPart(target)
-    if not target then return nil end
-    if target:IsA("Model") then
-        return target:FindFirstChild("HumanoidRootPart") or target.PrimaryPart
-    elseif target:IsA("BasePart") then
-        return target
-    end
-    return nil
-end
-
--- ====== ТЕЛЕПОРТ ======
+-- ====== ТЕЛЕПОРТ (исправленный) ======
 local function teleportTo(target, offset)
     local char = player.Character
     if not char then return false end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return false end
-    local targetPart = getTargetPart(target)
-    if not targetPart then return false end
+    if not target then return false end
+
     offset = offset or Vector3.new(0, 5, 0)
-    hrp.CFrame = CFrame.new(targetPart.Position + offset)
+    local targetPos
+
+    if target:IsA("Model") then
+        if target.PrimaryPart then
+            targetPos = target.PrimaryPart.Position
+        else
+            for _, part in ipairs(target:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    targetPos = part.Position
+                    break
+                end
+            end
+        end
+    elseif target:IsA("BasePart") then
+        targetPos = target.Position
+    end
+
+    if not targetPos then return false end
+
+    hrp.CFrame = CFrame.new(targetPos + offset)
     return true
 end
-
--- ====== FLY ======
+-- ====== FLY (для пчелы) ======
 local function flyTo(target, offset)
     local char = player.Character
     if not char then return false end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return false end
-    local targetPart = getTargetPart(target)
-    if not targetPart then return false end
+    if not target then return false end
+
+    local targetPos
+    if target:IsA("Model") then
+        if target.PrimaryPart then
+            targetPos = target.PrimaryPart.Position
+        else
+            local root = target:FindFirstChild("HumanoidRootPart")
+            if root then targetPos = root.Position end
+        end
+    elseif target:IsA("BasePart") then
+        targetPos = target.Position
+    end
+
+    if not targetPos then return false end
 
     offset = offset or Vector3.new(0, 5, 0)
-    local targetPos = targetPart.Position + offset
+    targetPos = targetPos + offset
     local startPos = hrp.Position
+
+    local flyHeight = 45
+
     local waypoints = {
         Vector3.new(startPos.X, startPos.Y + flyHeight, startPos.Z),
         Vector3.new(targetPos.X, targetPos.Y + flyHeight, targetPos.Z),
@@ -224,12 +254,13 @@ end
 -- ====== ОСНОВНАЯ ЛОГИКА ======
 local function huntViciousBee()
     print("[Hunt] === НОВЫЙ СЕРВЕР ===")
-    task.wait(3) -- ждём загрузки
+    task.wait(3)
 
     print("[Hunt] Поиск пчелы...")
     local bee = findViciousBee()
     if not bee then
         print("[Hunt] ❌ Пчела не найдена. Хоп...")
+        collectgarbage("collect")
         hopToRandomServer()
         return
     end
@@ -238,26 +269,26 @@ local function huntViciousBee()
 
     -- Ищем свободный улей
     local hive = findFreeHive()
-    if hive then
-        print("[Hunt] Летим к улью:", hive.Name)
-        local platform = hive:FindFirstChild("Platform")
-        if platform then
-            local platformPart = platform.Value
-            if platformPart then
-                teleportTo(platformPart, Vector3.new(0, 5, 0))
-            else
-                teleportTo(hive, Vector3.new(0, 5, 0))
-            end
-        else
-            teleportTo(hive, Vector3.new(0, 5, 0))
-        end
-        task.wait(1.5)
-        pressE()
-        task.wait(2)
-        print("[Hunt] ✅ Улей занят:", hive.Name)
-    else
-        print("[Hunt] ⚠️ Улей не найден, но летим к пчеле...")
+    if not hive then
+        print("[Hunt] ❌ Улей не найден. Хоп...")
+        collectgarbage("collect")
+        hopToRandomServer()
+        return
     end
+    print("[Hunt] Летим к улью:", hive.Name)
+    local platform = hive:FindFirstChild("Platform")
+    if platform and platform.Value then
+        print("[Hunt] Телепорт к платформе...")
+        teleportTo(platform.Value, Vector3.new(0, 5, 0))
+    else
+        print("[Hunt] Платформа не найдена, телепорт к улью...")
+        teleportTo(hive, Vector3.new(0, 5, 0))
+    end
+    task.wait(2)
+    print("[Hunt] Нажимаем E...")
+    pressE()
+    task.wait(2)
+    print("[Hunt] ✅ Улей занят:", hive.Name)
 
     -- Летим к пчеле
     print("[Hunt] Летим к пчеле...")
@@ -271,8 +302,10 @@ local function huntViciousBee()
     if stopMansing then stopMansing() end
 
     print("[Hunt] Завершено. Хоп...")
+    collectgarbage("collect")
     hopToRandomServer()
 end
+
 -- ====== АВТО-ЗАПУСК ======
 task.spawn(function()
     task.wait(5)
@@ -283,7 +316,3 @@ task.spawn(function()
 end)
 
 print("[Vicious Bee Hunter] Запущен.")
-
-    
-
-    local flyHeight = 45
