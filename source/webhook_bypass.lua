@@ -13,11 +13,11 @@ getgenv().ServerHopConfig = {
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
+local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 
--- ====== ФУНКЦИЯ ХОПА НА РАЗНЫЕ СЕРВЕРА ======
+-- ====== ХОП НА РАЗНЫЕ СЕРВЕРА ======
 local function hopToRandomServer()
-    -- Если мы на ВИП-сервере — выходим из него на публичный
     local success, servers = pcall(function()
         return HttpService:JSONDecode(
             game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")
@@ -25,7 +25,6 @@ local function hopToRandomServer()
     end)
 
     if not success or not servers or not servers.data then
-        -- Если не получилось получить список — перезаходим на тот же
         TeleportService:Teleport(game.PlaceId, player)
         return
     end
@@ -42,12 +41,10 @@ local function hopToRandomServer()
     end
 
     if #candidates == 0 then
-        -- Если нет подходящих — перезаходим на тот же
         TeleportService:Teleport(game.PlaceId, player)
         return
     end
 
-    -- Выбираем случайный сервер из списка
     local chosen = candidates[math.random(1, #candidates)]
     TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, player)
 end
@@ -67,39 +64,97 @@ local function findViciousBee()
     return nil
 end
 
--- ====== ТЕЛЕПОРТ К ПЧЕЛЕ ======
-local function teleportTo(target)
+-- ====== ТЕЛЕПОРТ К ЦЕЛИ (один раз, чтобы добраться до пчелы) ======
+local function getTargetPart(target)
+    if target:IsA("Model") then
+        return target:FindFirstChild("HumanoidRootPart") or target.PrimaryPart
+    elseif target:IsA("BasePart") then
+        return target
+    end
+    return nil
+end
+
+local function teleportTo(target, offset)
     local char = player.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-    local targetPart
-    if target:IsA("Model") then
-        targetPart = target:FindFirstChild("HumanoidRootPart") or target.PrimaryPart
-    elseif target:IsA("BasePart") then
-        targetPart = target
-    end
+    local targetPart = getTargetPart(target)
     if not targetPart then return end
-    hrp.CFrame = CFrame.new(targetPart.Position + Vector3.new(0, 5, 0))
+    offset = offset or Vector3.new(0, 5, 0)
+    hrp.CFrame = CFrame.new(targetPart.Position + offset)
+end
+
+-- ====== МАНСИНГ ХОДЬБОЙ ======
+local function startWalkingMansing(bee)
+    local char = player.Character
+    if not char then return end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+
+    local running = true
+
+    task.spawn(function()
+        local angle = 0
+        local radius = 15 -- радиус круга
+
+        while running do
+            -- Проверка: жив ли персонаж и пчела
+            if not player.Character then break end
+            local currentHumanoid = player.Character:FindFirstChildOfClass("Humanoid")
+            if not currentHumanoid or currentHumanoid.Health <= 0 then break end
+            if not bee.Parent then break end
+
+            local beeHrp = bee:FindFirstChild("HumanoidRootPart")
+            if not beeHrp then break end
+
+            -- Вычисляем точку на круге вокруг пчелы
+            angle = angle + math.rad(90) -- каждый шаг — 90 градусов
+            local offsetX = math.cos(angle) * radius
+            local offsetZ = math.sin(angle) * radius
+            local targetPos = beeHrp.Position + Vector3.new(offsetX, 0, offsetZ)
+
+            -- Заставляем персонажа идти к этой точке
+            currentHumanoid:MoveTo(targetPos)
+
+            task.wait(0.4) -- обновляем точку каждые 0.4 секунды
+        end
+    end)
+    -- Функция остановки
+    return function()
+        running = false
+        local char = player.Character
+        if char then
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                humanoid:MoveTo(char.HumanoidRootPart.Position) -- стоп
+            end
+        end
+    end
 end
 
 -- ====== ОСНОВНАЯ ЛОГИКА ======
 local function huntViciousBee()
     local bee = findViciousBee()
     if not bee then
-        -- Пчелы нет — хопаем на другой сервер
         hopToRandomServer()
         return
     end
 
-    -- Пчела есть — телепортируемся и ждём
-    teleportTo(bee)
-    task.wait(1)
+    -- Телепорт к пчеле (один раз, чтобы рядом был)
+    teleportTo(bee, Vector3.new(0, 5, 15))
+    task.wait(0.5)
 
-    -- Ждём 45 секунд (пока пчёлы убьют)
-    task.wait(45)
+    -- Запуск мансинга ходьбой
+    local stopMansing = startWalkingMansing(bee)
 
-    -- Перезаход на другой сервер
+    -- Ждём 25 секунд
+    task.wait(25)
+
+    -- Останавливаем мансинг
+    if stopMansing then stopMansing() end
+
+    -- Хоп на другой сервер
     hopToRandomServer()
 end
 
@@ -112,4 +167,4 @@ task.spawn(function()
     end
 end)
 
-print("[Vicious Bee Hunter] Запущен. Будет хопать на разные сервера.")
+print("[Vicious Bee Hunter] Запущен. Мансинг ходьбой. Таймер: 25с.")
