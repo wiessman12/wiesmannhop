@@ -14,6 +14,7 @@ local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local TweenService = game:GetService("TweenService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 local player = Players.LocalPlayer
 
 -- ====== ХОП ======
@@ -65,7 +66,7 @@ local function findViciousBee()
     return nil
 end
 
--- ====== ПОИСК УЛЬЯ (надёжный) ======
+-- ====== ПОИСК УЛЬЯ ======
 local function findFreeHive()
     local honeycombs = workspace:FindFirstChild("Honeycombs")
     if not honeycombs then return nil end
@@ -168,17 +169,9 @@ end
 -- ====== НАЖАТИЕ E ======
 local function pressE()
     pcall(function()
-        local VirtualInputManager = game:GetService("VirtualInputManager")
         VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
         task.wait(0.1)
         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-    end)
-    pcall(function()
-        if keypress then
-            keypress(0x45)
-            task.wait(0.1)
-            keyrelease(0x45)
-        end
     end)
 end
 
@@ -288,10 +281,10 @@ end
 
 -- ====== АВТО-ЗАПУСК ======
 task.spawn(function()
-    task.wait(5)
+    task.wait(3)
     while true do
         pcall(huntViciousBee)
-        task.wait(5)
+        task.wait(3)
     end
 end)
 
