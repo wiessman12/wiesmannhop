@@ -16,9 +16,9 @@ local TeleportService = game:GetService("TeleportService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local player = Players.LocalPlayer
 
--- ====== ХОП ======
+-- ====== ХОП (задержка 2 секунды) ======
 local function hopToRandomServer()
-    task.wait(5)
+    task.wait(2)
     local success, servers = pcall(function()
         return HttpService:JSONDecode(
             game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")
@@ -65,57 +65,6 @@ local function findViciousBee()
     return nil
 end
 
--- ====== ПОИСК УЛЬЯ ======
-local function findFreeHive()
-    local honeycombs = workspace:FindFirstChild("Honeycombs")
-    if not honeycombs then return nil end
-
-    -- Ждём загрузки ульев
-    local tries = 0
-    while tries < 10 do
-        local hasHives = true
-        for i = 1, 6 do
-            if not honeycombs:FindFirstChild("Hive" .. i) then
-                hasHives = false
-                break
-            end
-        end
-        if hasHives then break end
-        task.wait(0.3)
-        tries = tries + 1
-    end
-
-    -- 1. Ищем наш улей (где OwnerName = наш ник)
-    for i = 1, 6 do
-        local hive = honeycombs:FindFirstChild("Hive" .. i)
-        if hive and hive:FindFirstChild("Gui") and hive.Gui:FindFirstChild("Display") and hive.Gui.Display:FindFirstChild("Frame") then
-            local ownerName = hive.Gui.Display.Frame:FindFirstChild("OwnerName")
-            if ownerName and ownerName.Text == player.Name then
-                return hive
-            end
-        end
-    end
-
-    -- 2. Ищем СВОБОДНЫЙ улей
-    for i = 1, 6 do
-        local hive = honeycombs:FindFirstChild("Hive" .. i)
-        if hive and hive:FindFirstChild("Gui") and hive.Gui:FindFirstChild("Display") and hive.Gui.Display:FindFirstChild("Frame") then
-            local ownerName = hive.Gui.Display.Frame:FindFirstChild("OwnerName")
-            if ownerName then
-                local text = ownerName.Text
-                if text == "" or text == nil or text == " " or #text == 0 then
-                    print("[Hunt] Свободный улей:", hive.Name, "| OwnerName.Text:", "'" .. tostring(text) .. "'")
-                    return hive
-                end
-            end
-        end
-    end
-
-    -- 3. Ничего не нашли — возвращаем nil
-    print("[Hunt] ⚠️ Все ульи заняты или не прогрузились")
-    return nil
-end
-
 -- ====== ПОЛУЧЕНИЕ ЦЕЛИ ======
 local function getTargetPart(target)
     if not target then return nil end
@@ -126,7 +75,21 @@ local function getTargetPart(target)
     end
     return nil
 end
--- ====== FLY (с облётом препятствий) ======
+
+-- ====== ТЕЛЕПОРТ (для улья) ======
+local function teleportTo(target, offset)
+    local char = player.Character
+    if not char then return false end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    local targetPart = getTargetPart(target)
+    if not targetPart then return false end
+    offset = offset or Vector3.new(0, 5, 0)
+    hrp.CFrame = CFrame.new(targetPart.Position + offset)
+    return true
+end
+
+-- ====== FLY (для пчелы, облёт препятствий) ======
 local function flyTo(target, offset)
     local char = player.Character
     if not char then return false end
@@ -139,10 +102,8 @@ local function flyTo(target, offset)
     local targetPos = targetPart.Position + offset
     local startPos = hrp.Position
 
-    -- ВЫСОТА ПОЛЁТА над препятствиями
     local flyHeight = 45
 
-    -- Точки маршрута: подняться → лететь на высоте → спуститься
     local waypoints = {
         Vector3.new(startPos.X, startPos.Y + flyHeight, startPos.Z),
         Vector3.new(targetPos.X, targetPos.Y + flyHeight, targetPos.Z),
@@ -166,9 +127,8 @@ local function flyTo(target, offset)
 
             local distance = (hrp.Position - waypoint).Magnitude
             if distance < 5 then break end
-
             local direction = (waypoint - hrp.Position).Unit
-            bv.Velocity = direction * 300 -- СКОРОСТЬ 300
+            bv.Velocity = direction * 300
 
             task.wait(0.05)
         end
@@ -244,30 +204,29 @@ local function huntViciousBee()
 
     print("[Hunt] ✅ Пчела найдена:", bee.Name)
 
-    -- Ищем улей
-    local hive = findFreeHive()
-    if hive then
-        print("[Hunt] Улей найден:", hive.Name)
-        local platform = hive:FindFirstChild("Platform")
-        if platform then
-            print("[Hunt] Летим к улью...")
-            flyTo(platform, Vector3.new(0, 5, 0))
-            task.wait(1)
-            print("[Hunt] Нажимаем E...")
-            pressE()
-            task.wait(3)
-            print("[Hunt] ✅ Улей занят (по нажатию E)")
-        else
-            flyTo(hive, Vector3.new(0, 5, 0))
-            task.wait(1)
-            pressE()
-            task.wait(3)
-            print("[Hunt] ✅ Улей занят (по нажатию E)")
+    -- Пробуем ВСЕ 6 ульев по очереди
+    local honeycombs = workspace:FindFirstChild("Honeycombs")
+    if honeycombs then
+        for i = 1, 6 do
+            local hive = honeycombs:FindFirstChild("Hive" .. i)
+            if hive then
+                print("[Hunt] Пробуем улей:", hive.Name)
+                local platform = hive:FindFirstChild("Platform")
+                if platform then
+                    local platformPart = platform.Value
+                    if platformPart then
+                        teleportTo(platformPart, Vector3.new(0, 5, 0))
+                    else
+                        teleportTo(hive, Vector3.new(0, 5, 0))
+                    end
+                else
+                    teleportTo(hive, Vector3.new(0, 5, 0))
+                end
+                task.wait(2)
+                pressE()
+                task.wait(2)
+            end
         end
-    else
-        print("[Hunt] ⚠️ Улей не найден. Хоп...")
-        hopToRandomServer()
-        return
     end
 
     -- Летим к пчеле
@@ -294,4 +253,6 @@ task.spawn(function()
     end
 end)
 
-print("[Vicious Bee Hunter] Запущен. Fly: 45 studs, 300 speed.")
+print("[Vicious Bee Hunter] Запущен.")
+
+            
