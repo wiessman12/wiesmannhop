@@ -5,9 +5,9 @@ local TeleportService = game:GetService("TeleportService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local player = Players.LocalPlayer
 
--- ====== ХОП ======
+-- ====== ХОП (задержка 4 секунды — защита от Error 267) ======
 local function hopToRandomServer()
-    task.wait(2)
+    task.wait(4)
     local success, servers = pcall(function()
         return HttpService:JSONDecode(
             game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")
@@ -50,6 +50,38 @@ local function findViciousBee()
         end
     end
     return nil
+end
+
+-- ====== ПОИСК MONDO CHICK ======
+local function findMondoChick()
+    local monsters = workspace:FindFirstChild("Monsters")
+    if not monsters then return nil end
+    for _, obj in ipairs(monsters:GetChildren()) do
+        if obj.Name:find("Mondo Chick") then
+            local humanoid = obj:FindFirstChild("Humanoid")
+            if humanoid and humanoid.Health > 0 then
+                return obj
+            end
+        end
+    end
+    return nil
+end
+
+-- ====== ПРОВЕРКА: VICIOUS BEE РЯДОМ С MONDO (радиус 200) ======
+local function isViciousBeeNearMondo(bee)
+    local mondo = findMondoChick()
+    if not mondo then
+        print("[Hunt] Mondo Chick нет — Vicious Bee на поле")
+        return false
+    end
+
+    local beePos = bee:GetPivot().Position
+    local mondoPos = mondo:GetPivot().Position
+    local distance = (beePos - mondoPos).Magnitude
+
+    print("[Hunt] Расстояние Vicious Bee ↔ Mondo Chick:", distance)
+
+    return distance < 200
 end
 
 -- ====== ПОИСК СВОБОДНОГО УЛЬЯ ======
@@ -97,7 +129,6 @@ local function teleportTo(target, offset)
     elseif target:IsA("BasePart") then
         targetPos = target.Position
     end
-
     if not targetPos then return false end
     hrp.CFrame = CFrame.new(targetPos + offset)
     return true
@@ -112,13 +143,13 @@ local function pressE()
     end)
 end
 
--- ====== МАНСИНГ (бегает по кругу вокруг пчелы) ======
+-- ====== МАНСИНГ (с проверкой от пчелы) ======
 local function startMansing(bee)
     local running = true
 
     task.spawn(function()
         local angle = 0
-        local radius = 30
+        local radius = 25
 
         while running do
             if not player.Character then break end
@@ -129,7 +160,18 @@ local function startMansing(bee)
 
             local beeHrp = bee:FindFirstChild("HumanoidRootPart")
             if not beeHrp then break end
-                angle = angle + math.rad(90)
+
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local distance = (hrp.Position - beeHrp.Position).Magnitude
+                if distance > 50 then
+                    print("[Hunt] ⚠️ Далеко от пчелы. Возвращаемся...")
+                    hrp.CFrame = CFrame.new(beeHrp.Position + Vector3.new(radius, 5, 0))
+                    task.wait(0.3)
+                end
+            end
+
+            angle = angle + math.rad(90)
             local offsetX = math.cos(angle) * radius
             local offsetZ = math.sin(angle) * radius
             local targetPos = beeHrp.Position + Vector3.new(offsetX, 0, offsetZ)
@@ -147,7 +189,7 @@ end
 -- ====== ОСНОВНАЯ ЛОГИКА ======
 local function huntViciousBee()
     print("[Hunt] === НОВЫЙ СЕРВЕР ===")
-    task.wait(2)
+    task.wait(3)
 
     -- 1. Ищем пчелу
     print("[Hunt] Поиск пчелы...")
@@ -159,7 +201,14 @@ local function huntViciousBee()
     end
     print("[Hunt] ✅ Пчела найдена:", bee.Name)
 
-    -- 2. Ищем улей
+    -- 2. Проверяем, не на горе ли пчела (радиус 200)
+    if isViciousBeeNearMondo(bee) then
+        print("[Hunt] ⚠️ Vicious Bee на горе (рядом с Mondo Chick). Хоп...")
+        hopToRandomServer()
+        return
+    end
+
+    -- 3. Ищем улей
     print("[Hunt] Поиск улья...")
     local hive = findFreeHive()
     if not hive then
@@ -169,7 +218,7 @@ local function huntViciousBee()
     end
     print("[Hunt] ✅ Улей найден:", hive.Name)
 
-    -- 3. Телепорт к улью
+    -- 4. Телепорт к улью
     local platform = hive:FindFirstChild("Platform")
     if platform and platform.Value then
         print("[Hunt] Телепорт к платформе...")
@@ -179,23 +228,23 @@ local function huntViciousBee()
         teleportTo(hive, Vector3.new(0, 5, 0))
     end
 
-    -- 4. Нажимаем E
+    -- 5. Нажимаем E
     task.wait(2)
     print("[Hunt] Нажимаем E...")
     pressE()
     task.wait(2)
     print("[Hunt] ✅ Улей занят:", hive.Name)
 
-    -- 5. Телепорт к пчеле
+    -- 6. Телепорт к пчеле
     print("[Hunt] Телепорт к пчеле...")
     teleportTo(bee, Vector3.new(0, 5, 15))
     task.wait(0.5)
 
-    -- 6. Запускаем мансинг
+    -- 7. Запускаем мансинг
     print("[Hunt] Мансинг вокруг пчелы...")
     local stopMansing = startMansing(bee)
 
-    -- 7. Ждём, пока пчела умрёт (тройная проверка)
+    -- 8. Ждём убийства пчелы
     print("[Hunt] Ждём убийства пчелы...")
     local maxWait = 60
     local waited = 0
@@ -204,24 +253,21 @@ local function huntViciousBee()
         task.wait(0.5)
         waited = waited + 0.5
 
-        -- Тройная проверка смерти пчелы
         local humanoid = bee:FindFirstChild("Humanoid")
         local beeDead = false
 
         if not bee.Parent then
-            beeDead = true -- пчела удалена из workspace
+            beeDead = true
         elseif not humanoid then
-            beeDead = true -- Humanoid исчез
+            beeDead = true
         elseif humanoid.Health <= 0 then
-            beeDead = true -- Health = 0
+            beeDead = true
         end
 
         if beeDead then
             print("[Hunt] ✅ Пчела убита! Хоп...")
             break
         end
-
-        -- Проверяем, что мы сами живы
         if not player.Character then break end
         local myHumanoid = player.Character:FindFirstChildOfClass("Humanoid")
         if not myHumanoid or myHumanoid.Health <= 0 then
@@ -230,10 +276,10 @@ local function huntViciousBee()
         end
     end
 
-    -- 8. Останавливаем мансинг
+    -- 9. Останавливаем мансинг
     if stopMansing then stopMansing() end
 
-    -- 9. Хоп
+    -- 10. Хоп
     print("[Hunt] Хоп на другой сервер...")
     hopToRandomServer()
 end
