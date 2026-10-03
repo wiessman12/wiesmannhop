@@ -118,10 +118,9 @@ local function startMansing(bee)
 
     task.spawn(function()
         local angle = 0
-        local radius = 20 -- радиус круга
+        local radius = 20
 
         while running do
-            -- Проверка: жив ли персонаж и пчела
             if not player.Character then break end
             local char = player.Character
             local humanoid = char:FindFirstChildOfClass("Humanoid")
@@ -130,19 +129,16 @@ local function startMansing(bee)
 
             local beeHrp = bee:FindFirstChild("HumanoidRootPart")
             if not beeHrp then break end
-                -- Вычисляем точку на круге
-            angle = angle + math.rad(90) -- 90° за шаг (быстрое движение)
+                angle = angle + math.rad(90)
             local offsetX = math.cos(angle) * radius
             local offsetZ = math.sin(angle) * radius
             local targetPos = beeHrp.Position + Vector3.new(offsetX, 0, offsetZ)
 
-            -- Бежим к этой точке
             humanoid:MoveTo(targetPos)
             task.wait(0.3)
         end
     end)
 
-    -- Функция остановки
     return function()
         running = false
     end
@@ -199,15 +195,46 @@ local function huntViciousBee()
     print("[Hunt] Мансинг вокруг пчелы...")
     local stopMansing = startMansing(bee)
 
-    -- 7. Ждём 30 секунд
-    print("[Hunt] Ждём 30 секунд...")
-    task.wait(30)
+    -- 7. Ждём, пока пчела умрёт (тройная проверка)
+    print("[Hunt] Ждём убийства пчелы...")
+    local maxWait = 60
+    local waited = 0
+
+    while waited < maxWait do
+        task.wait(0.5)
+        waited = waited + 0.5
+
+        -- Тройная проверка смерти пчелы
+        local humanoid = bee:FindFirstChild("Humanoid")
+        local beeDead = false
+
+        if not bee.Parent then
+            beeDead = true -- пчела удалена из workspace
+        elseif not humanoid then
+            beeDead = true -- Humanoid исчез
+        elseif humanoid.Health <= 0 then
+            beeDead = true -- Health = 0
+        end
+
+        if beeDead then
+            print("[Hunt] ✅ Пчела убита! Хоп...")
+            break
+        end
+
+        -- Проверяем, что мы сами живы
+        if not player.Character then break end
+        local myHumanoid = player.Character:FindFirstChildOfClass("Humanoid")
+        if not myHumanoid or myHumanoid.Health <= 0 then
+            print("[Hunt] ⚠️ Мы умерли. Хоп...")
+            break
+        end
+    end
 
     -- 8. Останавливаем мансинг
     if stopMansing then stopMansing() end
 
     -- 9. Хоп
-    print("[Hunt] Завершено. Хоп...")
+    print("[Hunt] Хоп на другой сервер...")
     hopToRandomServer()
 end
 
