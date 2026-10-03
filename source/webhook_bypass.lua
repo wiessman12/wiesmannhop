@@ -260,12 +260,13 @@ local function huntViciousBee()
     local bee = findViciousBee()
     if not bee then
         print("[Hunt] ❌ Пчела не найдена. Хоп...")
-        collectgarbage("collect")
         hopToRandomServer()
         return
     end
-
     print("[Hunt] ✅ Пчела найдена:", bee.Name)
+    task.wait(5)
+    hopToRandomServer()
+end
 
     -- Ищем свободный улей
     local hive = findFreeHive()
