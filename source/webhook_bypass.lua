@@ -254,8 +254,8 @@ local function startMansing(bee)
     local running = true
     task.spawn(function()
         local angle = 0
-        local radius = 30
-        local maxDistance = 45
+        local radius = 50
+        local maxDistance = 65
 
         while running do
             local currentPlayer = game:GetService("Players").LocalPlayer
