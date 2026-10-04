@@ -4,7 +4,9 @@ local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
--- ====== ХОП (тихий, без логов) ======
+-- ====== ХОП (исключает ВСЕ посещённые серверы) ======
+getgenv().VisitedServers = getgenv().VisitedServers or {}
+
 local function hopToRandomServer()
     task.wait(6)
     local currentPlayer = game:GetService("Players").LocalPlayer
@@ -24,9 +26,30 @@ local function hopToRandomServer()
     local currentJobId = game.JobId
     local candidates = {}
 
+    -- Исключаем текущий сервер и ВСЕ посещённые
     for _, server in ipairs(servers.data) do
         if server.id ~= currentJobId and server.playing < server.maxPlayers then
-            table.insert(candidates, server)
+            local alreadyVisited = false
+            for _, visitedId in ipairs(getgenv().VisitedServers) do
+                if visitedId == server.id then
+                    alreadyVisited = true
+                    break
+                end
+            end
+            if not alreadyVisited then
+                table.insert(candidates, server)
+            end
+        end
+    end
+
+    -- Если все сервера посещены — очищаем историю
+    if #candidates == 0 then
+        print("[Hop] Все сервера посещены, сбрасываем историю")
+        getgenv().VisitedServers = {}
+        for _, server in ipairs(servers.data) do
+            if server.id ~= currentJobId and server.playing < server.maxPlayers then
+                table.insert(candidates, server)
+            end
         end
     end
 
@@ -36,6 +59,10 @@ local function hopToRandomServer()
     end
 
     local chosen = candidates[math.random(1, #candidates)]
+
+    -- Запоминаем ВСЕ посещённые серверы
+    table.insert(getgenv().VisitedServers, chosen.id)
+
     TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, currentPlayer)
 end
 
@@ -112,7 +139,7 @@ local function findFreeHive()
     return nil
 end
 
--- ====== FLY (адаптивный) ======
+-- ====== FLY (убирает текстуры на время полёта) ======
 local function flyTo(target, offset)
     local success, err = pcall(function()
         local currentPlayer = game:GetService("Players").LocalPlayer
@@ -128,7 +155,8 @@ local function flyTo(target, offset)
 
         offset = offset or Vector3.new(0, 3, 0)
         local targetPos
-            if target:IsA("Model") then
+
+        if target:IsA("Model") then
             if target.PrimaryPart then
                 targetPos = target.PrimaryPart.Position
             else
@@ -148,15 +176,29 @@ local function flyTo(target, offset)
         if not targetPos then return false end
         targetPos = targetPos + offset
 
-        -- Отключаем коллизии
-        local originalParts = {}
+        -- Запоминаем исходное состояние ВСЕХ объектов
+        local originalCollides = {}
+
+        -- Отключаем коллизии у ВСЕХ объектов
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("BasePart") and obj.CanCollide then
+                if not char:IsDescendantOf(obj) then
+                    originalCollides[obj] = true
+                    obj.CanCollide = false
+                end
+            end
+        end
+
+        -- Отключаем коллизии у персонажа
+        local originalCharCollides = {}
         for _, part in ipairs(char:GetDescendants()) do
             if part:IsA("BasePart") then
-                originalParts[part] = part.CanCollide
+                originalCharCollides[part] = part.CanCollide
                 part.CanCollide = false
             end
         end
 
+        -- BodyVelocity
         local bv = Instance.new("BodyVelocity")
         bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
         bv.P = 10000
@@ -168,14 +210,11 @@ local function flyTo(target, offset)
         while tick() - startTime < maxTime do
             if not hrp or not hrp.Parent then break end
             local distance = (hrp.Position - targetPos).Magnitude
-            if distance < 3 then break end
+            if distance < 5 then break end
 
             local direction = (targetPos - hrp.Position).Unit
-            local speed = 400
-            if distance < 15 then speed = 200 end
-            if distance < 8 then speed = 100 end
+            bv.Velocity = direction * 600
 
-            bv.Velocity = direction * speed
             task.wait(0.02)
         end
 
@@ -183,7 +222,13 @@ local function flyTo(target, offset)
         hrp.CFrame = CFrame.new(targetPos)
 
         -- Возвращаем коллизии
-        for part, collide in pairs(originalParts) do
+        for obj, _ in pairs(originalCollides) do
+            if obj and obj.Parent then
+                obj.CanCollide = true
+            end
+        end
+
+        for part, collide in pairs(originalCharCollides) do
             if part and part.Parent then
                 part.CanCollide = collide
             end
@@ -209,7 +254,6 @@ end
 -- ====== РЕЗКИЙ МАНСИНГ (радиус 30) ======
 local function startMansing(bee)
     local running = true
-
     task.spawn(function()
         local angle = 0
         local radius = 30
@@ -260,6 +304,7 @@ end
 local function huntViciousBee()
     print("[Hunt] === НОВЫЙ СЕРВЕР ===")
     task.wait(2)
+
     print("[Hunt] Поиск пчелы...")
     local bee = findViciousBee()
     if not bee then
@@ -342,7 +387,6 @@ local function huntViciousBee()
 
         local humanoid = bee:FindFirstChild("Humanoid")
         local beeDead = false
-
         if not bee.Parent then
             beeDead = true
         elseif not humanoid then
