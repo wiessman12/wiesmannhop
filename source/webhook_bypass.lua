@@ -118,7 +118,7 @@ local function findFreeHive()
     return nil
 end
 
--- ====== БЫСТРЫЙ FLY (600 studs/сек, через текстуры) ======
+-- ====== FLY (адаптивный — замедляется у цели) ======
 local function flyTo(target, offset)
     local success, err = pcall(function()
         local currentPlayer = game:GetService("Players").LocalPlayer
@@ -170,20 +170,28 @@ local function flyTo(target, offset)
         bv.Parent = hrp
 
         local startTime = tick()
-        local maxTime = 1.5
+        local maxTime = 3
 
         while tick() - startTime < maxTime do
             if not hrp or not hrp.Parent then break end
             local distance = (hrp.Position - targetPos).Magnitude
-            if distance < 10 then break end
+            if distance < 3 then break end
 
             local direction = (targetPos - hrp.Position).Unit
-            bv.Velocity = direction * 600
 
+            -- Адаптивная скорость
+            local speed = 400
+            if distance < 15 then speed = 200 end
+            if distance < 8 then speed = 100 end
+
+            bv.Velocity = direction * speed
             task.wait(0.02)
         end
 
         bv:Destroy()
+
+        -- Финальная точная посадка
+        hrp.CFrame = CFrame.new(targetPos)
 
         -- Возвращаем коллизии
         for part, collide in pairs(originalParts) do
@@ -209,7 +217,7 @@ local function pressE()
     end)
 end
 
--- ====== РЕЗКИЙ МАНСИНГ (радиус 30, 150° за шаг) ======
+-- ====== РЕЗКИЙ МАНСИНГ (радиус 30) ======
 local function startMansing(bee)
     local running = true
 
@@ -238,15 +246,12 @@ local function startMansing(bee)
             local beeHrp = bee:FindFirstChild("HumanoidRootPart")
             if not beeHrp then task.wait(0.1) continue end
 
-            -- Проверка дистанции
             local distance = (hrp.Position - beeHrp.Position).Magnitude
             if distance > maxDistance then
                 hrp.CFrame = CFrame.new(beeHrp.Position + Vector3.new(radius, 5, 0))
                 task.wait(0.15)
             end
-
-            -- Резкий мансинг
-            angle = angle + math.rad(150)
+                angle = angle + math.rad(150)
             local offsetX = math.cos(angle) * radius
             local offsetZ = math.sin(angle) * radius
             local targetPos = beeHrp.Position + Vector3.new(offsetX, 0, offsetZ)
@@ -255,6 +260,7 @@ local function startMansing(bee)
             task.wait(0.12)
         end
     end)
+
     return function()
         running = false
     end
