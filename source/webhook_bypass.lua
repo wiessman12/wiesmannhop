@@ -134,7 +134,7 @@ local function findFreeHive()
     return nil
 end
 
--- ====== FLY (не отлетает от улья) ======
+-- ====== FLY (медленнее, точная остановка) ======
 local function flyTo(target, offset)
     local success, err = pcall(function()
         local currentPlayer = game:GetService("Players").LocalPlayer
@@ -171,7 +171,7 @@ local function flyTo(target, offset)
         if not targetPos then return false end
         targetPos = targetPos + offset
 
-        -- Отключаем коллизии
+        -- Отключаем коллизии у ВСЕГО (включая цель)
         local originalCollides = {}
         for _, obj in ipairs(workspace:GetDescendants()) do
             if obj:IsA("BasePart") and obj.CanCollide then
@@ -197,29 +197,35 @@ local function flyTo(target, offset)
         bv.Parent = hrp
 
         local startTime = tick()
-        local maxTime = 3
+        local maxTime = 4 -- больше времени (медленнее)
 
         while tick() - startTime < maxTime do
             if not hrp or not hrp.Parent then break end
             local distance = (hrp.Position - targetPos).Magnitude
-            if distance < 5 then break end
+            if distance < 3 then break end
 
             local direction = (targetPos - hrp.Position).Unit
-            bv.Velocity = direction * 600
+            local speed = 400 -- было 600 — теперь медленнее
 
+            -- Замедление у цели
+            if distance < 30 then speed = 200 end
+            if distance < 15 then speed = 100 end
+            if distance < 8 then speed = 50 end
+
+            bv.Velocity = direction * speed
             task.wait(0.02)
         end
 
+        -- Сначала полностью останавливаем
         bv:Destroy()
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
         hrp.CFrame = CFrame.new(targetPos)
 
-        -- Поднимаем на 2 studs выше, чтобы не быть внутри объекта
-        task.wait(0.1)
-        hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 2, 0))
+        -- Ждём, чтобы физика успокоилась
+        task.wait(1)
 
-        -- Возвращаем коллизии через 0.5 сек (физика успокоится)
-        task.wait(0.5)
-
+        -- Возвращаем коллизии
         for obj, _ in pairs(originalCollides) do
             if obj and obj.Parent then
                 obj.CanCollide = true
@@ -239,7 +245,6 @@ local function flyTo(target, offset)
     end
     return success
 end
-
 -- ====== НАЖАТИЕ E ======
 local function pressE()
     pcall(function()
@@ -257,7 +262,8 @@ local function startMansing(bee)
         local angle = 0
         local radius = 30
         local maxDistance = 45
-            while running do
+
+        while running do
             local currentPlayer = game:GetService("Players").LocalPlayer
             if not currentPlayer then task.wait(0.1) continue end
 
@@ -373,7 +379,6 @@ local function huntViciousBee()
     -- Мансинг
     print("[Hunt] Мансинг вокруг пчелы (радиус 30)...")
     local stopMansing = startMansing(bee)
-
     -- Ждём убийства пчелы
     print("[Hunt] Ждём убийства пчелы...")
     local maxWait = 60
@@ -393,6 +398,7 @@ local function huntViciousBee()
         elseif humanoid.Health <= 0 then
             beeDead = true
         end
+
         if beeDead then
             print("[Hunt] ✅ Пчела убита! Хоп...")
             break
