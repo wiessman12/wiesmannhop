@@ -4,7 +4,7 @@ local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
--- ====== ХОП (задержка 6 сек — защита от 267) ======
+-- ====== ХОП ======
 local function hopToRandomServer()
     task.wait(6)
     local currentPlayer = game:GetService("Players").LocalPlayer
@@ -42,20 +42,7 @@ local function hopToRandomServer()
     local chosen = candidates[math.random(1, #candidates)]
     print("[Hop] ✅ Хоп на:", chosen.id)
 
-    local success2, err = pcall(function()
-        if TeleportService.TeleportAsync then
-            local options = Instance.new("TeleportOptions")
-            options.ServerInstanceId = chosen.id
-            TeleportService:TeleportAsync(game.PlaceId, {currentPlayer}, options)
-        else
-            TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, currentPlayer)
-        end
-    end)
-
-    if not success2 then
-        print("[Hop] ❌ Ошибка:", err)
-        TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, currentPlayer)
-    end
+    TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, currentPlayer)
 end
 
 -- ====== ПОИСК ПЧЕЛЫ ======
@@ -116,6 +103,7 @@ local function findFreeHive()
         task.wait(0.2)
         tries = tries + 1
     end
+
     for i = 1, 6 do
         local hive = honeycombs:FindFirstChild("Hive" .. i)
         if hive then
@@ -138,8 +126,7 @@ local function flyTo(target, offset)
 
         local char = currentPlayer.Character
         if not char then return false end
-
-        local hrp = char:FindFirstChild("HumanoidRootPart")
+            local hrp = char:FindFirstChild("HumanoidRootPart")
         if not hrp then return false end
 
         if not target then return false end
@@ -167,7 +154,7 @@ local function flyTo(target, offset)
         if not targetPos then return false end
         targetPos = targetPos + offset
 
-        -- Отключаем коллизии (проходим сквозь стены)
+        -- Отключаем коллизии (через текстуры)
         local originalParts = {}
         for _, part in ipairs(char:GetDescendants()) do
             if part:IsA("BasePart") then
@@ -176,7 +163,7 @@ local function flyTo(target, offset)
             end
         end
 
-        -- BodyVelocity для полёта
+        -- BodyVelocity
         local bv = Instance.new("BodyVelocity")
         bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
         bv.P = 10000
@@ -191,7 +178,7 @@ local function flyTo(target, offset)
             if distance < 10 then break end
 
             local direction = (targetPos - hrp.Position).Unit
-            bv.Velocity = direction * 600 -- СКОРОСТЬ 600
+            bv.Velocity = direction * 600
 
             task.wait(0.02)
         end
@@ -247,7 +234,8 @@ local function startMansing(bee)
             if not bee.Parent then break end
             local beeHumanoid = bee:FindFirstChild("Humanoid")
             if not beeHumanoid or beeHumanoid.Health <= 0 then break end
-                local beeHrp = bee:FindFirstChild("HumanoidRootPart")
+
+            local beeHrp = bee:FindFirstChild("HumanoidRootPart")
             if not beeHrp then task.wait(0.1) continue end
 
             -- Проверка дистанции
@@ -257,7 +245,7 @@ local function startMansing(bee)
                 task.wait(0.15)
             end
 
-            -- РЕЗКИЙ мансинг: 150° за шаг, пауза 0.12 сек
+            -- Резкий мансинг
             angle = angle + math.rad(150)
             local offsetX = math.cos(angle) * radius
             local offsetZ = math.sin(angle) * radius
@@ -267,7 +255,6 @@ local function startMansing(bee)
             task.wait(0.12)
         end
     end)
-
     return function()
         running = false
     end
@@ -302,7 +289,7 @@ local function huntViciousBee()
     end
     print("[Hunt] ✅ Выбран улей:", hive.Name)
 
-    -- Fly к улью
+    -- FLY к улью
     local platform = hive:FindFirstChild("Platform")
     if platform and platform.Value then
         print("[Hunt] Fly к платформе...")
@@ -313,7 +300,7 @@ local function huntViciousBee()
     end
 
     -- Нажимаем E
-    task.wait(0.8)
+    task.wait(1)
     print("[Hunt] Нажимаем E...")
     pressE()
     task.wait(1.5)
@@ -340,7 +327,7 @@ local function huntViciousBee()
         end
     end
 
-    -- Fly к пчеле
+    -- FLY к пчеле
     print("[Hunt] Fly к пчеле...")
     flyTo(bee, Vector3.new(0, 5, 15))
     task.wait(0.3)
