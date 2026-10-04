@@ -8,7 +8,9 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 getgenv().VisitedServers = getgenv().VisitedServers or {}
 
 local function hopToRandomServer()
-    task.wait(6)
+    -- Случайная задержка 8-14 сек (защита от Error 2/267)
+    task.wait(math.random(8, 14))
+
     local currentPlayer = game:GetService("Players").LocalPlayer
     if not currentPlayer then return end
 
@@ -27,6 +29,7 @@ local function hopToRandomServer()
     local candidates = {}
 
     for _, server in ipairs(servers.data) do
+        -- Только не полные
         if server.id ~= currentJobId and server.playing < server.maxPlayers then
             local alreadyVisited = false
             for _, visitedId in ipairs(getgenv().VisitedServers) do
@@ -134,7 +137,7 @@ local function findFreeHive()
     return nil
 end
 
--- ====== FLY (с отключением коллизий) ======
+-- ====== FLY (через текстуры) ======
 local function flyTo(target, offset)
     local success, err = pcall(function()
         local currentPlayer = game:GetService("Players").LocalPlayer
@@ -213,7 +216,6 @@ local function flyTo(target, offset)
             task.wait(0.02)
         end
 
-        -- Останавливаем
         bv:Destroy()
         hrp.AssemblyLinearVelocity = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
@@ -252,12 +254,12 @@ end
 -- ====== МАНСИНГ (радиус 30) ======
 local function startMansing(bee)
     local running = true
+
     task.spawn(function()
         local angle = 0
-        local radius = 50
+        local radius = 45
         local maxDistance = 65
-
-        while running do
+            while running do
             local currentPlayer = game:GetService("Players").LocalPlayer
             if not currentPlayer then task.wait(0.1) continue end
 
@@ -345,9 +347,8 @@ local function huntViciousBee()
         hopToRandomServer()
         return
     end
-    print("[Hunt] ✅ Персонаж прогрузился")
 
-    -- FLY к улью (с повторными попытками)
+    -- FLY к улью (с 3 попытками)
     local platform = hive:FindFirstChild("Platform")
     local target = nil
     if platform and platform.Value then
@@ -468,3 +469,4 @@ while true do
     huntViciousBee()
     task.wait(1.5)
 end
+            
