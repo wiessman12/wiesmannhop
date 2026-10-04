@@ -134,7 +134,7 @@ local function findFreeHive()
     return nil
 end
 
--- ====== FLY (не проваливается) ======
+-- ====== FLY (с отключением коллизий) ======
 local function flyTo(target, offset)
     local success, err = pcall(function()
         local currentPlayer = game:GetService("Players").LocalPlayer
@@ -148,7 +148,7 @@ local function flyTo(target, offset)
 
         if not target then return false end
 
-        offset = offset or Vector3.new(0, 1, 0)
+        offset = offset or Vector3.new(0, 3, 0)
         local targetPos
 
         if target:IsA("Model") then
@@ -201,7 +201,7 @@ local function flyTo(target, offset)
         while tick() - startTime < maxTime do
             if not hrp or not hrp.Parent then break end
             local distance = (hrp.Position - targetPos).Magnitude
-            if distance < 3 then break end
+            if distance < 5 then break end
 
             local direction = (targetPos - hrp.Position).Unit
             local speed = 400
@@ -249,7 +249,7 @@ local function pressE()
     end)
 end
 
--- ====== РЕЗКИЙ МАНСИНГ (радиус 30) ======
+-- ====== МАНСИНГ (радиус 30) ======
 local function startMansing(bee)
     local running = true
     task.spawn(function()
@@ -327,15 +327,72 @@ local function huntViciousBee()
     end
     print("[Hunt] ✅ Выбран улей:", hive.Name)
 
-    -- FLY к улью (offset 1, чтобы стоять на платформе)
-    local platform = hive:FindFirstChild("Platform")
-    if platform and platform.Value then
-        print("[Hunt] Fly к платформе...")
-        flyTo(platform.Value, Vector3.new(0, 1, 0))
-    else
-        print("[Hunt] Fly к улью...")
-        flyTo(hive, Vector3.new(0, 1, 0))
+    -- Ждём прогрузки персонажа
+    local currentPlayer = game:GetService("Players").LocalPlayer
+    local char = nil
+    local waitCount = 0
+    while waitCount < 30 do
+        char = currentPlayer.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            break
+        end
+        task.wait(0.2)
+        waitCount = waitCount + 1
     end
+
+    if not char then
+        print("[Hunt] ❌ Персонаж не прогрузился. Хоп...")
+        hopToRandomServer()
+        return
+    end
+    print("[Hunt] ✅ Персонаж прогрузился")
+
+    -- FLY к улью (с повторными попытками)
+    local platform = hive:FindFirstChild("Platform")
+    local target = nil
+    if platform and platform.Value then
+        target = platform.Value
+    else
+        target = hive
+    end
+
+    print("[Hunt] Fly к улью:", hive.Name)
+
+    local flySuccess = false
+    local attempts = 0
+    while attempts < 3 do
+        attempts = attempts + 1
+        print("[Hunt] Попытка", attempts)
+
+        flyTo(target, Vector3.new(0, 3, 0))
+
+        task.wait(0.5)
+        local currentChar = currentPlayer.Character
+        if currentChar then
+            local hrp = currentChar:FindFirstChild("HumanoidRootPart")
+            local targetPart = nil
+            if target:IsA("Model") then
+                targetPart = target.PrimaryPart
+            else
+                targetPart = target
+            end
+            if hrp and targetPart then
+                local distance = (hrp.Position - targetPart.Position).Magnitude
+                print("[Hunt] Расстояние до цели:", math.floor(distance))
+                if distance < 15 then
+                    flySuccess = true
+                    break
+                end
+            end
+        end
+        task.wait(0.5)
+    end
+    if not flySuccess then
+        print("[Hunt] ❌ Не удалось долететь до улья. Хоп...")
+        hopToRandomServer()
+        return
+    end
+    print("[Hunt] ✅ Долетели до улья")
 
     -- Нажимаем E
     task.wait(1)
@@ -344,10 +401,10 @@ local function huntViciousBee()
     task.wait(1.5)
 
     -- Проверка засчитался ли улей
-    local currentPlayer = game:GetService("Players").LocalPlayer
     local owner = hive:FindFirstChild("Owner")
+    local ownerValue = owner and owner.Value or nil
 
-    if owner and owner.Value == currentPlayer then
+    if ownerValue == currentPlayer then
         print("[Hunt] ✅ Улей занят:", hive.Name)
     else
         print("[Hunt] ❌ Улей не засчитан. Повторяем E...")
@@ -355,8 +412,8 @@ local function huntViciousBee()
         pressE()
         task.wait(1.5)
 
-        owner = hive:FindFirstChild("Owner")
-        if owner and owner.Value == currentPlayer then
+        ownerValue = owner and owner.Value or nil
+        if ownerValue == currentPlayer then
             print("[Hunt] ✅ Улей занят со 2-й попытки")
         else
             print("[Hunt] ❌ Улей не засчитан. Хоп...")
@@ -385,6 +442,7 @@ local function huntViciousBee()
 
         local humanoid = bee:FindFirstChild("Humanoid")
         local beeDead = false
+
         if not bee.Parent then
             beeDead = true
         elseif not humanoid then
