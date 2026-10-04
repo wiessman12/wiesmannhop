@@ -4,13 +4,11 @@ local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
--- ====== ХОП ======
+-- ====== ХОП (тихий, без логов) ======
 local function hopToRandomServer()
     task.wait(6)
     local currentPlayer = game:GetService("Players").LocalPlayer
     if not currentPlayer then return end
-
-    print("[Hop] Ищем сервер...")
 
     local success, servers = pcall(function()
         return HttpService:JSONDecode(
@@ -19,7 +17,6 @@ local function hopToRandomServer()
     end)
 
     if not success or not servers or not servers.data or #servers.data == 0 then
-        print("[Hop] ❌ Нет списка серверов")
         TeleportService:Teleport(game.PlaceId, currentPlayer)
         return
     end
@@ -34,14 +31,11 @@ local function hopToRandomServer()
     end
 
     if #candidates == 0 then
-        print("[Hop] ❌ Нет подходящих")
         TeleportService:Teleport(game.PlaceId, currentPlayer)
         return
     end
 
     local chosen = candidates[math.random(1, #candidates)]
-    print("[Hop] ✅ Хоп на:", chosen.id)
-
     TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, currentPlayer)
 end
 
@@ -118,7 +112,7 @@ local function findFreeHive()
     return nil
 end
 
--- ====== FLY (адаптивный — замедляется у цели) ======
+-- ====== FLY (адаптивный) ======
 local function flyTo(target, offset)
     local success, err = pcall(function()
         local currentPlayer = game:GetService("Players").LocalPlayer
@@ -126,15 +120,15 @@ local function flyTo(target, offset)
 
         local char = currentPlayer.Character
         if not char then return false end
-            local hrp = char:FindFirstChild("HumanoidRootPart")
+
+        local hrp = char:FindFirstChild("HumanoidRootPart")
         if not hrp then return false end
 
         if not target then return false end
 
         offset = offset or Vector3.new(0, 3, 0)
         local targetPos
-
-        if target:IsA("Model") then
+            if target:IsA("Model") then
             if target.PrimaryPart then
                 targetPos = target.PrimaryPart.Position
             else
@@ -154,7 +148,7 @@ local function flyTo(target, offset)
         if not targetPos then return false end
         targetPos = targetPos + offset
 
-        -- Отключаем коллизии (через текстуры)
+        -- Отключаем коллизии
         local originalParts = {}
         for _, part in ipairs(char:GetDescendants()) do
             if part:IsA("BasePart") then
@@ -163,7 +157,6 @@ local function flyTo(target, offset)
             end
         end
 
-        -- BodyVelocity
         local bv = Instance.new("BodyVelocity")
         bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
         bv.P = 10000
@@ -178,8 +171,6 @@ local function flyTo(target, offset)
             if distance < 3 then break end
 
             local direction = (targetPos - hrp.Position).Unit
-
-            -- Адаптивная скорость
             local speed = 400
             if distance < 15 then speed = 200 end
             if distance < 8 then speed = 100 end
@@ -189,8 +180,6 @@ local function flyTo(target, offset)
         end
 
         bv:Destroy()
-
-        -- Финальная точная посадка
         hrp.CFrame = CFrame.new(targetPos)
 
         -- Возвращаем коллизии
@@ -251,7 +240,8 @@ local function startMansing(bee)
                 hrp.CFrame = CFrame.new(beeHrp.Position + Vector3.new(radius, 5, 0))
                 task.wait(0.15)
             end
-                angle = angle + math.rad(150)
+
+            angle = angle + math.rad(150)
             local offsetX = math.cos(angle) * radius
             local offsetZ = math.sin(angle) * radius
             local targetPos = beeHrp.Position + Vector3.new(offsetX, 0, offsetZ)
@@ -270,7 +260,6 @@ end
 local function huntViciousBee()
     print("[Hunt] === НОВЫЙ СЕРВЕР ===")
     task.wait(2)
-
     print("[Hunt] Поиск пчелы...")
     local bee = findViciousBee()
     if not bee then
