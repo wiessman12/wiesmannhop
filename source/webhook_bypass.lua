@@ -26,7 +26,6 @@ local function hopToRandomServer()
     local currentJobId = game.JobId
     local candidates = {}
 
-    -- Исключаем текущий сервер и ВСЕ посещённые
     for _, server in ipairs(servers.data) do
         if server.id ~= currentJobId and server.playing < server.maxPlayers then
             local alreadyVisited = false
@@ -42,7 +41,6 @@ local function hopToRandomServer()
         end
     end
 
-    -- Если все сервера посещены — очищаем историю
     if #candidates == 0 then
         print("[Hop] Все сервера посещены, сбрасываем историю")
         getgenv().VisitedServers = {}
@@ -59,8 +57,6 @@ local function hopToRandomServer()
     end
 
     local chosen = candidates[math.random(1, #candidates)]
-
-    -- Запоминаем ВСЕ посещённые серверы
     table.insert(getgenv().VisitedServers, chosen.id)
 
     TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, currentPlayer)
@@ -124,7 +120,6 @@ local function findFreeHive()
         task.wait(0.2)
         tries = tries + 1
     end
-
     for i = 1, 6 do
         local hive = honeycombs:FindFirstChild("Hive" .. i)
         if hive then
@@ -139,7 +134,7 @@ local function findFreeHive()
     return nil
 end
 
--- ====== FLY (убирает текстуры на время полёта) ======
+-- ====== FLY (не отлетает от улья) ======
 local function flyTo(target, offset)
     local success, err = pcall(function()
         local currentPlayer = game:GetService("Players").LocalPlayer
@@ -176,10 +171,8 @@ local function flyTo(target, offset)
         if not targetPos then return false end
         targetPos = targetPos + offset
 
-        -- Запоминаем исходное состояние ВСЕХ объектов
+        -- Отключаем коллизии
         local originalCollides = {}
-
-        -- Отключаем коллизии у ВСЕХ объектов
         for _, obj in ipairs(workspace:GetDescendants()) do
             if obj:IsA("BasePart") and obj.CanCollide then
                 if not char:IsDescendantOf(obj) then
@@ -189,7 +182,6 @@ local function flyTo(target, offset)
             end
         end
 
-        -- Отключаем коллизии у персонажа
         local originalCharCollides = {}
         for _, part in ipairs(char:GetDescendants()) do
             if part:IsA("BasePart") then
@@ -221,7 +213,13 @@ local function flyTo(target, offset)
         bv:Destroy()
         hrp.CFrame = CFrame.new(targetPos)
 
-        -- Возвращаем коллизии
+        -- Поднимаем на 2 studs выше, чтобы не быть внутри объекта
+        task.wait(0.1)
+        hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 2, 0))
+
+        -- Возвращаем коллизии через 0.5 сек (физика успокоится)
+        task.wait(0.5)
+
         for obj, _ in pairs(originalCollides) do
             if obj and obj.Parent then
                 obj.CanCollide = true
@@ -254,12 +252,12 @@ end
 -- ====== РЕЗКИЙ МАНСИНГ (радиус 30) ======
 local function startMansing(bee)
     local running = true
+
     task.spawn(function()
         local angle = 0
         local radius = 30
         local maxDistance = 45
-
-        while running do
+            while running do
             local currentPlayer = game:GetService("Players").LocalPlayer
             if not currentPlayer then task.wait(0.1) continue end
 
@@ -387,6 +385,7 @@ local function huntViciousBee()
 
         local humanoid = bee:FindFirstChild("Humanoid")
         local beeDead = false
+
         if not bee.Parent then
             beeDead = true
         elseif not humanoid then
@@ -394,7 +393,6 @@ local function huntViciousBee()
         elseif humanoid.Health <= 0 then
             beeDead = true
         end
-
         if beeDead then
             print("[Hunt] ✅ Пчела убита! Хоп...")
             break
