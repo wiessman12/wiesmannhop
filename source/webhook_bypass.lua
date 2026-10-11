@@ -8,11 +8,12 @@ local RunService = game:GetService("RunService")
 getgenv().VisitedServers = getgenv().VisitedServers or {}
 getgenv().IsHopping = false
 
-local HOP_DELAY = 5
-local FLY_HEIGHT = 600
+-- ====== НАСТРОЙКИ ======
+local HOP_DELAY = 2.5
+local FLY_HEIGHT = 280
 local MOUNTAIN_MONDO_RADIUS = 200
-local MANSING_RADIUS = 30
-local MANSING_MAX_DIST = 45
+local MANSING_RADIUS = 60
+local MANSING_MAX_DIST = 90
 local SERVER_FETCH_LIMIT = 100
 
 -- ====== HTTP ======
@@ -39,9 +40,7 @@ local function fetchAvailableServers()
     local available = {}
 
     for _, server in ipairs(decoded.data) do
-        -- Только доступные: не текущий + есть свободные слоты
         if server.id ~= currentJobId and server.playing < server.maxPlayers then
-            -- Только не посещённые
             local visited = false
             for _, v in ipairs(getgenv().VisitedServers) do
                 if v == server.id then visited = true break end
@@ -66,7 +65,6 @@ local function hopToRandomServer()
     local lp = Players.LocalPlayer
     if not lp then return end
 
-    -- Собираем доступные не посещённые серверы
     local available = fetchAvailableServers()
 
     if #available == 0 then
@@ -75,7 +73,6 @@ local function hopToRandomServer()
         available = fetchAvailableServers()
     end
 
-    -- Fallback: если и после сброса пусто — телепорт в случайный
     if #available == 0 then
         print("[Hop] Нет доступных серверов — Teleport в случайный")
         local ok = pcall(function()
@@ -88,13 +85,13 @@ local function hopToRandomServer()
         return
     end
 
-    -- Перемешиваем список для случайности
+    -- Перемешиваем
     for i = #available, 2, -1 do
         local j = math.random(i)
         available[i], available[j] = available[j], available[i]
     end
 
-    -- Пробуем серверы по очереди, пока один не сработает
+    -- Перебираем серверы
     for _, chosen in ipairs(available) do
         print("[Hop] Пробуем сервер:", chosen.id,
             "| игроков:", chosen.playing .. "/" .. chosen.maxPlayers,
@@ -102,11 +99,10 @@ local function hopToRandomServer()
 
         table.insert(getgenv().VisitedServers, chosen.id)
 
-        -- Способ 1: TeleportToPlaceInstance (старый, надёжный)
+        -- Способ 1: TeleportToPlaceInstance
         local ok = pcall(function()
             TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, lp)
         end)
-
         if ok then
             print("[Hop] ✅ TeleportToPlaceInstance отправлен")
             return
@@ -125,13 +121,12 @@ local function hopToRandomServer()
         print("[Hop] ❌ Оба способа упали, берём следующий")
         task.wait(0.5)
     end
-    -- Все серверы упали — телепорт в случайный
+
     print("[Hop] Все серверы провалились — Teleport в случайный")
     pcall(function()
         TeleportService:Teleport(game.PlaceId, lp)
     end)
 end
-
 -- ====== ПОИСК ОБЪЕКТОВ ======
 local function findViciousBee()
     local monsters = workspace:FindFirstChild("Monsters")
@@ -155,8 +150,6 @@ local function findMondoChick()
     end
 end
 
--- Mondo найден и пчела рядом → она на горе → хоп
--- Mondo НЕ найден → летим куда угодно
 local function shouldHopFromBee(bee)
     local mondo = findMondoChick()
     if not mondo then return false end
@@ -182,14 +175,17 @@ local function findFreeHive()
     print("[Hunt] ❌ Свободных ульев нет")
 end
 
--- ====== ТОЧЕЧНОЕ ОТКЛЮЧЕНИЕ КОЛЛИЗИЙ ======
+-- ====== ТОЧЕЧНОЕ ОТКЛЮЧЕНИЕ КОЛЛИЗИЙ (без GummyBox) ======
 local function disableCollisionsNear(pos, radius)
     local disabled = {}
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("BasePart") and obj.CanCollide then
-            if (obj.Position - pos).Magnitude <= radius then
-                disabled[obj] = true
-                obj.CanCollide = false
+            local fullName = obj:GetFullName()
+            if not fullName:find("GummyBox", 1, true) then
+                if (obj.Position - pos).Magnitude <= radius then
+                    disabled[obj] = true
+                    obj.CanCollide = false
+                end
             end
         end
     end
@@ -223,7 +219,7 @@ local function flyOverhead(target, targetOffset)
     end
 
     local finalPos = targetPos + targetOffset
-    local flyY = math.max(FLY_HEIGHT, hrp.Position.Y + 200, finalPos.Y + 200)
+    local flyY = math.max(FLY_HEIGHT, finalPos.Y + 150, hrp.Position.Y + 100)
 
     -- ФАЗА 1: ПОДЪЁМ
     do
@@ -468,7 +464,7 @@ local function huntViciousBee()
             task.wait(0.3)
         end
 
-        print("[Hunt] Мансинг вокруг пчелы...")
+        print("[Hunt] Мансинг вокруг пчелы (радиус " .. MANSING_RADIUS .. ")...")
         local stopMansing = startMansing(bee)
 
         local maxWait = 90
@@ -498,18 +494,11 @@ end
 -- ====== ОБРАБОТКА ОШИБОК ТЕЛЕПОРТА ======
 TeleportService.TeleportInitFailed:Connect(function(_, result, err)
     warn("[Teleport] Ошибка:", result.Name, err, "| Код:", result.Value)
-
-    -- Сбрасываем флаг, чтобы можно было попробовать снова
     getgenv().IsHopping = false
-
-    -- При любой ошибке — пробуем хопнуть ещё раз через паузу
     task.wait(2)
     pcall(hopToRandomServer)
 end)
 
--- ====== ДИАГНОСТИКА (можно удалить после проверки) ======
-print("[Debug] TeleportAsync есть:", typeof(TeleportService.TeleportAsync))
-print("[Debug] TeleportToPlaceInstance есть:", typeof(TeleportService.TeleportToPlaceInstance))
 -- ====== БЕСКОНЕЧНЫЙ ЦИКЛ ======
 task.wait(5)
 while true do
