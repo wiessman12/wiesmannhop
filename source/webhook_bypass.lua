@@ -12,8 +12,8 @@ getgenv().IsHopping = false
 local HOP_DELAY = 2.5
 local FLY_HEIGHT = 280
 local MOUNTAIN_MONDO_RADIUS = 200
-local MANSING_RADIUS = 60
-local MANSING_MAX_DIST = 90
+local MANSING_RADIUS = 120
+local MANSING_MAX_DIST = 180
 local SERVER_FETCH_LIMIT = 100
 
 -- ====== HTTP ======
