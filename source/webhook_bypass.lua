@@ -5,7 +5,6 @@ local TeleportService     = game:GetService("TeleportService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local RunService          = game:GetService("RunService")
 
-getgenv().VisitedServers = getgenv().VisitedServers or {}
 getgenv().IsHopping = false
 
 -- ====== НАСТРОЙКИ ======
@@ -13,7 +12,6 @@ local HOP_DELAY            = 2
 local MOUNTAIN_MONDO_RADIUS = 200
 local MANSING_RADIUS       = 18
 local SERVER_FETCH_LIMIT   = 300
-local BLACKLIST_MAX        = 200
 local FLY_SPEED            = 50
 local WALK_SPEED           = 50
 
@@ -42,36 +40,11 @@ local function fetchAvailableServers()
 
     for _, server in ipairs(decoded.data) do
         if server.id ~= currentJobId and server.playing < server.maxPlayers then
-            local visited = false
-            for _, v in ipairs(getgenv().VisitedServers) do
-                if v == server.id then visited = true break end
-            end
-            if not visited then
-                table.insert(available, server)
-            end
+            table.insert(available, server)
         end
     end
 
     return available
-end
-
--- ====== ДОБАВИТЬ ТЕКУЩИЙ СЕРВЕР В ЧЁРНЫЙ СПИСОК ======
-local function addCurrentServerToBlacklist()
-    local currentJobId = game.JobId
-    if not currentJobId or currentJobId == "" then return end
-
-    for _, v in ipairs(getgenv().VisitedServers) do
-        if v == currentJobId then return end
-    end
-
-    table.insert(getgenv().VisitedServers, currentJobId)
-    print("[Blacklist] Добавлен сервер. Всего в списке:", #getgenv().VisitedServers)
-
-    -- Если достигли лимита — очищаем, чтобы хопать на "старые"
-    if #getgenv().VisitedServers >= BLACKLIST_MAX then
-        print("[Blacklist] Достигнут лимит " .. BLACKLIST_MAX .. " — очищаем, хопаем на старые серверы")
-        getgenv().VisitedServers = {}
-    end
 end
 
 -- ====== ХОП ======
@@ -79,7 +52,7 @@ local function hopToRandomServer()
     if getgenv().IsHopping then return end
     getgenv().IsHopping = true
 
-    print("[Hop] Ждём " .. HOP_DELAY .. " сек перед хопом...")
+    print("[Hop] Ждём " .. HOP_DELAY .. " сек...")
     task.wait(HOP_DELAY)
 
     local lp = Players.LocalPlayer
@@ -88,18 +61,12 @@ local function hopToRandomServer()
     local available = fetchAvailableServers()
 
     if #available == 0 then
-        print("[Hop] Все серверы в чёрном списке — сброс списка")
-        getgenv().VisitedServers = {}
-        available = fetchAvailableServers()
-    end
-
-    if #available == 0 then
         print("[Hop] Нет доступных серверов — Teleport в случайный")
         local ok = pcall(function()
             TeleportService:Teleport(game.PlaceId, lp)
         end)
         if not ok then
-            print("[Hop] Teleport тоже не сработал")
+            print("[Hop] Teleport не сработал")
             getgenv().IsHopping = false
         end
         return
@@ -110,33 +77,27 @@ local function hopToRandomServer()
         available[i], available[j] = available[j], available[i]
     end
 
-    for _, chosen in ipairs(available) do
-        print("[Hop] Пробуем сервер:", chosen.id,
-            "| игроков:", chosen.playing .. "/" .. chosen.maxPlayers,
-            "| доступно:", #available)
+    local chosen = available[1]
+    print("[Hop] Хоп на:", chosen.id, "|", chosen.playing .. "/" .. chosen.maxPlayers)
 
-        local ok = pcall(function()
-            TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, lp)
-        end)
-        if ok then
-            print("[Hop] ✅ TeleportToPlaceInstance отправлен")
-            return
-        end
-
-        print("[Hop] TeleportToPlaceInstance не сработал — TeleportAsync")
-        local ok2 = pcall(function()
-            TeleportService:TeleportAsync(game.PlaceId, {lp})
-        end)
-        if ok2 then
-            print("[Hop] ✅ TeleportAsync отправлен")
-            return
-        end
-
-        print("[Hop] ❌ Оба способа упали, берём следующий")
-        task.wait(0.5)
+    local ok = pcall(function()
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, lp)
+    end)
+    if ok then
+        print("[Hop] ✅ TeleportToPlaceInstance")
+        return
     end
 
-    print("[Hop] Все серверы провалились — Teleport в случайный")
+    print("[Hop] TeleportToPlaceInstance упал — TeleportAsync")
+    local ok2 = pcall(function()
+        TeleportService:TeleportAsync(game.PlaceId, {lp})
+    end)
+    if ok2 then
+        print("[Hop] ✅ TeleportAsync")
+        return
+    end
+
+    print("[Hop] Оба способа упали — Teleport")
     pcall(function()
         TeleportService:Teleport(game.PlaceId, lp)
     end)
@@ -233,7 +194,7 @@ local function flyTo(target, offset)
 
         hum:ChangeState(Enum.HumanoidStateType.Physics)
         local noclip = RunService.PreSimulation:Connect(function()
-                    for _, part in ipairs(char:GetDescendants()) do
+            for _, part in ipairs(char:GetDescendants()) do
                 if part:IsA("BasePart") then part.CanCollide = false end
             end
         end)
@@ -345,7 +306,7 @@ local function startMansing(bee)
         if thornPos then
             local dirToThorn = (thornPos - beeHrp.Position).Unit
             targetPos = thornPos - dirToThorn * 5
-                else
+        else
             local offset = Vector3.new(math.cos(finalAngle) * MANSING_RADIUS, 0, math.sin(finalAngle) * MANSING_RADIUS)
             targetPos = beeHrp.Position + offset
         end
@@ -376,8 +337,6 @@ end
 -- ====== ОСНОВНАЯ ЛОГИКА ======
 local function huntViciousBee()
     print("[Hunt] === НОВЫЙ СЕРВЕР ===")
-    -- Заносим текущий сервер в чёрный список сразу после захода
-    addCurrentServerToBlacklist()
     task.wait(2)
 
     local lp = Players.LocalPlayer
@@ -471,7 +430,7 @@ local function huntViciousBee()
         end
 
         print("[Hunt] Мансинг вокруг пчелы (радиус " .. MANSING_RADIUS .. ")...")
-            local stopMansing = startMansing(bee)
+        local stopMansing = startMansing(bee)
 
         local maxWait = 90
         local waited = 0
