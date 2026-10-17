@@ -223,8 +223,8 @@ local function startMansing(bee)
     local running = true
     local connection
     local isFlying = false
-    local radius = 50
-    local speed = 70
+    local radius = 20
+    local speed = 50
 
     task.spawn(function()
         local angle = 0
