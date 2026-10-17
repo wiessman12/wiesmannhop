@@ -17,19 +17,18 @@ local playerGui = player:WaitForChild("PlayerGui")
 if getgenv().VichopLoaded then return end
 getgenv().VichopLoaded = true
 
--- ====== OCEAN BREEZE PALETTE ======
 local Palette = {
-    Background   = Color3.fromRGB(14, 22, 33),    -- #0E1621
-    Card         = Color3.fromRGB(22, 34, 47),    -- #16222F
+    Background   = Color3.fromRGB(14, 22, 33),
+    Card         = Color3.fromRGB(22, 34, 47),
     CardHover    = Color3.fromRGB(28, 42, 58),
-    Accent       = Color3.fromRGB(79, 195, 247),  -- #4FC3F7
-    Accent2      = Color3.fromRGB(38, 166, 154),  -- #26A69A
-    Text         = Color3.fromRGB(224, 247, 250), -- #E0F7FA
+    Accent       = Color3.fromRGB(79, 195, 247),
+    Accent2      = Color3.fromRGB(38, 166, 154),
+    Text         = Color3.fromRGB(224, 247, 250),
     TextDim      = Color3.fromRGB(160, 190, 200),
     SliderBg     = Color3.fromRGB(30, 45, 60),
     StrokeColor  = Color3.fromRGB(50, 80, 100),
-    StopRed      = Color3.fromRGB(229, 115, 115), -- #E57373
-    StartGreen   = Color3.fromRGB(129, 199, 132), -- #81C784
+    StopRed      = Color3.fromRGB(229, 115, 115),
+    StartGreen   = Color3.fromRGB(129, 199, 132),
 }
 
 local CONFIG_FILE = "wiesmann_vichop_v2.json"
@@ -76,73 +75,91 @@ local function countStingers()
     return count
 end
 
-local SERVERS_FILE = "wiesmann_vichop_servers.json"
-local MAX_VISITED = 500
-
-local function loadVisitedServers()
-    if isfile and isfile(SERVERS_FILE) then
-        local ok, data = pcall(function() return HttpService:JSONDecode(readfile(SERVERS_FILE)) end)
-        if ok and data and type(data) == "table" then return data end
-    end
-    return {}
-end
-
-local function saveVisitedServers(servers)
-    if writefile then pcall(function() writefile(SERVERS_FILE, HttpService:JSONEncode(servers)) end) end
-end
-
-getgenv().VisitedServers = loadVisitedServers()
+getgenv().VisitedServers = getgenv().VisitedServers or {}
 
 local function hopToRandomServer()
-    taskwait(2)
+    taskwait(1.5)
     if not player or not player.Parent then return end
 
     local success, servers = pcall(function()
-        return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
+        return HttpService:JSONDecode(
+            game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")
+        )
     end)
 
-    if not success or not servers or not servers.data or #servers.data == 0 then 
+    if not success or not servers or not servers.data or #servers.data == 0 then
         TeleportService:Teleport(game.PlaceId, player)
-        return 
+        return
     end
+
     local currentJobId = game.JobId
     local candidates = {}
 
     for _, server in ipairs(servers.data) do
-        if server.id ~= currentJobId and server.playing < server.maxPlayers and server.id ~= "" then
-            local visited = false
-            for _, vId in ipairs(getgenv().VisitedServers) do 
-                if vId == server.id then visited = true; break end 
+        if server.id ~= currentJobId and server.playing < server.maxPlayers then
+            local alreadyVisited = false
+            for _, visitedId in ipairs(getgenv().VisitedServers) do
+                if visitedId == server.id then alreadyVisited = true; break end
             end
-            if not visited then 
-                table.insert(candidates, server) 
-            end
+            if not alreadyVisited then table.insert(candidates, server) end
         end
     end
 
-    if #candidates == 0 then 
-        print("[Hop] All servers blacklisted. Clearing...")
-        getgenv().VisitedServers = {}
-        saveVisitedServers(getgenv().VisitedServers)
+    while #getgenv().VisitedServers > 150 do table.remove(getgenv().VisitedServers, 1) end
+    if #candidates == 0 then
         TeleportService:Teleport(game.PlaceId, player)
-        return 
+        return
     end
 
     local chosen = candidates[math.random(#candidates)]
     table.insert(getgenv().VisitedServers, chosen.id)
-    while #getgenv().VisitedServers > MAX_VISITED do table.remove(getgenv().VisitedServers, 1) end
-    saveVisitedServers(getgenv().VisitedServers)
 
-    local teleportOptions = Instance.new("TeleportOptions")
-    teleportOptions.ServerInstanceId = chosen.id
-    
-    local tpSuccess = pcall(function()
-        TeleportService:TeleportAsync(game.PlaceId, {player}, teleportOptions)
-    end)
+    TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, player)
+end
 
-    if not tpSuccess then
-        TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, player)
+local function findViciousBee()
+    local monsters = workspace:FindFirstChild("Monsters")
+    if not monsters then return nil end
+    for _, obj in ipairs(monsters:GetChildren()) do
+        if obj.Name:find("Vicious Bee") then
+            local h = obj:FindFirstChild("Humanoid")
+            if h and h.Health > 0 then return obj end
+        end
     end
+end
+
+local function findMondoChick()
+    local monsters = workspace:FindFirstChild("Monsters")
+    if not monsters then return nil end
+    for _, obj in ipairs(monsters:GetChildren()) do
+        if obj.Name:find("Mondo Chick") then
+            local h = obj:FindFirstChild("Humanoid")
+            if h and h.Health > 0 then return obj end
+        end
+    end
+end
+
+local function shouldHopFromBee(bee)
+    local mondo = findMondoChick()
+    if not mondo then return false end
+    local dist = (bee:GetPivot().Position - mondo:GetPivot().Position).Magnitude
+    return dist < 200
+end
+
+local function findFreeHive()
+    local honeycombs = workspace:FindFirstChild("Honeycombs")
+    if not honeycombs then return nil end
+    local freeHive = nil
+    for i = 1, 6 do
+        local hive = honeycombs:FindFirstChild("Hive" .. i)
+        if hive then
+            local owner = hive:FindFirstChild("Owner")
+            local v = owner and owner.Value
+            if v == player then return hive end
+            if not freeHive and (not v or not v:IsA("Player") or not v.Parent) then freeHive = hive end
+        end
+    end
+    return freeHive
 end
 
 local function flyTo(target, offset)
@@ -194,57 +211,11 @@ local function flyTo(target, offset)
 
         noclip:Disconnect(); ap:Destroy(); ao:Destroy()
         for _, part in ipairs(char:GetDescendants()) do if part:IsA("BasePart") then part.CanCollide = true end end
-        hum:ChangeState(Enum.HumanoidStateType.Freefall)
+            hum:ChangeState(Enum.HumanoidStateType.Freefall)
         return (hrp.Position - targetPos).Magnitude < 30
     end)
     if not success then resetCharacterState(); return false end
     return result
-end
-
-local function findViciousBee()
-    local monsters = workspace:FindFirstChild("Monsters")
-    if not monsters then return nil end
-    for _, obj in ipairs(monsters:GetChildren()) do
-        if obj.Name:find("Vicious Bee", 1, true) then
-            local humanoid = obj:FindFirstChild("Humanoid")
-            if humanoid and humanoid.Health > 0 then return obj end
-        end
-    end
-    return nil
-end
-
-local function findMondoChick()
-    local monsters = workspace:FindFirstChild("Monsters")
-    if not monsters then return nil end
-    for _, obj in ipairs(monsters:GetChildren()) do
-        if obj.Name:find("Mondo Chick", 1, true) then
-            local humanoid = obj:FindFirstChild("Humanoid")
-            if humanoid and humanoid.Health > 0 then return obj end
-        end
-    end
-    return nil
-end
-
-local function isViciousBeeNearMondo(bee)
-    local mondo = findMondoChick()
-    if not mondo then return false end
-    return (bee:GetPivot().Position - mondo:GetPivot().Position).Magnitude < 200
-end
-
-local function findFreeHive()
-    local honeycombs = workspace:FindFirstChild("Honeycombs")
-    if not honeycombs then return nil end
-    local freeHive = nil
-    for i = 1, 6 do
-        local hive = honeycombs:FindFirstChild("Hive" .. i)
-        if hive then
-            local owner = hive:FindFirstChild("Owner")
-            local v = owner and owner.Value
-            if v == player then return hive end
-            if not freeHive and (not v or not v:IsA("Player") or not v.Parent) then freeHive = hive end
-        end
-    end
-    return freeHive
 end
 
 local function pressE(hive)
@@ -313,7 +284,7 @@ local function startMansing(bee)
         zigzagPhase = zigzagPhase + dt * 5
         local zigzag = math.sin(zigzagPhase) * 0.45
         angle = angle + (Settings.WalkSpeed / Settings.MansRadius) * dt
-            local finalAngle = angle + zigzag
+        local finalAngle = angle + zigzag
 
         local targetPos
         if thornPos then
@@ -337,7 +308,6 @@ local function startMansing(bee)
     return function() running = false; if connection then connection:Disconnect() end; resetCharacterState() end
 end
 
--- ====== GUI (OCEAN BREEZE) ======
 local function createGUI()
     local old = playerGui:FindFirstChild("wiesmann_vichop")
     if old then old:Destroy() end
@@ -375,8 +345,7 @@ local function createGUI()
     titleBar.BackgroundColor3 = Palette.Card
     titleBar.BorderSizePixel = 0
     titleBar.Parent = main
-    local titleCorner = Instance.new("UICorner", titleBar)
-    titleCorner.CornerRadius = UDim.new(0, 12)
+    Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 12)
 
     local titleGradient = Instance.new("UIGradient")
     titleGradient.Color = ColorSequence.new({
@@ -520,7 +489,7 @@ local function createGUI()
         local fillGrad = Instance.new("UIGradient")
         fillGrad.Color = ColorSequence.new({
             ColorSequenceKeypoint.new(0.0, Palette.Accent2),
-                ColorSequenceKeypoint.new(1.0, Palette.Accent),
+            ColorSequenceKeypoint.new(1.0, Palette.Accent),
         })
         fillGrad.Parent = fill
 
@@ -549,7 +518,7 @@ local function createGUI()
         bg.InputBegan:Connect(function(i)
             if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then 
                 dragging = true
-                main.Draggable = false
+                    main.Draggable = false
                 update(i) 
             end
         end)
@@ -589,15 +558,31 @@ end
 local function huntViciousBee()
     if not Stats.Running then return end
     
-    local bee = findViciousBee()
+    print("[Hunt] === NEW SERVER ===")
+    
+    local t = 0
+    while not workspace:FindFirstChild("Monsters") and t < 10 do
+        taskwait(0.5)
+        t = t + 0.5
+    end
+    
+    local bee = nil
+    local searchStart = tick()
+    while tick() - searchStart < 2 do
+        bee = findViciousBee()
+        if bee then break end
+        taskwait(0.5)
+    end
+    
     if not bee then
-        print("[Vichop] No Vicious -> hop")
+        print("[Hunt] No Vicious after 2s -> hop")
         hopToRandomServer()
         return
     end
+    print("[Hunt] Vicious found:", bee.Name)
     
-    if isViciousBeeNearMondo(bee) then
-        print("[Vichop] Vicious near Mondo -> hop")
+    if shouldHopFromBee(bee) then
+        print("[Hunt] Vicious near Mondo -> hop")
         hopToRandomServer()
         return
     end
@@ -605,12 +590,12 @@ local function huntViciousBee()
     if not guiCreated then
         guiCreated = true
         createGUI()
-        print("[Vichop] Vicious found -> GUI loaded")
+        print("[Hunt] GUI loaded")
     end
     
     local hive = findFreeHive()
     if not hive then
-        print("[Vichop] No free hive -> hop")
+        print("[Hunt] No free hive -> hop")
         hopToRandomServer()
         return
     end
@@ -618,7 +603,7 @@ local function huntViciousBee()
     local platform = hive:FindFirstChild("Platform")
     local target = (platform and platform.Value) and platform.Value or hive
     if not flyTo(target, Vector3.new(0, 3, 0)) then
-        print("[Vichop] Failed to reach hive -> hop")
+        print("[Hunt] Failed to reach hive -> hop")
         hopToRandomServer()
         return
     end
@@ -633,23 +618,26 @@ local function huntViciousBee()
         tries = tries + 1
     end
     if not claimed then
-        print("[Vichop] Failed to claim hive -> hop")
+        print("[Hunt] Failed to claim hive -> hop")
         hopToRandomServer()
         return
     end
+    print("[Hunt] Hive claimed")
+    
     if not bee.Parent then
-        print("[Vichop] Bee disappeared -> hop")
+        print("[Hunt] Bee disappeared -> hop")
         hopToRandomServer()
         return
     end
     
     if not flyTo(bee, Vector3.new(0, 5, 10)) then
-        print("[Vichop] Failed to reach bee -> hop")
+        print("[Hunt] Failed to reach bee -> hop")
         hopToRandomServer()
         return
     end
     taskwait(0.3)
     
+    print("[Hunt] Mansing...")
     local stopMansing = startMansing(bee)
     local maxWait, waited = 120, 0
     local killed = false
@@ -668,8 +656,8 @@ local function huntViciousBee()
         local hum = bee:FindFirstChild("Humanoid")
         if hum and hum.Health <= 0 then
             killed = true
-            local t = 0
-            while bee.Parent and t < 3 do taskwait(0.1); t = t + 0.1 end
+            local tt = 0
+            while bee.Parent and tt < 3 do taskwait(0.1); tt = tt + 0.1 end
             break
         end
     end
@@ -678,9 +666,9 @@ local function huntViciousBee()
     
     if killed then
         Stats.ViciousKilled = Stats.ViciousKilled + 1
-        print("[Vichop] Vicious killed. Total:", Stats.ViciousKilled)
+        print("[Hunt] Vicious killed! Total:", Stats.ViciousKilled)
     else
-        print("[Vichop] Mansing timeout -> hop")
+        print("[Hunt] Mansing timeout -> hop")
     end
     
     Stats.StingersCollected = countStingers()
