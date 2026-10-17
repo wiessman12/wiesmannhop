@@ -4,6 +4,7 @@ local TeleportService = game:GetService("TeleportService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 local workspace = game:GetService("Workspace")
 
 local taskwait = (task and task.wait) or wait
@@ -15,6 +16,21 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 if getgenv().VichopLoaded then return end
 getgenv().VichopLoaded = true
+
+-- ====== OCEAN BREEZE PALETTE ======
+local Palette = {
+    Background   = Color3.fromRGB(14, 22, 33),    -- #0E1621
+    Card         = Color3.fromRGB(22, 34, 47),    -- #16222F
+    CardHover    = Color3.fromRGB(28, 42, 58),
+    Accent       = Color3.fromRGB(79, 195, 247),  -- #4FC3F7
+    Accent2      = Color3.fromRGB(38, 166, 154),  -- #26A69A
+    Text         = Color3.fromRGB(224, 247, 250), -- #E0F7FA
+    TextDim      = Color3.fromRGB(160, 190, 200),
+    SliderBg     = Color3.fromRGB(30, 45, 60),
+    StrokeColor  = Color3.fromRGB(50, 80, 100),
+    StopRed      = Color3.fromRGB(229, 115, 115), -- #E57373
+    StartGreen   = Color3.fromRGB(129, 199, 132), -- #81C784
+}
 
 local CONFIG_FILE = "wiesmann_vichop_v2.json"
 local DefaultSettings = { WalkSpeed = 60, FlySpeed = 100, MansRadius = 18, Running = true }
@@ -89,7 +105,6 @@ local function hopToRandomServer()
         TeleportService:Teleport(game.PlaceId, player)
         return 
     end
-
     local currentJobId = game.JobId
     local candidates = {}
 
@@ -298,7 +313,7 @@ local function startMansing(bee)
         zigzagPhase = zigzagPhase + dt * 5
         local zigzag = math.sin(zigzagPhase) * 0.45
         angle = angle + (Settings.WalkSpeed / Settings.MansRadius) * dt
-        local finalAngle = angle + zigzag
+            local finalAngle = angle + zigzag
 
         local targetPos
         if thornPos then
@@ -312,7 +327,7 @@ local function startMansing(bee)
         local rayParams = RaycastParams.new()
         rayParams.FilterDescendantsInstances = {char}; rayParams.FilterType = Enum.RaycastFilterType.Exclude
         local ground = workspace:Raycast(Vector3.new(targetPos.X, targetPos.Y + 30, targetPos.Z), Vector3.new(0, -100, 0), rayParams)
-            if ground then targetPos = Vector3.new(targetPos.X, ground.Position.Y + 3, targetPos.Z) end
+        if ground then targetPos = Vector3.new(targetPos.X, ground.Position.Y + 3, targetPos.Z) end
 
         if now - lastMoveTime > 0.1 or (targetPos - lastTarget).Magnitude > 4 then
             hum:MoveTo(targetPos); lastMoveTime = now; lastTarget = targetPos
@@ -322,6 +337,7 @@ local function startMansing(bee)
     return function() running = false; if connection then connection:Disconnect() end; resetCharacterState() end
 end
 
+-- ====== GUI (OCEAN BREEZE) ======
 local function createGUI()
     local old = playerGui:FindFirstChild("wiesmann_vichop")
     if old then old:Destroy() end
@@ -333,91 +349,201 @@ local function createGUI()
     gui.Parent = playerGui
 
     local main = Instance.new("Frame")
-    main.Size = UDim2.new(0, 500, 0, 300)
-    main.Position = UDim2.new(0.5, -250, 0.5, -150)
-    main.BackgroundColor3 = Color3.fromRGB(18, 18, 20)
+    main.Size = UDim2.new(0, 500, 0, 320)
+    main.Position = UDim2.new(0.5, -250, 0.5, -160)
+    main.BackgroundColor3 = Palette.Background
     main.BorderSizePixel = 0
     main.Active = true
     main.Draggable = true
     main.Parent = gui
-    Instance.new("UICorner", main).CornerRadius = UDim.new(0, 10)
-    local stroke = Instance.new("UIStroke", main); stroke.Color = Color3.fromRGB(60, 60, 70); stroke.Thickness = 1
+    Instance.new("UICorner", main).CornerRadius = UDim.new(0, 12)
+
+    local stroke = Instance.new("UIStroke", main)
+    stroke.Color = Palette.StrokeColor
+    stroke.Thickness = 1
+    stroke.Transparency = 0.3
+    stroke.Parent = main
+
+    local glow = Instance.new("UIStroke", main)
+    glow.Color = Palette.Accent
+    glow.Thickness = 2
+    glow.Transparency = 0.9
+    glow.Parent = main
 
     local titleBar = Instance.new("Frame")
-    titleBar.Size = UDim2.new(1, 0, 0, 40)
-    titleBar.BackgroundColor3 = Color3.fromRGB(22, 22, 25)
+    titleBar.Size = UDim2.new(1, 0, 0, 42)
+    titleBar.BackgroundColor3 = Palette.Card
     titleBar.BorderSizePixel = 0
     titleBar.Parent = main
-    Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 10)
+    local titleCorner = Instance.new("UICorner", titleBar)
+    titleCorner.CornerRadius = UDim.new(0, 12)
+
+    local titleGradient = Instance.new("UIGradient")
+    titleGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0.0, Palette.Accent),
+        ColorSequenceKeypoint.new(1.0, Palette.Accent2),
+    })
+    titleGradient.Rotation = 90
+    titleGradient.Parent = titleBar
+
+    local titleOverlay = Instance.new("Frame")
+    titleOverlay.Size = UDim2.new(1, 0, 0, 22)
+    titleOverlay.Position = UDim2.new(0, 0, 0, 20)
+    titleOverlay.BackgroundColor3 = Palette.Card
+    titleOverlay.BorderSizePixel = 0
+    titleOverlay.Parent = titleBar
 
     local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, -20, 1, 0); title.Position = UDim2.new(0, 15, 0, 0)
-    title.BackgroundTransparency = 1; title.Text = "wiesmann vichop"
-    title.TextColor3 = Color3.fromRGB(180, 130, 255)
-    title.Font = Enum.Font.GothamBold; title.TextSize = 14
-    title.TextXAlignment = Enum.TextXAlignment.Left; title.Parent = titleBar
+    title.Size = UDim2.new(1, -20, 1, 0)
+    title.Position = UDim2.new(0, 15, 0, 0)
+    title.BackgroundTransparency = 1
+    title.Text = "  wiesmann vichop"
+    title.TextColor3 = Palette.Text
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 15
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = titleBar
+
+    local dot = Instance.new("Frame")
+    dot.Size = UDim2.new(0, 8, 0, 8)
+    dot.Position = UDim2.new(1, -20, 0.5, -4)
+    dot.BackgroundColor3 = Palette.Accent
+    dot.BorderSizePixel = 0
+    dot.Parent = titleBar
+    Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+    Instance.new("UIStroke", dot).Color = Palette.Accent2
 
     local content = Instance.new("Frame")
-    content.Size = UDim2.new(1, -20, 1, -50); content.Position = UDim2.new(0, 10, 0, 45)
-    content.BackgroundTransparency = 1; content.Parent = main
+    content.Size = UDim2.new(1, -20, 1, -60)
+    content.Position = UDim2.new(0, 10, 0, 50)
+    content.BackgroundTransparency = 1
+    content.Parent = main
 
     local statsCard = Instance.new("Frame")
-    statsCard.Size = UDim2.new(0.4, -5, 1, 0)
-    statsCard.BackgroundColor3 = Color3.fromRGB(25, 25, 30); statsCard.BorderSizePixel = 0; statsCard.Parent = content
-    Instance.new("UICorner", statsCard).CornerRadius = UDim.new(0, 8)
+    statsCard.Size = UDim2.new(0.42, -5, 1, 0)
+    statsCard.BackgroundColor3 = Palette.Card
+    statsCard.BorderSizePixel = 0
+    statsCard.Parent = content
+    Instance.new("UICorner", statsCard).CornerRadius = UDim.new(0, 10)
+    local statsStroke = Instance.new("UIStroke", statsCard)
+    statsStroke.Color = Palette.StrokeColor
+    statsStroke.Transparency = 0.5
+    statsStroke.Parent = statsCard
 
     local statsText = Instance.new("TextLabel")
-    statsText.Size = UDim2.new(1, -20, 1, -20); statsText.Position = UDim2.new(0, 10, 0, 10)
-    statsText.BackgroundTransparency = 1; statsText.TextColor3 = Color3.fromRGB(200, 200, 200)
-    statsText.Font = Enum.Font.Gotham; statsText.TextSize = 12; statsText.TextXAlignment = Enum.TextXAlignment.Left
-    statsText.TextYAlignment = Enum.TextYAlignment.Top; statsText.Parent = statsCard
+    statsText.Size = UDim2.new(1, -20, 1, -20)
+    statsText.Position = UDim2.new(0, 12, 0, 12)
+    statsText.BackgroundTransparency = 1
+    statsText.TextColor3 = Palette.Text
+    statsText.Font = Enum.Font.Gotham
+    statsText.TextSize = 12
+    statsText.TextXAlignment = Enum.TextXAlignment.Left
+    statsText.TextYAlignment = Enum.TextYAlignment.Top
+    statsText.Text = ""
+    statsText.Parent = statsCard
 
     local settingsCard = Instance.new("Frame")
-    settingsCard.Size = UDim2.new(0.6, -5, 1, 0); settingsCard.Position = UDim2.new(0.4, 5, 0, 0)
-    settingsCard.BackgroundColor3 = Color3.fromRGB(25, 25, 30); settingsCard.BorderSizePixel = 0; settingsCard.Parent = content
-    Instance.new("UICorner", settingsCard).CornerRadius = UDim.new(0, 8)
+    settingsCard.Size = UDim2.new(0.58, -5, 1, 0)
+    settingsCard.Position = UDim2.new(0.42, 5, 0, 0)
+    settingsCard.BackgroundColor3 = Palette.Card
+    settingsCard.BorderSizePixel = 0
+    settingsCard.Parent = content
+    Instance.new("UICorner", settingsCard).CornerRadius = UDim.new(0, 10)
+    local setStroke = Instance.new("UIStroke", settingsCard)
+    setStroke.Color = Palette.StrokeColor
+    setStroke.Transparency = 0.5
+    setStroke.Parent = settingsCard
 
     local toggleBtn = Instance.new("TextButton")
-    toggleBtn.Size = UDim2.new(1, -20, 0, 35); toggleBtn.Position = UDim2.new(0, 10, 1, -45)
-    toggleBtn.BackgroundColor3 = Stats.Running and Color3.fromRGB(180, 60, 60) or Color3.fromRGB(60, 180, 60)
+    toggleBtn.Size = UDim2.new(1, -20, 0, 38)
+    toggleBtn.Position = UDim2.new(0, 10, 1, -48)
+    toggleBtn.BackgroundColor3 = Stats.Running and Palette.StopRed or Palette.StartGreen
     toggleBtn.Text = Stats.Running and "STOP" or "START"
-    toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255); toggleBtn.Font = Enum.Font.GothamBold; toggleBtn.TextSize = 13
-    toggleBtn.Parent = settingsCard; Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 6)
+    toggleBtn.TextColor3 = Palette.Text
+    toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.TextSize = 14
+    toggleBtn.AutoButtonColor = false
+    toggleBtn.Parent = settingsCard
+    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 8)
+
+    local function tweenBtn(color)
+        TweenService:Create(toggleBtn, TweenInfo.new(0.25), {BackgroundColor3 = color}):Play()
+    end
+
+    toggleBtn.MouseEnter:Connect(function()
+        tweenBtn(Stats.Running and Color3.fromRGB(255, 140, 140) or Color3.fromRGB(160, 230, 160))
+    end)
+    toggleBtn.MouseLeave:Connect(function()
+        tweenBtn(Stats.Running and Palette.StopRed or Palette.StartGreen)
+    end)
 
     toggleBtn.MouseButton1Click:Connect(function()
-        Stats.Running = not Stats.Running; Settings.Running = Stats.Running; saveSettings(Settings)
+        Stats.Running = not Stats.Running
+        Settings.Running = Stats.Running
+        saveSettings(Settings)
         toggleBtn.Text = Stats.Running and "STOP" or "START"
-        toggleBtn.BackgroundColor3 = Stats.Running and Color3.fromRGB(180, 60, 60) or Color3.fromRGB(60, 180, 60)
+        toggleBtn.BackgroundColor3 = Stats.Running and Palette.StopRed or Palette.StartGreen
     end)
+
     local function makeSlider(name, key, min, max, yPos)
         local c = Instance.new("Frame")
-        c.Size = UDim2.new(1, -20, 0, 35); c.Position = UDim2.new(0, 10, 0, yPos)
-        c.BackgroundTransparency = 1; c.Parent = settingsCard
+        c.Size = UDim2.new(1, -20, 0, 40)
+        c.Position = UDim2.new(0, 10, 0, yPos)
+        c.BackgroundTransparency = 1
+        c.Parent = settingsCard
 
         local lbl = Instance.new("TextLabel")
-        lbl.Size = UDim2.new(1, 0, 0, 15); lbl.BackgroundTransparency = 1
-        lbl.Text = name .. ": " .. Settings[key]; lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
-        lbl.Font = Enum.Font.Gotham; lbl.TextSize = 11; lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = c
+        lbl.Size = UDim2.new(1, 0, 0, 15)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = name .. ": " .. Settings[key]
+        lbl.TextColor3 = Palette.TextDim
+        lbl.Font = Enum.Font.Gotham
+        lbl.TextSize = 11
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Parent = c
 
         local bg = Instance.new("Frame")
-        bg.Size = UDim2.new(1, 0, 0, 6); bg.Position = UDim2.new(0, 0, 0, 22); bg.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
-        bg.BorderSizePixel = 0; bg.Parent = c; Instance.new("UICorner", bg).CornerRadius = UDim.new(1, 0)
+        bg.Size = UDim2.new(1, 0, 0, 6)
+        bg.Position = UDim2.new(0, 0, 0, 25)
+        bg.BackgroundColor3 = Palette.SliderBg
+        bg.BorderSizePixel = 0
+        bg.Parent = c
+        Instance.new("UICorner", bg).CornerRadius = UDim.new(1, 0)
 
         local fill = Instance.new("Frame")
-        fill.Size = UDim2.new((Settings[key] - min) / (max - min), 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(180, 130, 255)
-        fill.BorderSizePixel = 0; fill.Parent = bg; Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+        fill.Size = UDim2.new((Settings[key] - min) / (max - min), 0, 1, 0)
+        fill.BackgroundColor3 = Palette.Accent
+        fill.BorderSizePixel = 0
+        fill.Parent = bg
+        Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+
+        local fillGrad = Instance.new("UIGradient")
+        fillGrad.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0.0, Palette.Accent2),
+                ColorSequenceKeypoint.new(1.0, Palette.Accent),
+        })
+        fillGrad.Parent = fill
 
         local knob = Instance.new("Frame")
-        knob.Size = UDim2.new(0, 12, 0, 12); knob.Position = UDim2.new((Settings[key] - min) / (max - min), -6, 0.5, -6)
-        knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255); knob.BorderSizePixel = 0; knob.Parent = bg
+        knob.Size = UDim2.new(0, 14, 0, 14)
+        knob.Position = UDim2.new((Settings[key] - min) / (max - min), -7, 0.5, -7)
+        knob.BackgroundColor3 = Palette.Text
+        knob.BorderSizePixel = 0
+        knob.Parent = bg
         Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+        local knobStroke = Instance.new("UIStroke", knob)
+        knobStroke.Color = Palette.Accent
+        knobStroke.Thickness = 2
+        knobStroke.Parent = knob
 
         local dragging = false
         local function update(input)
             local pos = math.clamp((input.Position.X - bg.AbsolutePosition.X) / bg.AbsoluteSize.X, 0, 1)
             local val = math.floor(min + (max - min) * pos)
-            fill.Size = UDim2.new(pos, 0, 1, 0); knob.Position = UDim2.new(pos, -6, 0.5, -6)
-            lbl.Text = name .. ": " .. val; Settings[key] = val
+            fill.Size = UDim2.new(pos, 0, 1, 0)
+            knob.Position = UDim2.new(pos, -7, 0.5, -7)
+            lbl.Text = name .. ": " .. val
+            Settings[key] = val
         end
 
         bg.InputBegan:Connect(function(i)
@@ -442,15 +568,19 @@ local function createGUI()
     end
 
     makeSlider("Walk Speed", "WalkSpeed", 30, 90, 10)
-    makeSlider("Fly Speed", "FlySpeed", 1, 100, 50)
-    makeSlider("Mans Radius", "MansRadius", 10, 50, 90)
+    makeSlider("Fly Speed", "FlySpeed", 1, 100, 58)
+    makeSlider("Mans Radius", "MansRadius", 10, 50, 106)
 
     taskspawn(function()
         while gui.Parent do
             local uptime = math.floor(tick() - Stats.StartTime)
-            local mins = math.floor(uptime / 60); local secs = uptime % 60
-            statsText.Text = string.format("Uptime: %02d:%02d\nVicious Killed: %d\nStingers: %d\nStatus: %s", 
-                mins, secs, Stats.ViciousKilled, Stats.StingersCollected, Stats.Running and "Running" or "Stopped")
+            local mins = math.floor(uptime / 60)
+            local secs = uptime % 60
+            statsText.Text = string.format(
+                "Uptime\n  %02d:%02d\n\nVicious Killed\n  %d\n\nStingers\n  %d\n\nStatus\n  %s",
+                mins, secs, Stats.ViciousKilled, Stats.StingersCollected,
+                Stats.Running and "Running" or "Stopped"
+            )
             taskwait(1)
         end
     end)
@@ -507,7 +637,6 @@ local function huntViciousBee()
         hopToRandomServer()
         return
     end
-    
     if not bee.Parent then
         print("[Vichop] Bee disappeared -> hop")
         hopToRandomServer()
