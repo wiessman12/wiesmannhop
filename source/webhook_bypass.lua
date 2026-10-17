@@ -7,12 +7,10 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local workspace = game:GetService("Workspace")
 
--- Ждем загрузки игрока и GUI (защита от ошибки nil)
 local player = Players.LocalPlayer
 while not player do task.wait(0.1) player = Players.LocalPlayer end
 local playerGui = player:WaitForChild("PlayerGui")
 
--- Защита от двойного запуска
 if getgenv().VichopLoaded then return end
 getgenv().VichopLoaded = true
 
@@ -36,7 +34,7 @@ end
 
 local Settings = loadSettings()
 local Stats = { StartTime = tick(), ViciousKilled = 0, StingersCollected = 0, Running = Settings.Running }
-local guiCreated = false -- Флаг, чтобы меню создалось только 1 раз при детекте
+local guiCreated = false
 
 -- ====== УТИЛИТЫ ======
 local function resetCharacterState()
@@ -62,42 +60,70 @@ local function countStingers()
     return count
 end
 
--- ====== ХОП ======
+-- ====== ХОП (Без захода к друзьям) ======
 getgenv().VisitedServers = getgenv().VisitedServers or {}
 local MAX_VISITED = 300
 
 local function hopToRandomServer()
     task.wait(1.0)
     if not player or not player.Parent then return end
-    
+
     local success, servers = pcall(function()
         return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
     end)
-    if not success or not servers or not servers.data or #servers.data == 0 then TeleportService:Teleport(game.PlaceId, player); return end
+
+    if not success or not servers or not servers.data or #servers.data == 0 then 
+        TeleportService:Teleport(game.PlaceId, player)
+        return 
+    end
 
     local currentJobId = game.JobId
     local candidates = {}
+
     for _, server in ipairs(servers.data) do
         if server.id ~= currentJobId and server.playing < server.maxPlayers and server.id ~= "" then
             local visited = false
-            for _, vId in ipairs(getgenv().VisitedServers) do if vId == server.id then visited = true; break end end
-            if not visited then table.insert(candidates, server) end
+            for _, vId in ipairs(getgenv().VisitedServers) do 
+                if vId == server.id then visited = true; break end 
+            end
+            if not visited then 
+                table.insert(candidates, server) 
+            end
         end
     end
 
-    if #candidates == 0 then TeleportService:Teleport(game.PlaceId, player); return end
+    if #candidates == 0 then 
+        print("[Hop] Все сервера в блеклисте. Очистка...")
+        getgenv().VisitedServers = {}
+        TeleportService:Teleport(game.PlaceId, player)
+        return 
+    end
+
     local chosen = candidates[math.random(#candidates)]
+    
     table.insert(getgenv().VisitedServers, chosen.id)
-    while #getgenv().VisitedServers > MAX_VISITED do table.remove(getgenv().VisitedServers, 1) end
-    TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, player)
+    while #getgenv().VisitedServers > MAX_VISITED do 
+        table.remove(getgenv().VisitedServers, 1) 
+    end
+
+    local teleportOptions = Instance.new("TeleportOptions")
+    teleportOptions.ServerInstanceId = chosen.id
+    
+    local tpSuccess = pcall(function()
+        TeleportService:TeleportAsync(game.PlaceId, {player}, teleportOptions)
+            end)
+
+    if not tpSuccess then
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, player)
+    end
 end
 
--- ====== FLY (Метод Атласа) ======
+-- ====== FLY ======
 local function flyTo(target, offset)
     local success, result = pcall(function()
         local char = player.Character
         if not char then return false end
-            local hrp = char:FindFirstChild("HumanoidRootPart")
+        local hrp = char:FindFirstChild("HumanoidRootPart")
         local hum = char:FindFirstChildOfClass("Humanoid")
         if not hrp or not target or not hum then return false end
 
@@ -149,13 +175,15 @@ local function flyTo(target, offset)
     return result
 end
 
--- ====== ПОИСК ======
+-- ====== ДЕТЕКТ ПЧЕЛЫ (Как у Атласа) ======
 local function findViciousBee()
     local monsters = workspace:FindFirstChild("Monsters")
     if not monsters then return nil end
     for _, obj in ipairs(monsters:GetChildren()) do
-        if obj.Name:find("Vicious Bee", 1, true) then
+        -- Ищем по слову "vicious" (игнорируя регистр), чтобы найти "Vicious Bee (Lvl 5)"
+        if string.find(string.lower(obj.Name), "vicious") then
             local hum = obj:FindFirstChild("Humanoid")
+            -- Если пчела жива и уровень подходит
             if hum and hum.Health > 0 then
                 return obj 
             end
@@ -272,6 +300,69 @@ local function startMansing(bee)
     return function() running = false; if connection then connection:Disconnect() end; resetCharacterState() end
 end
 
+-- ====== ГЛАВНЫЙ ЦИКЛ (ДЕТЕКТ КАК У АТЛАСА) ======
+local function huntViciousBee()
+    if not Stats.Running then return end
+    
+    -- Ждем прогрузки сервера
+    task.wait(3)
+    local t = 0
+    while not workspace:FindFirstChild("Monsters") and t < 10 do task.wait(0.5); t = t + 0.5 end
+
+    -- Ищем пчелу
+    local bee = findViciousBee()
+    
+    -- Если не нашли (как у Атласа - сразу хоп)
+    if not bee then 
+        hopToRandomServer() 
+        return 
+    end
+    local hive = findFreeHive()
+    if not hive then 
+        hopToRandomServer() 
+        return 
+    end
+
+    if not guiCreated then
+        guiCreated = true
+        createGUI()
+    end
+
+    local platform = hive:FindFirstChild("Platform")
+    local target = (platform and platform.Value) and platform.Value or hive
+    if not flyTo(target, Vector3.new(0, 3, 0)) then hopToRandomServer() return end
+    task.wait(0.5)
+
+    local tries, claimed = 0, false
+    while tries < 3 do
+        pressE(hive); task.wait(1.2)
+        local o = hive:FindFirstChild("Owner")
+        if o and o.Value == player then claimed = true; break end
+        tries = tries + 1
+    end
+    if not claimed then hopToRandomServer() return end
+
+    if not bee.Parent then hopToRandomServer() return end
+    if not flyTo(bee, Vector3.new(0, 5, 10)) then hopToRandomServer() return end
+    task.wait(0.3)
+
+    local stopMansing = startMansing(bee)
+    local maxWait, waited = 120, 0
+    while waited < maxWait do
+        task.wait(0.3); waited = waited + 0.3
+        if not Stats.Running then break end
+        local hum = bee:FindFirstChild("Humanoid")
+        if not bee.Parent or not hum or hum.Health <= 0 then
+            if bee.Parent and hum and hum.Health <= 0 then Stats.ViciousKilled = Stats.ViciousKilled + 1 end
+            break
+        end
+    end
+    if stopMansing then stopMansing() end
+    Stats.StingersCollected = countStingers()
+    task.wait(0.5)
+    hopToRandomServer()
+end
+
 -- ====== АВТОРСКИЙ GUI ======
 local function createGUI()
     local old = playerGui:FindFirstChild("wiesmann_vichop")
@@ -341,7 +432,6 @@ local function createGUI()
         toggleBtn.BackgroundColor3 = Stats.Running and Color3.fromRGB(180, 60, 60) or Color3.fromRGB(60, 180, 60)
     end)
 
-    -- Функция слайдера (с защитой от сдвига окна)
     local function makeSlider(name, key, min, max, yPos)
         local c = Instance.new("Frame")
         c.Size = UDim2.new(1, -20, 0, 35); c.Position = UDim2.new(0, 10, 0, yPos)
@@ -376,7 +466,7 @@ local function createGUI()
         bg.InputBegan:Connect(function(i)
             if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then 
                 dragging = true
-                main.Draggable = false -- Отключаем движение окна при перетаскивании
+                main.Draggable = false
                 update(i) 
             end
         end)
@@ -387,7 +477,7 @@ local function createGUI()
             if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
                 if dragging then 
                     dragging = false
-                    main.Draggable = true -- Возвращаем возможность двигать окно
+                    main.Draggable = true
                     saveSettings(Settings) 
                 end
             end
@@ -409,66 +499,7 @@ local function createGUI()
     end)
 end
 
--- ====== ГЛАВНЫЙ ЦИКЛ ======
-local function huntViciousBee()
-    if not Stats.Running then return end
-    task.wait(2)
-    local t = 0
-    while not workspace:FindFirstChild("Monsters") and t < 10 do task.wait(0.5); t = t + 0.5 end
-
-    local bee = findViciousBee()
-    if not bee then 
-        hopToRandomServer() return 
-    end
-    
-    local hive = findFreeHive()
-    if not hive then 
-        hopToRandomServer() return 
-    end
-
-    -- Меню появляется только при детекте пчелы и улья
-    if not guiCreated then
-        guiCreated = true
-        createGUI()
-    end
-
-    local platform = hive:FindFirstChild("Platform")
-    local target = (platform and platform.Value) and platform.Value or hive
-    if not flyTo(target, Vector3.new(0, 3, 0)) then hopToRandomServer() return end
-    task.wait(0.5)
-
-    local tries, claimed = 0, false
-    while tries < 3 do
-        pressE(hive); task.wait(1.2)
-        local o = hive:FindFirstChild("Owner")
-        if o and o.Value == player then claimed = true; break end
-        tries = tries + 1
-    end
-    if not claimed then hopToRandomServer() return end
-
-    if not bee.Parent then hopToRandomServer() return end
-    if not flyTo(bee, Vector3.new(0, 5, 10)) then hopToRandomServer() return end
-    task.wait(0.3)
-
-    local stopMansing = startMansing(bee)
-    local maxWait, waited = 120, 0
-    while waited < maxWait do
-        task.wait(0.3); waited = waited + 0.3
-        if not Stats.Running then break end
-        local hum = bee:FindFirstChild("Humanoid")
-        if not bee.Parent or not hum or hum.Health <= 0 then
-            if bee.Parent and hum and hum.Health <= 0 then Stats.ViciousKilled = Stats.ViciousKilled + 1 end
-            break
-        end
-    end
-    if stopMansing then stopMansing() end
-    Stats.StingersCollected = countStingers()
-    task.wait(0.5)
-    hopToRandomServer()
-end
-
 -- ====== ЗАПУСК ======
--- Убрали createGUI() отсюда, теперь меню появляется только при детекте пчелы.
 task.wait(2)
 while true do
     if Stats.Running then
