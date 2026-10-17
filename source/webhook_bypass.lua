@@ -5,7 +5,11 @@ local TeleportService = game:GetService("TeleportService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local workspace = game:GetService("Workspace")
+
+-- Ждем загрузки игрока и GUI
 local player = Players.LocalPlayer
+while not player do task.wait(0.1) player = Players.LocalPlayer end
 local playerGui = player:WaitForChild("PlayerGui")
 
 -- Защита от двойного запуска
@@ -13,8 +17,9 @@ if getgenv().VichopLoaded then return end
 getgenv().VichopLoaded = true
 
 -- ====== НАСТРОЙКИ ======
-local CONFIG_FILE = "wiesmann_vichop_config.json"
-local DefaultSettings = { WalkSpeed = 26, FlySpeed = 300, MansRadius = 18, Running = true }
+local CONFIG_FILE = "wiesmann_vichop_v2.json"
+-- Дефолтные значения (WalkSpeed изменен на 60, FlySpeed на 100)
+local DefaultSettings = { WalkSpeed = 60, FlySpeed = 100, MansRadius = 18, Running = true }
 
 local function loadSettings()
     if isfile and isfile(CONFIG_FILE) then
@@ -64,73 +69,35 @@ local MAX_VISITED = 300
 local function hopToRandomServer()
     task.wait(1.0)
     if not player or not player.Parent then return end
-
     local success, servers = pcall(function()
         return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
     end)
-
-    if not success or not servers or not servers.data or #servers.data == 0 then
-        TeleportService:Teleport(game.PlaceId, player); return
-    end
+    if not success or not servers or not servers.data or #servers.data == 0 then TeleportService:Teleport(game.PlaceId, player); return end
 
     local currentJobId = game.JobId
     local candidates = {}
-
     for _, server in ipairs(servers.data) do
         if server.id ~= currentJobId and server.playing < server.maxPlayers and server.id ~= "" then
             local visited = false
-            for _, vId in ipairs(getgenv().VisitedServers) do
-                if vId == server.id then visited = true; break end
-            end
+            for _, vId in ipairs(getgenv().VisitedServers) do if vId == server.id then visited = true; break end end
             if not visited then table.insert(candidates, server) end
         end
     end
 
     if #candidates == 0 then TeleportService:Teleport(game.PlaceId, player); return end
-
     local chosen = candidates[math.random(#candidates)]
     table.insert(getgenv().VisitedServers, chosen.id)
     while #getgenv().VisitedServers > MAX_VISITED do table.remove(getgenv().VisitedServers, 1) end
-
     TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, player)
 end
 
--- ====== ДЕТЕКТ И ПОИСК ======
-local function findViciousBee()
-    local monsters = workspace:FindFirstChild("Monsters")
-    if not monsters then return nil end
-    for _, obj in ipairs(monsters:GetChildren()) do
-        if obj.Name:find("Vicious Bee", 1, true) then
-            local hum = obj:FindFirstChild("Humanoid")
-            if hum and hum.Health > 0 then return obj end
-        end
-    end
-    return nil
-end
-
-local function findFreeHive()
-    local honeycombs = workspace:FindFirstChild("Honeycombs")
-    if not honeycombs then return nil end
-    local freeHive = nil
-    for i = 1, 6 do
-        local hive = honeycombs:FindFirstChild("Hive" .. i)
-        if hive then
-            local owner = hive:FindFirstChild("Owner")
-            local v = owner and owner.Value
-            if v == player then return hive end
-            if not freeHive and (not v or not v:IsA("Player") or not v.Parent) then freeHive = hive end
-        end
-    end
-    return freeHive
-end
-
--- ====== FLY ======
+-- ====== FLY (Метод Атласа) ======
 local function flyTo(target, offset)
     local success, result = pcall(function()
         local char = player.Character
         if not char then return false end
         local hrp = char:FindFirstChild("HumanoidRootPart")
-        local hum = char:FindFirstChildOfClass("Humanoid")
+            local hum = char:FindFirstChildOfClass("Humanoid")
         if not hrp or not target or not hum then return false end
 
         offset = offset or Vector3.new(0, 3, 0)
@@ -173,14 +140,41 @@ local function flyTo(target, offset)
         end
 
         noclip:Disconnect(); ap:Destroy(); ao:Destroy()
-        for _, part in ipairs(char:GetDescendants()) do
-            if part:IsA("BasePart") then part.CanCollide = true end
-        end
+        for _, part in ipairs(char:GetDescendants()) do if part:IsA("BasePart") then part.CanCollide = true end end
         hum:ChangeState(Enum.HumanoidStateType.Freefall)
         return (hrp.Position - targetPos).Magnitude < 30
     end)
     if not success then resetCharacterState(); return false end
     return result
+end
+
+-- ====== ПОИСК ======
+local function findViciousBee()
+    local monsters = workspace:FindFirstChild("Monsters")
+    if not monsters then return nil end
+    for _, obj in ipairs(monsters:GetChildren()) do
+        if obj.Name:find("Vicious Bee", 1, true) then
+            local hum = obj:FindFirstChild("Humanoid")
+            if hum and hum.Health > 0 then return obj end
+        end
+    end
+    return nil
+end
+
+local function findFreeHive()
+    local honeycombs = workspace:FindFirstChild("Honeycombs")
+    if not honeycombs then return nil end
+    local freeHive = nil
+    for i = 1, 6 do
+        local hive = honeycombs:FindFirstChild("Hive" .. i)
+        if hive then
+            local owner = hive:FindFirstChild("Owner")
+            local v = owner and owner.Value
+            if v == player then return hive end
+            if not freeHive and (not v or not v:IsA("Player") or not v.Parent) then freeHive = hive end
+        end
+    end
+    return freeHive
 end
 
 -- ====== НАЖАТИЕ E ======
@@ -195,7 +189,7 @@ local function pressE(hive)
     end
 end
 
--- ====== МАНСИНГ ======
+-- ====== МАНСИНГ (Метод Атласа: стойка у шипов) ======
 local function startMansing(bee)
     local running = true
     local connection
@@ -211,7 +205,7 @@ local function startMansing(bee)
         if h and b then
             local v = h.Position - b.Position
             if v.Magnitude > 1 then angle = math.atan2(v.Z, v.X) end
-            end
+        end
     end
 
     connection = RunService.RenderStepped:Connect(function(dt)
@@ -241,26 +235,39 @@ local function startMansing(bee)
             lastJump = now
         end
 
+        -- Ищем шипы для стойки (как Атлас)
+        local thorn = workspace.Particles:FindFirstChild("WTs")
+        local thornPos = nil
+        if thorn then
+            local wt = thorn:FindFirstChild("WaitingThorn")
+            if wt and wt.Parent then
+                thornPos = wt.Position
+            end
+        end
+
         zigzagPhase = zigzagPhase + dt * 5
         local zigzag = math.sin(zigzagPhase) * 0.45
         angle = angle + (Settings.WalkSpeed / Settings.MansRadius) * dt
         local finalAngle = angle + zigzag
 
-        local offset = Vector3.new(math.cos(finalAngle) * Settings.MansRadius, 0, math.sin(finalAngle) * Settings.MansRadius)
-        local targetPos = beeHrp.Position + offset
+        local targetPos
+        if thornPos then
+            -- Стоим в 5 стадах от шипов, чтобы приманить пчелу
+            local dirToThorn = (thornPos - beeHrp.Position).Unit
+            targetPos = thornPos - dirToThorn * 5 
+        else
+            -- Если шипов нет, бегаем вокруг пчелы
+            local offset = Vector3.new(math.cos(finalAngle) * Settings.MansRadius, 0, math.sin(finalAngle) * Settings.MansRadius)
+            targetPos = beeHrp.Position + offset
+        end
 
         local rayParams = RaycastParams.new()
         rayParams.FilterDescendantsInstances = {char}; rayParams.FilterType = Enum.RaycastFilterType.Exclude
-        local ground = workspace:Raycast(Vector3.new(targetPos.X, beeHrp.Position.Y + 30, targetPos.Z), Vector3.new(0, -100, 0), rayParams)
+        local ground = workspace:Raycast(Vector3.new(targetPos.X, targetPos.Y + 30, targetPos.Z), Vector3.new(0, -100, 0), rayParams)
         if ground then targetPos = Vector3.new(targetPos.X, ground.Position.Y + 3, targetPos.Z) end
 
         if now - lastMoveTime > 0.1 or (targetPos - lastTarget).Magnitude > 4 then
             hum:MoveTo(targetPos); lastMoveTime = now; lastTarget = targetPos
-        end
-
-        local lookAt = Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z)
-        if (lookAt - hrp.Position).Magnitude > 0.5 and hum:GetState() ~= Enum.HumanoidStateType.Jumping then
-            hrp.CFrame = CFrame.lookAt(hrp.Position, lookAt)
         end
     end)
 
@@ -269,13 +276,13 @@ end
 
 -- ====== ГЛАВНЫЙ ЦИКЛ ======
 local function huntViciousBee()
-    print("[Hunt] === НОВЫЙ СЕРВЕР ===")
     task.wait(2)
     local t = 0
     while not workspace:FindFirstChild("Monsters") and t < 10 do task.wait(0.5); t = t + 0.5 end
 
     local bee = findViciousBee()
     if not bee then hopToRandomServer() return end
+    
     local hive = findFreeHive()
     if not hive then hopToRandomServer() return end
 
@@ -314,7 +321,7 @@ local function huntViciousBee()
     hopToRandomServer()
 end
 
--- ====== КРАСИВЫЙ GUI ======
+-- ====== АВТОРСКИЙ GUI ======
 local function createGUI()
     local old = playerGui:FindFirstChild("wiesmann_vichop")
     if old then old:Destroy() end
@@ -325,118 +332,91 @@ local function createGUI()
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     gui.Parent = playerGui
 
-    -- Главный фрейм
+    -- Главный фрейм (Темная тема с фиолетовым акцентом)
     local main = Instance.new("Frame")
-    main.Size = UDim2.new(0, 550, 0, 320)
-    main.Position = UDim2.new(0.5, -275, 0.5, -160)
-    main.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
+    main.Size = UDim2.new(0, 500, 0, 300)
+    main.Position = UDim2.new(0.5, -250, 0.5, -150)
+    main.BackgroundColor3 = Color3.fromRGB(18, 18, 20)
     main.BorderSizePixel = 0
     main.Active = true
     main.Draggable = true
     main.Parent = gui
-    Instance.new("UICorner", main).CornerRadius = UDim.new(0, 8)
-    local stroke = Instance.new("UIStroke", main); stroke.Color = Color3.fromRGB(50, 50, 60); stroke.Thickness = 1
+    Instance.new("UICorner", main).CornerRadius = UDim.new(0, 10)
+    local stroke = Instance.new("UIStroke", main); stroke.Color = Color3.fromRGB(60, 60, 70); stroke.Thickness = 1
 
-    -- Боковая панель (Слева)
-    local sidebar = Instance.new("Frame")
-    sidebar.Size = UDim2.new(0, 120, 1, 0)
-    sidebar.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
-    sidebar.BorderSizePixel = 0
-    sidebar.Parent = main
-    Instance.new("UICorner", sidebar).CornerRadius = UDim.new(0, 8)
+    -- Заголовок
+    local titleBar = Instance.new("Frame")
+    titleBar.Size = UDim2.new(1, 0, 0, 40)
+    titleBar.BackgroundColor3 = Color3.fromRGB(22, 22, 25)
+    titleBar.BorderSizePixel = 0
+    titleBar.Parent = main
+    Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 10)
 
-    local logo = Instance.new("TextLabel")
-    logo.Size = UDim2.new(1, 0, 0, 40)
-    logo.BackgroundTransparency = 1
-    logo.Text = "wiesmann\nvichop"
-    logo.TextColor3 = Color3.fromRGB(220, 220, 220)
-    logo.Font = Enum.Font.GothamBold
-    logo.TextSize = 14
-    logo.Parent = sidebar
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -20, 1, 0); title.Position = UDim2.new(0, 15, 0, 0)
+    title.BackgroundTransparency = 1; title.Text = "wiesmann vichop"
+    title.TextColor3 = Color3.fromRGB(180, 130, 255) -- Фиолетовый акцент
+    title.Font = Enum.Font.GothamBold; title.TextSize = 14
+    title.TextXAlignment = Enum.TextXAlignment.Left; title.Parent = titleBar
 
-    -- Кнопка Stop/Start в сайдбаре
-    local toggleBtn = Instance.new("TextButton")
-    toggleBtn.Size = UDim2.new(0, 100, 0, 30)
-    toggleBtn.Position = UDim2.new(0, 10, 1, -45)
-    toggleBtn.BackgroundColor3 = Stats.Running and Color3.fromRGB(200, 50, 50) or Color3.fromRGB(50, 200, 50)
-    toggleBtn.Text = Stats.Running and "STOP" or "START"
-    toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    toggleBtn.Font = Enum.Font.GothamBold
-    toggleBtn.TextSize = 12
-    toggleBtn.Parent = sidebar
-    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 4)
-
-    toggleBtn.MouseButton1Click:Connect(function()
-        Stats.Running = not Stats.Running
-        Settings.Running = Stats.Running
-        saveSettings(Settings)
-        toggleBtn.Text = Stats.Running and "STOP" or "START"
-        toggleBtn.BackgroundColor3 = Stats.Running and Color3.fromRGB(200, 50, 50) or Color3.fromRGB(50, 200, 50)
-    end)
-
-    -- Правая часть (Контент)
+    -- Правая часть (Настройки и Статистика)
     local content = Instance.new("Frame")
-    content.Size = UDim2.new(1, -130, 1, -20)
-    content.Position = UDim2.new(0, 120, 0, 10)
-    content.BackgroundTransparency = 1
-    content.Parent = main
+    content.Size = UDim2.new(1, -20, 1, -50); content.Position = UDim2.new(0, 10, 0, 45)
+    content.BackgroundTransparency = 1; content.Parent = main
 
-    -- Карточка 1: Профиль и Статистика
+    -- Карточка статистики
     local statsCard = Instance.new("Frame")
-    statsCard.Size = UDim2.new(0.48, 0, 0.45, 0)
-    statsCard.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-    statsCard.BorderSizePixel = 0
-    statsCard.Parent = content
-    Instance.new("UICorner", statsCard).CornerRadius = UDim.new(0, 6)
-
-    local statsTitle = Instance.new("TextLabel")
-    statsTitle.Size = UDim2.new(1, -10, 0, 20); statsTitle.Position = UDim2.new(0, 10, 0, 5)
-    statsTitle.BackgroundTransparency = 1; statsTitle.Text = "Session Dashboard"
-    statsTitle.TextColor3 = Color3.fromRGB(150, 150, 150); statsTitle.Font = Enum.Font.GothamSemibold
-    statsTitle.TextSize = 11; statsTitle.TextXAlignment = Enum.TextXAlignment.Left; statsTitle.Parent = statsCard
+    statsCard.Size = UDim2.new(0.4, -5, 1, 0)
+    statsCard.BackgroundColor3 = Color3.fromRGB(25, 25, 30); statsCard.BorderSizePixel = 0; statsCard.Parent = content
+    Instance.new("UICorner", statsCard).CornerRadius = UDim.new(0, 8)
 
     local statsText = Instance.new("TextLabel")
-    statsText.Size = UDim2.new(1, -20, 1, -25); statsText.Position = UDim2.new(0, 10, 0, 25)
+    statsText.Size = UDim2.new(1, -20, 1, -20); statsText.Position = UDim2.new(0, 10, 0, 10)
     statsText.BackgroundTransparency = 1; statsText.TextColor3 = Color3.fromRGB(200, 200, 200)
-    statsText.Font = Enum.Font.Gotham; statsText.TextSize = 11; statsText.TextXAlignment = Enum.TextXAlignment.Left
+    statsText.Font = Enum.Font.Gotham; statsText.TextSize = 12; statsText.TextXAlignment = Enum.TextXAlignment.Left
     statsText.TextYAlignment = Enum.TextYAlignment.Top; statsText.Parent = statsCard
 
-    -- Карточка 2: Настройки (Слайдеры)
+    -- Карточка настроек
     local settingsCard = Instance.new("Frame")
-    settingsCard.Size = UDim2.new(0.5, -5, 0.45, 0); settingsCard.Position = UDim2.new(0.49, 5, 0, 0)
-    settingsCard.BackgroundColor3 = Color3.fromRGB(30, 30, 35); settingsCard.BorderSizePixel = 0
-    settingsCard.Parent = content
-    Instance.new("UICorner", settingsCard).CornerRadius = UDim.new(0, 6)
+    settingsCard.Size = UDim2.new(0.6, -5, 1, 0); settingsCard.Position = UDim2.new(0.4, 5, 0, 0)
+    settingsCard.BackgroundColor3 = Color3.fromRGB(25, 25, 30); settingsCard.BorderSizePixel = 0; settingsCard.Parent = content
+    Instance.new("UICorner", settingsCard).CornerRadius = UDim.new(0, 8)
 
-    local setTitle = Instance.new("TextLabel")
-    setTitle.Size = UDim2.new(1, -10, 0, 20); setTitle.Position = UDim2.new(0, 10, 0, 5)
-    setTitle.BackgroundTransparency = 1; setTitle.Text = "Quick Controls"
-    setTitle.TextColor3 = Color3.fromRGB(150, 150, 150); setTitle.Font = Enum.Font.GothamSemibold
-    setTitle.TextSize = 11; setTitle.TextXAlignment = Enum.TextXAlignment.Left; setTitle.Parent = settingsCard
+    -- Кнопка STOP/START
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Size = UDim2.new(1, -20, 0, 35); toggleBtn.Position = UDim2.new(0, 10, 1, -45)
+    toggleBtn.BackgroundColor3 = Stats.Running and Color3.fromRGB(180, 60, 60) or Color3.fromRGB(60, 180, 60)
+    toggleBtn.Text = Stats.Running and "STOP" or "START"
+    toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255); toggleBtn.Font = Enum.Font.GothamBold; toggleBtn.TextSize = 13
+    toggleBtn.Parent = settingsCard; Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 6)
+
+    toggleBtn.MouseButton1Click:Connect(function()
+        Stats.Running = not Stats.Running; Settings.Running = Stats.Running; saveSettings(Settings)
+        toggleBtn.Text = Stats.Running and "STOP" or "START"
+        toggleBtn.BackgroundColor3 = Stats.Running and Color3.fromRGB(180, 60, 60) or Color3.fromRGB(60, 180, 60)
+    end)
 
     -- Функция слайдера
     local function makeSlider(name, key, min, max, yPos)
         local c = Instance.new("Frame")
-        c.Size = UDim2.new(1, -20, 0, 30); c.Position = UDim2.new(0, 10, 0, yPos)
+        c.Size = UDim2.new(1, -20, 0, 35); c.Position = UDim2.new(0, 10, 0, yPos)
         c.BackgroundTransparency = 1; c.Parent = settingsCard
 
         local lbl = Instance.new("TextLabel")
-        lbl.Size = UDim2.new(1, 0, 0, 12); lbl.BackgroundTransparency = 1
+        lbl.Size = UDim2.new(1, 0, 0, 15); lbl.BackgroundTransparency = 1
         lbl.Text = name .. ": " .. Settings[key]; lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
-        lbl.Font = Enum.Font.Gotham; lbl.TextSize = 10; lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = c
+        lbl.Font = Enum.Font.Gotham; lbl.TextSize = 11; lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = c
 
         local bg = Instance.new("Frame")
-        bg.Size = UDim2.new(1, 0, 0, 4); bg.Position = UDim2.new(0, 0, 0, 18); bg.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
-        bg.BorderSizePixel = 0; bg.Parent = c
-        Instance.new("UICorner", bg).CornerRadius = UDim.new(1, 0)
+        bg.Size = UDim2.new(1, 0, 0, 6); bg.Position = UDim2.new(0, 0, 0, 22); bg.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+        bg.BorderSizePixel = 0; bg.Parent = c; Instance.new("UICorner", bg).CornerRadius = UDim.new(1, 0)
 
         local fill = Instance.new("Frame")
-        fill.Size = UDim2.new((Settings[key] - min) / (max - min), 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
-        fill.BorderSizePixel = 0; fill.Parent = bg
-        Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+        fill.Size = UDim2.new((Settings[key] - min) / (max - min), 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(180, 130, 255) -- Фиолетовый
+        fill.BorderSizePixel = 0; fill.Parent = bg; Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
 
         local knob = Instance.new("Frame")
-        knob.Size = UDim2.new(0, 10, 0, 10); knob.Position = UDim2.new((Settings[key] - min) / (max - min), -5, 0.5, -5)
+        knob.Size = UDim2.new(0, 12, 0, 12); knob.Position = UDim2.new((Settings[key] - min) / (max - min), -6, 0.5, -6)
         knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255); knob.BorderSizePixel = 0; knob.Parent = bg
         Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
 
@@ -444,14 +424,12 @@ local function createGUI()
         local function update(input)
             local pos = math.clamp((input.Position.X - bg.AbsolutePosition.X) / bg.AbsoluteSize.X, 0, 1)
             local val = math.floor(min + (max - min) * pos)
-            fill.Size = UDim2.new(pos, 0, 1, 0); knob.Position = UDim2.new(pos, -5, 0.5, -5)
+            fill.Size = UDim2.new(pos, 0, 1, 0); knob.Position = UDim2.new(pos, -6, 0.5, -6)
             lbl.Text = name .. ": " .. val; Settings[key] = val
         end
 
         bg.InputBegan:Connect(function(i)
-            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-                dragging = true; update(i)
-            end
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then dragging = true; update(i) end
         end)
         UserInputService.InputChanged:Connect(function(i)
             if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then update(i) end
@@ -463,43 +441,18 @@ local function createGUI()
         end)
     end
 
-    makeSlider("Walk Speed", "WalkSpeed", 16, 100, 25)
-    makeSlider("Fly Speed", "FlySpeed", 100, 1000, 60)
-    makeSlider("Mans Radius", "MansRadius", 10, 50, 95)
-
-    -- Нижняя панель (Логи)
-    local logCard = Instance.new("Frame")
-    logCard.Size = UDim2.new(1, 0, 0.5, -10); logCard.Position = UDim2.new(0, 0, 0.5, 5)
-    logCard.BackgroundColor3 = Color3.fromRGB(30, 30, 35); logCard.BorderSizePixel = 0
-    logCard.Parent = content
-    Instance.new("UICorner", logCard).CornerRadius = UDim.new(0, 6)
-
-    local logTitle = Instance.new("TextLabel")
-    logTitle.Size = UDim2.new(1, -10, 0, 20); logTitle.Position = UDim2.new(0, 10, 0, 5)
-    logTitle.BackgroundTransparency = 1; logTitle.Text = "System Logs"
-    logTitle.TextColor3 = Color3.fromRGB(150, 150, 150); logTitle.Font = Enum.Font.GothamSemibold
-    logTitle.TextSize = 11; logTitle.TextXAlignment = Enum.TextXAlignment.Left; logTitle.Parent = logCard
-
-    local logText = Instance.new("TextLabel")
-    logText.Size = UDim2.new(1, -20, 1, -25); logText.Position = UDim2.new(0, 10, 0, 25)
-    logText.BackgroundTransparency = 1; logText.Text = "Waiting for events..."
-    logText.TextColor3 = Color3.fromRGB(150, 150, 150); logText.Font = Enum.Font.Code
-    logText.TextSize = 11; logText.TextXAlignment = Enum.TextXAlignment.Left; logText.TextYAlignment = Enum.TextYAlignment.Top
-    logText.Parent = logCard
+    -- Слайдеры (Walk Speed 30-90, Fly Speed 1-100, Radius 10-50)
+    makeSlider("Walk Speed", "WalkSpeed", 30, 90, 10)
+    makeSlider("Fly Speed", "FlySpeed", 1, 100, 50)
+    makeSlider("Mans Radius", "MansRadius", 10, 50, 90)
 
     -- Обновление данных
     task.spawn(function()
         while gui.Parent do
             local uptime = math.floor(tick() - Stats.StartTime)
             local mins = math.floor(uptime / 60); local secs = uptime % 60
-            statsText.Text = string.format("Uptime: %02d:%02d\nVicious Killed: %d\nStingers: %d\nStatus: %s", 
-                mins, secs, Stats.ViciousKilled, Stats.StingersCollected, Stats.Running and "Running" or "Stopped")
-            
-            if Stats.Running then
-                logText.Text = "[INFO] Script running...\n[Hunt] Searching for Vicious Bee..."
-            else
-                logText.Text = "[WARN] Script paused by user.\n[Hunt] Stopped."
-            end
+            statsText.Text = string.format("Uptime: %02d:%02d\nVicious Killed: %d\nStingers: %d\nStatus: %s",
+                    mins, secs, Stats.ViciousKilled, Stats.StingersCollected, Stats.Running and "Running" or "Stopped")
             task.wait(1)
         end
     end)
