@@ -60,9 +60,23 @@ local function countStingers()
     return count
 end
 
--- ====== ХОП (Без захода к друзьям) ======
-getgenv().VisitedServers = getgenv().VisitedServers or {}
-local MAX_VISITED = 300
+-- ====== ХОП (С СОХРАНЕНИЕМ В ФАЙЛ) ======
+local SERVERS_FILE = "wiesmann_vichop_servers.json"
+local MAX_VISITED = 500
+
+local function loadVisitedServers()
+    if isfile and isfile(SERVERS_FILE) then
+        local ok, data = pcall(function() return HttpService:JSONDecode(readfile(SERVERS_FILE)) end)
+        if ok and data and type(data) == "table" then return data end
+    end
+    return {}
+end
+
+local function saveVisitedServers(servers)
+    if writefile then pcall(function() writefile(SERVERS_FILE, HttpService:JSONEncode(servers)) end) end
+end
+
+getgenv().VisitedServers = loadVisitedServers()
 
 local function hopToRandomServer()
     task.wait(1.0)
@@ -93,25 +107,24 @@ local function hopToRandomServer()
     end
 
     if #candidates == 0 then 
-        print("[Hop] Все сервера в блеклисте. Очистка...")
+        print("[Hop] Все сервера в блеклисте. Очистка блеклиста...")
         getgenv().VisitedServers = {}
+        saveVisitedServers(getgenv().VisitedServers)
         TeleportService:Teleport(game.PlaceId, player)
         return 
     end
 
     local chosen = candidates[math.random(#candidates)]
-    
     table.insert(getgenv().VisitedServers, chosen.id)
-    while #getgenv().VisitedServers > MAX_VISITED do 
-        table.remove(getgenv().VisitedServers, 1) 
-    end
+    while #getgenv().VisitedServers > MAX_VISITED do table.remove(getgenv().VisitedServers, 1) end
+    saveVisitedServers(getgenv().VisitedServers)
 
     local teleportOptions = Instance.new("TeleportOptions")
     teleportOptions.ServerInstanceId = chosen.id
     
     local tpSuccess = pcall(function()
         TeleportService:TeleportAsync(game.PlaceId, {player}, teleportOptions)
-            end)
+    end)
 
     if not tpSuccess then
         TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, player)
@@ -175,15 +188,13 @@ local function flyTo(target, offset)
     return result
 end
 
--- ====== ДЕТЕКТ ПЧЕЛЫ (Как у Атласа) ======
+-- ====== ПОИСК ======
 local function findViciousBee()
     local monsters = workspace:FindFirstChild("Monsters")
     if not monsters then return nil end
     for _, obj in ipairs(monsters:GetChildren()) do
-        -- Ищем по слову "vicious" (игнорируя регистр), чтобы найти "Vicious Bee (Lvl 5)"
         if string.find(string.lower(obj.Name), "vicious") then
             local hum = obj:FindFirstChild("Humanoid")
-            -- Если пчела жива и уровень подходит
             if hum and hum.Health > 0 then
                 return obj 
             end
@@ -300,34 +311,32 @@ local function startMansing(bee)
     return function() running = false; if connection then connection:Disconnect() end; resetCharacterState() end
 end
 
--- ====== ГЛАВНЫЙ ЦИКЛ (ДЕТЕКТ КАК У АТЛАСА) ======
+-- ====== ГЛАВНЫЙ ЦИКЛ ======
 local function huntViciousBee()
     if not Stats.Running then return end
-    
-    -- Ждем прогрузки сервера
-    task.wait(3)
+    task.wait(2)
     local t = 0
     while not workspace:FindFirstChild("Monsters") and t < 10 do task.wait(0.5); t = t + 0.5 end
 
-    -- Ищем пчелу
+    -- 1. Сначала ищем пчелу
     local bee = findViciousBee()
-    
-    -- Если не нашли (как у Атласа - сразу хоп)
     if not bee then 
-        hopToRandomServer() 
-        return 
+        hopToRandomServer() return 
     end
+    
+    -- 2. Ищем улей
     local hive = findFreeHive()
     if not hive then 
-        hopToRandomServer() 
-        return 
+        hopToRandomServer() return 
     end
 
+    -- 3. Только ТЕПЕРЬ создаем меню
     if not guiCreated then
         guiCreated = true
         createGUI()
     end
 
+    -- 4. Продолжаем убийство
     local platform = hive:FindFirstChild("Platform")
     local target = (platform and platform.Value) and platform.Value or hive
     if not flyTo(target, Vector3.new(0, 3, 0)) then hopToRandomServer() return end
@@ -474,7 +483,7 @@ local function createGUI()
             if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then update(i) end
         end)
         UserInputService.InputEnded:Connect(function(i)
-            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
                 if dragging then 
                     dragging = false
                     main.Draggable = true
