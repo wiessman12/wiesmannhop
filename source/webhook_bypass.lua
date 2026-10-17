@@ -1,9 +1,153 @@
+-- ====== SERVICES ======
+local Players             = game:GetService("Players")
+local HttpService         = game:GetService("HttpService")
+local TeleportService     = game:GetService("TeleportService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local RunService          = game:GetService("RunService")
+
+getgenv().VisitedServers = getgenv().VisitedServers or {}
+getgenv().IsHopping = false
+
+-- ====== НАСТРОЙКИ ======
+local HOP_DELAY            = 2
+local MOUNTAIN_MONDO_RADIUS = 200
+local MANSING_RADIUS       = 18
+local SERVER_FETCH_LIMIT   = 300
+local BLACKLIST_MAX        = 200
+local FLY_SPEED            = 50
+local WALK_SPEED           = 50
+
+-- ====== HTTP ======
+local function httpGet(url)
+    if request then
+        local ok, res = pcall(request, {Url = url, Method = "GET"})
+        if ok and res and res.Body then return res.Body end
+    end
+    if game.HttpGet then
+        return game:HttpGet(url)
+    end
+end
+
+-- ====== СБОР СПИСКА ДОСТУПНЫХ СЕРВЕРОВ ======
+local function fetchAvailableServers()
+    local body = httpGet("https://games.roblox.com/v1/games/" ..
+        game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=" .. SERVER_FETCH_LIMIT)
+
+    if not body then return {} end
+    local ok, decoded = pcall(HttpService.JSONDecode, HttpService, body)
+    if not ok or not decoded or not decoded.data then return {} end
+
+    local currentJobId = game.JobId
+    local available = {}
+
+    for _, server in ipairs(decoded.data) do
+        if server.id ~= currentJobId and server.playing < server.maxPlayers then
+            local visited = false
+            for _, v in ipairs(getgenv().VisitedServers) do
+                if v == server.id then visited = true break end
+            end
+            if not visited then
+                table.insert(available, server)
+            end
+        end
+    end
+
+    return available
+end
+
+-- ====== ДОБАВИТЬ ТЕКУЩИЙ СЕРВЕР В ЧЁРНЫЙ СПИСОК ======
+local function addCurrentServerToBlacklist()
+    local currentJobId = game.JobId
+    if not currentJobId or currentJobId == "" then return end
+
+    for _, v in ipairs(getgenv().VisitedServers) do
+        if v == currentJobId then return end
+    end
+
+    table.insert(getgenv().VisitedServers, currentJobId)
+    print("[Blacklist] Добавлен сервер. Всего в списке:", #getgenv().VisitedServers)
+
+    -- Если достигли лимита — очищаем, чтобы хопать на "старые"
+    if #getgenv().VisitedServers >= BLACKLIST_MAX then
+        print("[Blacklist] Достигнут лимит " .. BLACKLIST_MAX .. " — очищаем, хопаем на старые серверы")
+        getgenv().VisitedServers = {}
+    end
+end
+
+-- ====== ХОП ======
+local function hopToRandomServer()
+    if getgenv().IsHopping then return end
+    getgenv().IsHopping = true
+
+    print("[Hop] Ждём " .. HOP_DELAY .. " сек перед хопом...")
+    task.wait(HOP_DELAY)
+
+    local lp = Players.LocalPlayer
+    if not lp then return end
+
+    local available = fetchAvailableServers()
+
+    if #available == 0 then
+        print("[Hop] Все серверы в чёрном списке — сброс списка")
+        getgenv().VisitedServers = {}
+        available = fetchAvailableServers()
+    end
+
+    if #available == 0 then
+        print("[Hop] Нет доступных серверов — Teleport в случайный")
+        local ok = pcall(function()
+            TeleportService:Teleport(game.PlaceId, lp)
+        end)
+        if not ok then
+            print("[Hop] Teleport тоже не сработал")
+            getgenv().IsHopping = false
+        end
+        return
+    end
+
+    for i = #available, 2, -1 do
+        local j = math.random(i)
+        available[i], available[j] = available[j], available[i]
+    end
+
+    for _, chosen in ipairs(available) do
+        print("[Hop] Пробуем сервер:", chosen.id,
+            "| игроков:", chosen.playing .. "/" .. chosen.maxPlayers,
+            "| доступно:", #available)
+
+        local ok = pcall(function()
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, lp)
+        end)
+        if ok then
+            print("[Hop] ✅ TeleportToPlaceInstance отправлен")
+            return
+        end
+
+        print("[Hop] TeleportToPlaceInstance не сработал — TeleportAsync")
+        local ok2 = pcall(function()
+            TeleportService:TeleportAsync(game.PlaceId, {lp})
+        end)
+        if ok2 then
+            print("[Hop] ✅ TeleportAsync отправлен")
+            return
+        end
+
+        print("[Hop] ❌ Оба способа упали, берём следующий")
+        task.wait(0.5)
+    end
+
+    print("[Hop] Все серверы провалились — Teleport в случайный")
+    pcall(function()
+        TeleportService:Teleport(game.PlaceId, lp)
+    end)
+end
+
 -- ====== ПОИСК ОБЪЕКТОВ ======
 local function findViciousBee()
     local monsters = workspace:FindFirstChild("Monsters")
     if not monsters then return nil end
     for _, obj in ipairs(monsters:GetChildren()) do
-        if obj.Name:find("Vicious Bee") then
+        if obj.Name:find("Vicious Bee", 1, true) then
             local h = obj:FindFirstChild("Humanoid")
             if h and h.Health > 0 then return obj end
         end
@@ -14,7 +158,7 @@ local function findMondoChick()
     local monsters = workspace:FindFirstChild("Monsters")
     if not monsters then return nil end
     for _, obj in ipairs(monsters:GetChildren()) do
-        if obj.Name:find("Mondo Chick") then
+        if obj.Name:find("Mondo Chick", 1, true) then
             local h = obj:FindFirstChild("Humanoid")
             if h and h.Health > 0 then return obj end
         end
@@ -49,7 +193,7 @@ end
 -- ====== FLY (из первого скрипта) ======
 local function flyTo(target, offset)
     local success, result = pcall(function()
-        local char = lp.Character
+        local char = Players.LocalPlayer.Character
         if not char then return false end
         local hrp = char:FindFirstChild("HumanoidRootPart")
         local hum = char:FindFirstChildOfClass("Humanoid")
@@ -89,7 +233,7 @@ local function flyTo(target, offset)
 
         hum:ChangeState(Enum.HumanoidStateType.Physics)
         local noclip = RunService.PreSimulation:Connect(function()
-            for _, part in ipairs(char:GetDescendants()) do
+                    for _, part in ipairs(char:GetDescendants()) do
                 if part:IsA("BasePart") then part.CanCollide = false end
             end
         end)
@@ -107,7 +251,7 @@ local function flyTo(target, offset)
         end
         hum:ChangeState(Enum.HumanoidStateType.Freefall)
         return (hrp.Position - targetPos).Magnitude < 30
-            end)
+    end)
     if not success then return false end
     return result
 end
@@ -143,7 +287,7 @@ local function startMansing(bee)
     local lastTarget = Vector3.zero
     local zigzagPhase = 0
 
-    local char0 = lp.Character
+    local char0 = Players.LocalPlayer.Character
     if char0 then
         local hum0 = char0:FindFirstChildOfClass("Humanoid")
         if hum0 then hum0.PlatformStand = false; hum0.WalkSpeed = 16 end
@@ -151,7 +295,7 @@ local function startMansing(bee)
         if hrp0 then hrp0.CanCollide = true end
     end
 
-    local startChar = lp.Character
+    local startChar = Players.LocalPlayer.Character
     if startChar and bee and bee.Parent then
         local h, b = startChar:FindFirstChild("HumanoidRootPart"), bee:FindFirstChild("HumanoidRootPart")
         if h and b then
@@ -163,7 +307,7 @@ local function startMansing(bee)
     connection = RunService.RenderStepped:Connect(function(dt)
         if not running then return end
         dt = math.min(dt, 0.05)
-        local char = lp.Character
+        local char = Players.LocalPlayer.Character
         if not char then return end
         local hrp, hum = char:FindFirstChild("HumanoidRootPart"), char:FindFirstChildOfClass("Humanoid")
         if not hrp or not hum or not bee or not bee.Parent then return end
@@ -201,7 +345,7 @@ local function startMansing(bee)
         if thornPos then
             local dirToThorn = (thornPos - beeHrp.Position).Unit
             targetPos = thornPos - dirToThorn * 5
-        else
+                else
             local offset = Vector3.new(math.cos(finalAngle) * MANSING_RADIUS, 0, math.sin(finalAngle) * MANSING_RADIUS)
             targetPos = beeHrp.Position + offset
         end
@@ -213,13 +357,13 @@ local function startMansing(bee)
 
         if now - lastMoveTime > 0.1 or (targetPos - lastTarget).Magnitude > 4 then
             hum:MoveTo(targetPos); lastMoveTime = now; lastTarget = targetPos
-                end
+        end
     end)
 
     return function()
         running = false
         if connection then connection:Disconnect() end
-        local char = lp.Character
+        local char = Players.LocalPlayer.Character
         if char then
             local hum = char:FindFirstChildOfClass("Humanoid")
             if hum then hum.PlatformStand = false; hum.WalkSpeed = 16 end
@@ -232,8 +376,11 @@ end
 -- ====== ОСНОВНАЯ ЛОГИКА ======
 local function huntViciousBee()
     print("[Hunt] === НОВЫЙ СЕРВЕР ===")
+    -- Заносим текущий сервер в чёрный список сразу после захода
+    addCurrentServerToBlacklist()
     task.wait(2)
 
+    local lp = Players.LocalPlayer
     local char, hrp
     for _ = 1, 30 do
         char = lp.Character
@@ -324,7 +471,7 @@ local function huntViciousBee()
         end
 
         print("[Hunt] Мансинг вокруг пчелы (радиус " .. MANSING_RADIUS .. ")...")
-        local stopMansing = startMansing(bee)
+            local stopMansing = startMansing(bee)
 
         local maxWait = 90
         local waited = 0
@@ -352,7 +499,9 @@ end
 
 -- ====== ОБРАБОТКА ОШИБОК ТЕЛЕПОРТА ======
 TeleportService.TeleportInitFailed:Connect(function(_, result, err)
-    warn("[Teleport] Ошибка:", result.Name, err, "| Код:", result.Value)
+    local name = result and result.Name or "Unknown"
+    local code = result and result.Value or -1
+    warn("[Teleport] Ошибка:", name, err, "| Код:", code)
     getgenv().IsHopping = false
     task.wait(2)
     pcall(hopToRandomServer)
