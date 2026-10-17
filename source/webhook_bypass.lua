@@ -3,12 +3,13 @@ local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
+local RunService = game:GetService("RunService")
 
 -- ====== ХОП (0.9 секунды) ======
 getgenv().VisitedServers = getgenv().VisitedServers or {}
 
 local function hopToRandomServer()
-    task.wait(1.5)
+    task.wait(0.9)
     local currentPlayer = game:GetService("Players").LocalPlayer
     if not currentPlayer then return end
 
@@ -134,7 +135,7 @@ local function findFreeHive()
     return nil
 end
 
--- ====== FLY (без вращения) ======
+-- ====== FLY (отключает коллизии ТОЛЬКО персонажу) ======
 local function flyTo(target, offset)
     local success, err = pcall(function()
         local currentPlayer = game:GetService("Players").LocalPlayer
@@ -239,30 +240,39 @@ local function pressE()
     end)
 end
 
--- ====== МАНСИНГ (радиус 50, скорость 30, задержка 0.1) ======
+-- ====== МАНСИНГ (WalkSpeed 100 через RenderStepped) ======
 local function startMansing(bee)
     local running = true
+    local connection
 
     task.spawn(function()
         local angle = 0
         local radius = 50
-        local maxDistance = 30
+        local maxDistance = 40
+
+        -- Жестко фиксируем скорость 100
+        connection = RunService.RenderStepped:Connect(function()
+                    local char = game:GetService("Players").LocalPlayer.Character
+            if char then
+                local hum = char:FindFirstChildOfClass("Humanoid")
+                if hum and hum.WalkSpeed ~= 100 then
+                    hum.WalkSpeed = 100
+                end
+            end
+        end)
 
         while running do
             local currentPlayer = game:GetService("Players").LocalPlayer
             if not currentPlayer then task.wait(0.1) continue end
 
             local char = currentPlayer.Character
-                if not char then task.wait(0.1) continue end
+            if not char then task.wait(0.1) continue end
 
             local humanoid = char:FindFirstChildOfClass("Humanoid")
             if not humanoid or humanoid.Health <= 0 then task.wait(0.1) continue end
 
             local hrp = char:FindFirstChild("HumanoidRootPart")
             if not hrp then task.wait(0.1) continue end
-
-            -- УСКОРЯЕМ ПЕРСОНАЖА
-            humanoid.WalkSpeed = 30 
 
             if not bee.Parent then break end
             local beeHumanoid = bee:FindFirstChild("Humanoid")
@@ -273,24 +283,25 @@ local function startMansing(bee)
 
             local distance = (hrp.Position - beeHrp.Position).Magnitude
             
+            -- Возврат точно к пчеле
             if distance > maxDistance then
-                print("[Hunt] ⚠️ Далеко от пчелы. Летим обратно...")
-                flyTo(bee, Vector3.new(radius, 5, 0))
+                print("[Hunt] ⚠️ Далеко от пчелы. Летим точно к ней...")
+                flyTo(bee, Vector3.new(0, 5, 0))
                 task.wait(0.1)
             end
 
-            -- Резкий манс
+            -- Круговой бег (радиус 50, шаг 180)
             angle = angle + math.rad(180)
             local offsetX = math.cos(angle) * radius
             local offsetZ = math.sin(angle) * radius
             local targetPos = beeHrp.Position + Vector3.new(offsetX, 0, offsetZ)
 
             humanoid:MoveTo(targetPos)
-            task.wait(0.1) -- ЗАДЕРЖКА 0.1
-            
+            task.wait(0.1)
         end
         
-        -- Возвращаем скорость после манса
+        if connection then connection:Disconnect() end
+        
         local finalChar = game:GetService("Players").LocalPlayer.Character
         if finalChar and finalChar:FindFirstChildOfClass("Humanoid") then
             finalChar.Humanoid.WalkSpeed = 16
@@ -299,6 +310,7 @@ local function startMansing(bee)
 
     return function()
         running = false
+        if connection then connection:Disconnect() end
     end
 end
 
@@ -418,7 +430,7 @@ local function huntViciousBee()
     task.wait(0.3)
 
     -- Мансинг
-    print("[Hunt] Мансинг вокруг пчелы...")
+    print("[Hunt] Мансинг вокруг пчелы (WalkSpeed 100, радиус 50)...")
     local stopMansing = startMansing(bee)
 
     -- Ждём убийства
