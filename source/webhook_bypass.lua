@@ -78,7 +78,7 @@ end
 getgenv().VisitedServers = loadVisitedServers()
 
 local function hopToRandomServer()
-    taskwait(1.5)
+    taskwait(2)
     if not player or not player.Parent then return end
 
     local success, servers = pcall(function()
