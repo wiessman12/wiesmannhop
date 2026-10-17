@@ -4,11 +4,11 @@ local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
--- ====== ХОП (быстрый, 1.5 секунды) ======
+-- ====== ХОП (0.9 секунды) ======
 getgenv().VisitedServers = getgenv().VisitedServers or {}
 
 local function hopToRandomServer()
-    task.wait(1.5) -- ОЧЕНЬ БЫСТРЫЙ ХОП
+    task.wait(0.9)
     local currentPlayer = game:GetService("Players").LocalPlayer
     if not currentPlayer then return end
 
@@ -134,7 +134,7 @@ local function findFreeHive()
     return nil
 end
 
--- ====== FLY ======
+-- ====== FLY (без вращения) ======
 local function flyTo(target, offset)
     local success, err = pcall(function()
         local currentPlayer = game:GetService("Players").LocalPlayer
@@ -185,6 +185,10 @@ local function flyTo(target, offset)
         bv.P = 10000
         bv.Parent = hrp
 
+        -- Фиксируем начальный поворот
+        local initialCFrame = hrp.CFrame
+        local originalRot = CFrame.new(Vector3.zero, initialCFrame.LookVector)
+
         local startTime = tick()
         local maxTime = 3
 
@@ -201,6 +205,8 @@ local function flyTo(target, offset)
             if distance < 8 then speed = 50 end
 
             bv.Velocity = direction * speed
+            hrp.CFrame = CFrame.new(hrp.Position) * originalRot
+            
             task.wait(0.02)
         end
 
@@ -233,26 +239,30 @@ local function pressE()
     end)
 end
 
--- ====== МАНСИНГ (радиус 100) ======
+-- ====== МАНСИНГ (радиус 50, скорость 30, задержка 0.1) ======
 local function startMansing(bee)
     local running = true
 
     task.spawn(function()
         local angle = 0
-        local radius = 100 -- ОГРОМНЫЙ РАДИУС
-        local maxDistance = 120
+        local radius = 50
+        local maxDistance = 30
 
         while running do
             local currentPlayer = game:GetService("Players").LocalPlayer
             if not currentPlayer then task.wait(0.1) continue end
 
             local char = currentPlayer.Character
-            if not char then task.wait(0.1) continue end
+                if not char then task.wait(0.1) continue end
 
             local humanoid = char:FindFirstChildOfClass("Humanoid")
             if not humanoid or humanoid.Health <= 0 then task.wait(0.1) continue end
-                local hrp = char:FindFirstChild("HumanoidRootPart")
+
+            local hrp = char:FindFirstChild("HumanoidRootPart")
             if not hrp then task.wait(0.1) continue end
+
+            -- УСКОРЯЕМ ПЕРСОНАЖА
+            humanoid.WalkSpeed = 30 
 
             if not bee.Parent then break end
             local beeHumanoid = bee:FindFirstChild("Humanoid")
@@ -262,18 +272,28 @@ local function startMansing(bee)
             if not beeHrp then task.wait(0.1) continue end
 
             local distance = (hrp.Position - beeHrp.Position).Magnitude
+            
             if distance > maxDistance then
-                hrp.CFrame = CFrame.new(beeHrp.Position + Vector3.new(radius, 5, 0))
-                task.wait(0.15)
+                print("[Hunt] ⚠️ Далеко от пчелы. Летим обратно...")
+                flyTo(bee, Vector3.new(radius, 5, 0))
+                task.wait(0.1)
             end
 
-            angle = angle + math.rad(150)
+            -- Резкий манс
+            angle = angle + math.rad(180)
             local offsetX = math.cos(angle) * radius
             local offsetZ = math.sin(angle) * radius
             local targetPos = beeHrp.Position + Vector3.new(offsetX, 0, offsetZ)
 
             humanoid:MoveTo(targetPos)
-            task.wait(0.12)
+            task.wait(0.1) -- ЗАДЕРЖКА 0.1
+            
+        end
+        
+        -- Возвращаем скорость после манса
+        local finalChar = game:GetService("Players").LocalPlayer.Character
+        if finalChar and finalChar:FindFirstChildOfClass("Humanoid") then
+            finalChar.Humanoid.WalkSpeed = 16
         end
     end)
 
@@ -329,7 +349,7 @@ local function huntViciousBee()
         return
     end
 
-    -- FLY к улью (3 попытки)
+    -- FLY к улью
     local platform = hive:FindFirstChild("Platform")
     local target = platform and platform.Value and platform.Value or hive
 
@@ -370,7 +390,7 @@ local function huntViciousBee()
     pressE()
     task.wait(1.5)
 
-    -- Проверка засчитался ли улей
+    -- Проверка улья
     local owner = hive:FindFirstChild("Owner")
     local ownerValue = owner and owner.Value or nil
 
@@ -398,10 +418,10 @@ local function huntViciousBee()
     task.wait(0.3)
 
     -- Мансинг
-    print("[Hunt] Мансинг вокруг пчелы (радиус 100)...")
+    print("[Hunt] Мансинг вокруг пчелы...")
     local stopMansing = startMansing(bee)
 
-    -- Ждём убийства пчелы
+    -- Ждём убийства
     print("[Hunt] Ждём убийства пчелы...")
     local maxWait = 60
     local waited = 0
