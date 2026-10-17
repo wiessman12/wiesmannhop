@@ -4,11 +4,11 @@ local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
--- ====== ХОП (быстрый, 4 секунды) ======
+-- ====== ХОП (быстрый, 1.5 секунды) ======
 getgenv().VisitedServers = getgenv().VisitedServers or {}
 
 local function hopToRandomServer()
-    task.wait(4) -- Ускорили хоп
+    task.wait(1.5) -- ОЧЕНЬ БЫСТРЫЙ ХОП
     local currentPlayer = game:GetService("Players").LocalPlayer
     if not currentPlayer then return end
 
@@ -134,7 +134,7 @@ local function findFreeHive()
     return nil
 end
 
--- ====== FLY (исправлен, чтобы не проваливаться) ======
+-- ====== FLY ======
 local function flyTo(target, offset)
     local success, err = pcall(function()
         local currentPlayer = game:GetService("Players").LocalPlayer
@@ -169,20 +169,9 @@ local function flyTo(target, offset)
         end
 
         if not targetPos then return false end
-        -- Ставим точку чуть выше платформы, чтобы персонаж приземлился на неё
         targetPos = targetPos + offset
 
-        -- Отключаем коллизии
-        local originalCollides = {}
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if obj:IsA("BasePart") and obj.CanCollide then
-                if not char:IsDescendantOf(obj) then
-                    originalCollides[obj] = true
-                    obj.CanCollide = false
-                end
-            end
-        end
-
+        -- Отключаем коллизии только у персонажа
         local originalCharCollides = {}
         for _, part in ipairs(char:GetDescendants()) do
             if part:IsA("BasePart") then
@@ -197,7 +186,7 @@ local function flyTo(target, offset)
         bv.Parent = hrp
 
         local startTime = tick()
-        local maxTime = 4
+        local maxTime = 3
 
         while tick() - startTime < maxTime do
             if not hrp or not hrp.Parent then break end
@@ -205,8 +194,9 @@ local function flyTo(target, offset)
             if distance < 5 then break end
 
             local direction = (targetPos - hrp.Position).Unit
-            local speed = 400
-            if distance < 30 then speed = 200 end
+            local speed = 500
+            
+            if distance < 30 then speed = 250 end
             if distance < 15 then speed = 100 end
             if distance < 8 then speed = 50 end
 
@@ -217,17 +207,9 @@ local function flyTo(target, offset)
         bv:Destroy()
         hrp.AssemblyLinearVelocity = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
-        
-        -- Ставим чуть выше (на 1.5 стада), чтобы гравитация мягко опустила на платформу
-        hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 1.5, 0))
+        hrp.CFrame = CFrame.new(targetPos)
 
-        -- Возвращаем коллизии
-        for obj, _ in pairs(originalCollides) do
-            if obj and obj.Parent then
-                obj.CanCollide = true
-            end
-        end
-
+        -- Возвращаем коллизии персонажу
         for part, collide in pairs(originalCharCollides) do
             if part and part.Parent then
                 part.CanCollide = collide
@@ -250,14 +232,15 @@ local function pressE()
         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
     end)
 end
--- ====== МАНСИНГ (радиус 30) ======
+
+-- ====== МАНСИНГ (радиус 100) ======
 local function startMansing(bee)
     local running = true
 
     task.spawn(function()
         local angle = 0
-        local radius = 30
-        local maxDistance = 45
+        local radius = 100 -- ОГРОМНЫЙ РАДИУС
+        local maxDistance = 120
 
         while running do
             local currentPlayer = game:GetService("Players").LocalPlayer
@@ -268,8 +251,7 @@ local function startMansing(bee)
 
             local humanoid = char:FindFirstChildOfClass("Humanoid")
             if not humanoid or humanoid.Health <= 0 then task.wait(0.1) continue end
-
-            local hrp = char:FindFirstChild("HumanoidRootPart")
+                local hrp = char:FindFirstChild("HumanoidRootPart")
             if not hrp then task.wait(0.1) continue end
 
             if not bee.Parent then break end
@@ -381,6 +363,7 @@ local function huntViciousBee()
         return
     end
     print("[Hunt] ✅ Долетели до улья")
+
     -- Нажимаем E
     task.wait(1)
     print("[Hunt] Нажимаем E...")
@@ -415,7 +398,7 @@ local function huntViciousBee()
     task.wait(0.3)
 
     -- Мансинг
-    print("[Hunt] Мансинг вокруг пчелы (радиус 30)...")
+    print("[Hunt] Мансинг вокруг пчелы (радиус 100)...")
     local stopMansing = startMansing(bee)
 
     -- Ждём убийства пчелы
