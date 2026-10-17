@@ -12,6 +12,8 @@ local WALK_SPEED     = 60
 local FLY_SPEED      = 50
 local API_PAGES      = 5
 local HOP_TRY_COUNT  = 15
+local MIN_PLAYERS    = 0   -- минимум игроков на сервере
+local MAX_PLAYERS    = 5   -- максимум игроков на сервере
 
 -- ====== HTTP ======
 local function httpGet(url)
@@ -26,7 +28,7 @@ local function httpGet(url)
     return nil
 end
 
--- ====== ХОП (простой, без истории/ЧС) ======
+-- ====== ХОП (простой, с фильтром по игрокам) ======
 getgenv().IsHopping = getgenv().IsHopping or false
 
 local function fetchServers()
@@ -69,18 +71,26 @@ local function hopToRandomServer(reason)
 
     local servers = fetchServers()
 
-    -- Убираем ТОЛЬКО текущий сервер
+    -- Фильтр: не текущий + игроки в диапазоне [MIN_PLAYERS, MAX_PLAYERS]
     local pool = {}
+    local skippedCurrent, skippedPlayers = 0, 0
     for _, s in ipairs(servers) do
-        if s.id ~= game.JobId then
+        if s.id == game.JobId then
+            skippedCurrent = skippedCurrent + 1
+        elseif s.playing and s.playing >= MIN_PLAYERS and s.playing <= MAX_PLAYERS then
             table.insert(pool, s)
+        else
+            skippedPlayers = skippedPlayers + 1
         end
     end
 
-    print("[Hop] Всего:", #servers, "| Доступно (не текущий):", #pool)
+    print("[Hop] Всего:", #servers,
+          "| текущий:", skippedCurrent,
+          "| не подходит по игрокам:", skippedPlayers,
+          "| доступно:", #pool)
 
     if #pool == 0 then
-        print("[Hop] ❌ Нет серверов — ждём 5 сек")
+        print("[Hop] ❌ Нет серверов с", MIN_PLAYERS, "-", MAX_PLAYERS, "игроками — ждём 5 сек")
         getgenv().IsHopping = false
         task.wait(5)
         return
@@ -365,7 +375,7 @@ local function huntViciousBee()
         if char and char:FindFirstChild("HumanoidRootPart") then
             hrp = char.HumanoidRootPart
             break
-            end
+        end
         task.wait(0.2)
     end
     if not char or not hrp then
