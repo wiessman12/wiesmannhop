@@ -8,7 +8,7 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 getgenv().VisitedServers = getgenv().VisitedServers or {}
 
 local function hopToRandomServer()
-    task.wait(0.9)
+    task.wait(1.5)
     local currentPlayer = game:GetService("Players").LocalPlayer
     if not currentPlayer then return end
 
