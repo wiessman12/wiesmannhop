@@ -7,10 +7,12 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local workspace = game:GetService("Workspace")
 
+-- Ждем загрузки игрока и GUI
 local player = Players.LocalPlayer
 while not player do task.wait(0.1) player = Players.LocalPlayer end
 local playerGui = player:WaitForChild("PlayerGui")
 
+-- Защита от двойного запуска
 if getgenv().VichopLoaded then return end
 getgenv().VichopLoaded = true
 
@@ -78,8 +80,8 @@ end
 
 getgenv().VisitedServers = loadVisitedServers()
 
-local function hopToRandomServer()
-    task.wait(1.0)
+local function hopToRandomServer(skipWait)
+    if not skipWait then task.wait(1.0) end
     if not player or not player.Parent then return end
 
     local success, servers = pcall(function()
@@ -188,7 +190,7 @@ local function flyTo(target, offset)
     return result
 end
 
--- ====== ПОИСК (КАК В СТАРОМ КОДЕ) ======
+-- ====== ПОИСК ======
 local function findViciousBee()
     local monsters = workspace:FindFirstChild("Monsters")
     if not monsters then return nil end
@@ -209,114 +211,8 @@ local function findMondoChick()
             local humanoid = obj:FindFirstChild("Humanoid")
             if humanoid and humanoid.Health > 0 then return obj end
         end
-    end
-    return nil
-end
-
-local function isViciousBeeNearMondo(bee)
-    local mondo = findMondoChick()
-    if not mondo then return false end
-    return (bee:GetPivot().Position - mondo:GetPivot().Position).Magnitude < 200
-end
-
-local function findFreeHive()
-    local honeycombs = workspace:FindFirstChild("Honeycombs")
-    if not honeycombs then return nil end
-    local freeHive = nil
-    for i = 1, 6 do
-        local hive = honeycombs:FindFirstChild("Hive" .. i)
-        if hive then
-            local owner = hive:FindFirstChild("Owner")
-            local v = owner and owner.Value
-            if v == player then return hive end
-            if not freeHive and (not v or not v:IsA("Player") or not v.Parent) then freeHive = hive end
-        end
-    end
-    return freeHive
-end
-
--- ====== НАЖАТИЕ E ======
-local function pressE(hive)
-    local prompt = hive and hive:FindFirstChildOfClass("ProximityPrompt")
-    if prompt and type(fireproximityprompt) == "function" then
-        pcall(function() fireproximityprompt(prompt) end)
-    else
-        pcall(function() VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game) end)
-        task.wait(0.15)
-        pcall(function() VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game) end)
-    end
-end
-
--- ====== МАНСИНГ ======
-local function startMansing(bee)
-    local running = true
-    local connection
-    local angle = 0
-    local lastJump, lastMoveTime = 0, 0
-    local lastTarget = Vector3.zero
-    local zigzagPhase = 0
-
-    resetCharacterState()
-    local startChar = player.Character
-    if startChar and bee then
-        local h, b = startChar:FindFirstChild("HumanoidRootPart"), bee:FindFirstChild("HumanoidRootPart")
-        if h and b then
-            local v = h.Position - b.Position
-            if v.Magnitude > 1 then angle = math.atan2(v.Z, v.X) end
-        end
-    end
-
-    connection = RunService.RenderStepped:Connect(function(dt)
-        if not running or not Stats.Running then return end
-        dt = math.min(dt, 0.05)
-        local char = player.Character
-        if not char then return end
-        local hrp, hum = char:FindFirstChild("HumanoidRootPart"), char:FindFirstChildOfClass("Humanoid")
-        if not hrp or not hum or not bee or not bee.Parent then return end
-
-        hum.PlatformStand = false; hrp.CanCollide = true; hum.WalkSpeed = Settings.WalkSpeed
-        local beeHrp = bee:FindFirstChild("HumanoidRootPart")
-        if not beeHrp then return end
-
-        if (hrp.Position - beeHrp.Position).Magnitude > 100 then
-            local ok = flyTo(bee, Vector3.new(0, 3, 0))
-            if ok then
-                local v = hrp.Position - beeHrp.Position
-                angle = (v.Magnitude > 1) and math.atan2(v.Z, v.X) or 0
-            end
-            return
-        end
-
-        local now = tick()
-        if now - lastJump > 1.2 then
-            if hum:GetState() == Enum.HumanoidStateType.Running or hum:GetState() == Enum.HumanoidStateType.Landed then hum.Jump = true end
-            lastJump = now
-        end
-
-        local thorn = workspace.Particles:FindFirstChild("WTs")
-        local thornPos = nil
-        if thorn then
-            local wt = thorn:FindFirstChild("WaitingThorn")
-            if wt and wt.Parent then thornPos = wt.Position end
-        end
-
-        zigzagPhase = zigzagPhase + dt * 5
-        local zigzag = math.sin(zigzagPhase) * 0.45
-        angle = angle + (Settings.WalkSpeed / Settings.MansRadius) * dt
-        local finalAngle = angle + zigzag
-
-        local targetPos
-        if thornPos then
-            local dirToThorn = (thornPos - beeHrp.Position).Unit
-            targetPos = thornPos - dirToThorn * 5 
-        else
-            local offset = Vector3.new(math.cos(finalAngle) * Settings.MansRadius, 0, math.sin(finalAngle) * Settings.MansRadius)
-            targetPos = beeHrp.Position + offset
-        end
-
-        local rayParams = RaycastParams.new()
         rayParams.FilterDescendantsInstances = {char}; rayParams.FilterType = Enum.RaycastFilterType.Exclude
-            local ground = workspace:Raycast(Vector3.new(targetPos.X, targetPos.Y + 30, targetPos.Z), Vector3.new(0, -100, 0), rayParams)
+        local ground = workspace:Raycast(Vector3.new(targetPos.X, targetPos.Y + 30, targetPos.Z), Vector3.new(0, -100, 0), rayParams)
         if ground then targetPos = Vector3.new(targetPos.X, ground.Position.Y + 3, targetPos.Z) end
 
         if now - lastMoveTime > 0.1 or (targetPos - lastTarget).Magnitude > 4 then
@@ -325,70 +221,6 @@ local function startMansing(bee)
     end)
 
     return function() running = false; if connection then connection:Disconnect() end; resetCharacterState() end
-end
-
--- ====== ГЛАВНЫЙ ЦИКЛ ======
-local function huntViciousBee()
-    if not Stats.Running then return end
-    task.wait(2)
-
-    -- 1. Ищем пчелу (как в старом коде)
-    local bee = findViciousBee()
-    if not bee then 
-        hopToRandomServer() return 
-    end
-
-    -- 2. Проверяем, не на горе ли она (если на горе, хопаем)
-    if isViciousBeeNearMondo(bee) then 
-        print("[Hunt] Пчела на горе. Хоп...")
-        hopToRandomServer() return 
-    end
-
-    -- 3. Ищем улей
-    local hive = findFreeHive()
-    if not hive then 
-        hopToRandomServer() return 
-    end
-
-    -- 4. Создаем меню при первом успехе
-    if not guiCreated then
-        guiCreated = true
-        createGUI()
-    end
-
-    local platform = hive:FindFirstChild("Platform")
-    local target = (platform and platform.Value) and platform.Value or hive
-    if not flyTo(target, Vector3.new(0, 3, 0)) then hopToRandomServer() return end
-    task.wait(0.5)
-
-    local tries, claimed = 0, false
-    while tries < 3 do
-        pressE(hive); task.wait(1.2)
-        local o = hive:FindFirstChild("Owner")
-        if o and o.Value == player then claimed = true; break end
-        tries = tries + 1
-    end
-    if not claimed then hopToRandomServer() return end
-
-    if not bee.Parent then hopToRandomServer() return end
-    if not flyTo(bee, Vector3.new(0, 5, 10)) then hopToRandomServer() return end
-    task.wait(0.3)
-
-    local stopMansing = startMansing(bee)
-    local maxWait, waited = 120, 0
-    while waited < maxWait do
-        task.wait(0.3); waited = waited + 0.3
-        if not Stats.Running then break end
-        local hum = bee:FindFirstChild("Humanoid")
-        if not bee.Parent or not hum or hum.Health <= 0 then
-            if bee.Parent and hum and hum.Health <= 0 then Stats.ViciousKilled = Stats.ViciousKilled + 1 end
-            break
-        end
-    end
-    if stopMansing then stopMansing() end
-    Stats.StingersCollected = countStingers()
-    task.wait(0.5)
-    hopToRandomServer()
 end
 
 -- ====== АВТОРСКИЙ GUI ======
@@ -426,6 +258,7 @@ local function createGUI()
     title.TextColor3 = Color3.fromRGB(180, 130, 255)
     title.Font = Enum.Font.GothamBold; title.TextSize = 14
     title.TextXAlignment = Enum.TextXAlignment.Left; title.Parent = titleBar
+
     local content = Instance.new("Frame")
     content.Size = UDim2.new(1, -20, 1, -50); content.Position = UDim2.new(0, 10, 0, 45)
     content.BackgroundTransparency = 1; content.Parent = main
@@ -488,7 +321,7 @@ local function createGUI()
             local val = math.floor(min + (max - min) * pos)
             fill.Size = UDim2.new(pos, 0, 1, 0); knob.Position = UDim2.new(pos, -6, 0.5, -6)
             lbl.Text = name .. ": " .. val; Settings[key] = val
-            end
+        end
 
         bg.InputBegan:Connect(function(i)
             if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then 
@@ -526,11 +359,130 @@ local function createGUI()
     end)
 end
 
+-- ====== ГЛАВНЫЙ ЦИКЛ ======
+local function huntViciousBee()
+    if not Stats.Running then return end
+    
+    -- Мгновенная проверка: есть ли Vicious на этом сервере?
+    local bee = findViciousBee()
+    if not bee then
+        print("[Vichop] Vicious не найден -> хоп")
+    hopToRandomServer(true) -- skipWait = true для мгновенного хопа
+        return
+    end
+    
+    -- Мгновенная проверка: не на горе ли (рядом с Mondo)?
+    if isViciousBeeNearMondo(bee) then
+        print("[Vichop] Vicious на горе (Mondo) -> хоп")
+        hopToRandomServer(true)
+        return
+    end
+    
+    -- Меню создаём ТОЛЬКО после того, как убедились — пчела есть
+    if not guiCreated then
+        guiCreated = true
+        createGUI()
+        print("[Vichop] Vicious найден -> загрузка меню")
+    end
+    
+    -- Улей
+    local hive = findFreeHive()
+    if not hive then
+        print("[Vichop] Нет свободного улья -> хоп")
+        hopToRandomServer(true)
+        return
+    end
+    
+    local platform = hive:FindFirstChild("Platform")
+    local target = (platform and platform.Value) and platform.Value or hive
+    if not flyTo(target, Vector3.new(0, 3, 0)) then
+        print("[Vichop] Не долетел до улья -> хоп")
+        hopToRandomServer(true)
+        return
+    end
+    task.wait(0.5)
+    
+    -- Занимаем улей
+    local tries, claimed = 0, false
+    while tries < 3 do
+        pressE(hive)
+        task.wait(1.2)
+        local o = hive:FindFirstChild("Owner")
+        if o and o.Value == player then claimed = true; break end
+        tries = tries + 1
+    end
+    if not claimed then
+        print("[Vichop] Не удалось занять улей -> хоп")
+        hopToRandomServer(true)
+        return
+    end
+    
+    -- Пчела могла умереть/исчезнуть пока занимали улей
+    if not bee.Parent then
+        print("[Vichop] Пчела исчезла -> хоп")
+        hopToRandomServer(true)
+        return
+    end
+    
+    -- Летим к пчеле
+    if not flyTo(bee, Vector3.new(0, 5, 10)) then
+        print("[Vichop] Не долетел до пчелы -> хоп")
+        hopToRandomServer(true)
+        return
+    end
+    task.wait(0.3)
+    
+    -- Мансим и бьём, пока bee.Parent не станет nil (как в Atlas)
+    local stopMansing = startMansing(bee)
+    local maxWait, waited = 120, 0
+    local killed = false
+    
+    while waited < maxWait do
+        task.wait(0.3)
+        waited = waited + 0.3
+        
+        if not Stats.Running then break end
+        
+        -- ГЛАВНЫЙ ДЕТЕКТ: модель удалена сервером = убит
+        if not bee.Parent then
+            killed = true
+            break
+        end
+        
+        -- Дополнительный ранний сигнал: Health <= 0 (на случай задержки удаления)
+        local hum = bee:FindFirstChild("Humanoid")
+        if hum and hum.Health <= 0 then
+            killed = true
+            -- ждём реального удаления модели, чтобы не телепортнуться раньше
+            local t = 0
+            while bee.Parent and t < 3 do task.wait(0.1); t = t + 0.1 end
+            break
+        end
+    end
+    
+    if stopMansing then stopMansing() end
+    
+    if killed then
+        Stats.ViciousKilled = Stats.ViciousKilled + 1
+        print("[Vichop] Vicious убит. Всего:", Stats.ViciousKilled)
+    else
+        print("[Vichop] Таймаут мансинга -> хоп")
+    end
+    
+    Stats.StingersCollected = countStingers()
+    task.wait(0.5)
+    
+    -- После убийства — хоп дальше (с задержкой 1с, чтобы успело прогрузиться)
+    hopToRandomServer()
+end
+
 -- ====== ЗАПУСК ======
 task.wait(2)
+
+-- Мгновенный цикл: как только сервер загрузился — сразу проверка
 while true do
     if Stats.Running then
         pcall(huntViciousBee)
     end
-    task.wait(2)
+    task.wait(0.5) -- ускорено с 2 для мгновенной реакции
 end
