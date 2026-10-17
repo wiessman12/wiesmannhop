@@ -1,27 +1,9 @@
--- ====== СЕРВИСЫ ======
-local Players             = game:GetService("Players")
-local HttpService         = game:GetService("HttpService")
-local TeleportService     = game:GetService("TeleportService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
-local RunService          = game:GetService("RunService")
-
-local lp = Players.LocalPlayer
-
--- ====== КОНСТАНТЫ ======
-local MOUNTAIN_MONDO_RADIUS = 200
-local FLY_SPEED     = 50
-local WALK_SPEED    = 40
-local MANSING_RADIUS = 20
-
-getgenv().IsHopping = false
-getgenv().VisitedServers = getgenv().VisitedServers or {}
-
 -- ====== ПОИСК ОБЪЕКТОВ ======
 local function findViciousBee()
     local monsters = workspace:FindFirstChild("Monsters")
     if not monsters then return nil end
     for _, obj in ipairs(monsters:GetChildren()) do
-        if obj.Name:find("Vicious Bee", 1, true) then
+        if obj.Name:find("Vicious Bee") then
             local h = obj:FindFirstChild("Humanoid")
             if h and h.Health > 0 then return obj end
         end
@@ -32,7 +14,7 @@ local function findMondoChick()
     local monsters = workspace:FindFirstChild("Monsters")
     if not monsters then return nil end
     for _, obj in ipairs(monsters:GetChildren()) do
-        if obj.Name:find("Mondo Chick", 1, true) then
+        if obj.Name:find("Mondo Chick") then
             local h = obj:FindFirstChild("Humanoid")
             if h and h.Health > 0 then return obj end
         end
@@ -56,12 +38,12 @@ local function findFreeHive()
         if hive then
             local owner = hive:FindFirstChild("Owner")
             if owner and owner.Value == nil then
-                print("[Hunt] Свободный улей:", hive.Name)
+                print("[Hunt] ✅ Свободный улей:", hive.Name)
                 return hive
             end
         end
     end
-    print("[Hunt] Свободных ульев нет")
+    print("[Hunt] ❌ Свободных ульев нет")
 end
 
 -- ====== FLY (из первого скрипта) ======
@@ -108,7 +90,7 @@ local function flyTo(target, offset)
         hum:ChangeState(Enum.HumanoidStateType.Physics)
         local noclip = RunService.PreSimulation:Connect(function()
             for _, part in ipairs(char:GetDescendants()) do
-                        if part:IsA("BasePart") then part.CanCollide = false end
+                if part:IsA("BasePart") then part.CanCollide = false end
             end
         end)
 
@@ -125,7 +107,7 @@ local function flyTo(target, offset)
         end
         hum:ChangeState(Enum.HumanoidStateType.Freefall)
         return (hrp.Position - targetPos).Magnitude < 30
-    end)
+            end)
     if not success then return false end
     return result
 end
@@ -220,7 +202,7 @@ local function startMansing(bee)
             local dirToThorn = (thornPos - beeHrp.Position).Unit
             targetPos = thornPos - dirToThorn * 5
         else
-                local offset = Vector3.new(math.cos(finalAngle) * MANSING_RADIUS, 0, math.sin(finalAngle) * MANSING_RADIUS)
+            local offset = Vector3.new(math.cos(finalAngle) * MANSING_RADIUS, 0, math.sin(finalAngle) * MANSING_RADIUS)
             targetPos = beeHrp.Position + offset
         end
 
@@ -231,7 +213,7 @@ local function startMansing(bee)
 
         if now - lastMoveTime > 0.1 or (targetPos - lastTarget).Magnitude > 4 then
             hum:MoveTo(targetPos); lastMoveTime = now; lastTarget = targetPos
-        end
+                end
     end)
 
     return function()
@@ -247,55 +229,6 @@ local function startMansing(bee)
     end
 end
 
--- ====== ХОП ======
-local function hopToRandomServer()
-    if getgenv().IsHopping then return end
-    getgenv().IsHopping = true
-    task.wait(1.5)
-    if not lp or not lp.Parent then return end
-
-    local success, servers = pcall(function()
-        return HttpService:JSONDecode(
-            game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")
-        )
-    end)
-
-    if not success or not servers or not servers.data or #servers.data == 0 then
-        pcall(function() TeleportService:Teleport(game.PlaceId, lp) end)
-        return
-    end
-
-    local currentJobId = game.JobId
-    local candidates = {}
-    for _, server in ipairs(servers.data) do
-        if server.id ~= currentJobId and server.playing < server.maxPlayers then
-            local alreadyVisited = false
-            for _, visitedId in ipairs(getgenv().VisitedServers) do
-                if visitedId == server.id then alreadyVisited = true; break end
-            end
-            if not alreadyVisited then table.insert(candidates, server) end
-        end
-    end
-
-    while #getgenv().VisitedServers > 150 do table.remove(getgenv().VisitedServers, 1) end
-
-    if #candidates == 0 then
-        pcall(function() TeleportService:Teleport(game.PlaceId, lp) end)
-        return
-    end
-
-    local chosen = candidates[math.random(#candidates)]
-    table.insert(getgenv().VisitedServers, chosen.id)
-
-    local ok = pcall(function()
-        TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, lp)
-    end)
-    if not ok then
-        getgenv().IsHopping = false
-        pcall(function() TeleportService:Teleport(game.PlaceId, lp) end)
-    end
-end
-
 -- ====== ОСНОВНАЯ ЛОГИКА ======
 local function huntViciousBee()
     print("[Hunt] === НОВЫЙ СЕРВЕР ===")
@@ -304,43 +237,42 @@ local function huntViciousBee()
     local char, hrp
     for _ = 1, 30 do
         char = lp.Character
-        if char and char:FindFirstChild("HumanoidRootPart") then hrp = char.HumanoidRootPart; break end
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            hrp = char.HumanoidRootPart
+            break
+        end
         task.wait(0.2)
     end
     if not char or not hrp then
         print("[Hunt] Персонаж не прогрузился — хоп")
-        hopToRandomServer(); return
+        hopToRandomServer()
+        return
     end
 
-    -- 1. Ищем пчелу
     print("[Hunt] Ищем Vicious Bee...")
-    local bee
-    for _ = 1, 20 do
-        bee = findViciousBee()
-        if bee then break end
-        task.wait(0.4)
-    end
+    local bee = findViciousBee()
     if not bee then
         print("[Hunt] Пчела не найдена — хоп")
-        hopToRandomServer(); return
+        hopToRandomServer()
+        return
     end
-    print("[Hunt] Пчела найдена:", bee.Name)
+    print("[Hunt] ✅ Пчела найдена:", bee.Name)
 
-    -- 2. Проверка горы
     if shouldHopFromBee(bee) then
         print("[Hunt] Пчела на горе (рядом с Mondo) — хоп")
-        hopToRandomServer(); return
+        hopToRandomServer()
+        return
     end
     print("[Hunt] Летим убивать")
 
-    -- 3. Ищем улей
     print("[Hunt] Ищем улей...")
     local hive = findFreeHive()
     if not hive then
         print("[Hunt] Улей не найден — хоп")
-        hopToRandomServer(); return
+        hopToRandomServer()
+        return
     end
-    print("[Hunt] Выбран улей:", hive.Name)
+    print("[Hunt] ✅ Выбран улей:", hive.Name)
 
     local platform = hive:FindFirstChild("Platform")
     local hiveTarget = (platform and platform.Value) or hive
@@ -348,17 +280,22 @@ local function huntViciousBee()
     local reached = false
     for attempt = 1, 3 do
         print("[Hunt] Попытка долететь до улья:", attempt)
-        local ok, flew = pcall(function() return flyTo(hiveTarget, Vector3.new(0, 3, 0)) end)
-        if ok and flew then reached = true; break end
+        local ok, flew = pcall(function()
+            return flyTo(hiveTarget, Vector3.new(0, 3, 0))
+        end)
+        if ok and flew then
+            reached = true
+            break
+        end
         task.wait(0.3)
     end
     if not reached then
         print("[Hunt] Не долетели до улья — хоп")
-        hopToRandomServer(); return
+        hopToRandomServer()
+        return
     end
-    print("[Hunt] Долетели до улья")
+    print("[Hunt] ✅ Долетели до улья")
 
-    -- Нажимаем E
     task.wait(0.7)
     print("[Hunt] Занимаем улей...")
     occupyHive(hive)
@@ -373,44 +310,41 @@ local function huntViciousBee()
         ownerValue = owner and owner.Value or nil
         if ownerValue ~= lp then
             print("[Hunt] Улей не занят — хоп")
-            hopToRandomServer(); return
+            hopToRandomServer()
+            return
         end
     end
-    print("[Hunt] Улей занят")
+    print("[Hunt] ✅ Улей занят")
 
-    -- 4. Летим к пчеле + мансинг
-    print("[Hunt] Летим к пчеле...")
-    for attempt = 1, 3 do
-        if not bee or not bee.Parent then break end
-        if flyTo(bee, Vector3.new(0, 5, 10)) then break end
-        task.wait(0.3)
-    end
-
-    if not bee or not bee.Parent then
-        print("[Hunt] Пчела исчезла — хоп")
-        hopToRandomServer(); return
-    end
-
-    print("[Hunt] Мансинг вокруг пчелы (радиус " .. MANSING_RADIUS .. ")...")
-    local stopMansing = startMansing(bee)
-
-    local maxWait = 90
-    local waited = 0
-    while waited < maxWait do
-        task.wait(0.3)
-        waited += 0.3
-        if not bee or not bee.Parent then
-            print("[Hunt] Пчела убита!")
-            break
+    local attackOk = pcall(function()
+        print("[Hunt] Летим к пчеле...")
+        for attempt = 1, 3 do
+            if flyTo(bee, Vector3.new(0, 5, 15)) then break end
+            task.wait(0.3)
         end
-        local h = bee:FindFirstChild("Humanoid")
-        if h and h.Health <= 0 then
-            print("[Hunt] Пчела убита!")
-            break
-        end
-    end
 
-    if stopMansing then stopMansing() end
+        print("[Hunt] Мансинг вокруг пчелы (радиус " .. MANSING_RADIUS .. ")...")
+        local stopMansing = startMansing(bee)
+
+        local maxWait = 90
+        local waited = 0
+        while waited < maxWait do
+            task.wait(0.3)
+            waited += 0.3
+
+            local h = bee:FindFirstChild("Humanoid")
+            if not bee.Parent or not h or h.Health <= 0 then
+                print("[Hunt] ✅ Пчела убита!")
+                break
+            end
+        end
+
+        if stopMansing then stopMansing() end
+    end)
+
+    if not attackOk then
+        print("[Hunt] Ошибка в фазе атаки — хоп")
+    end
 
     print("[Hunt] Хоп на другой сервер...")
     hopToRandomServer()
