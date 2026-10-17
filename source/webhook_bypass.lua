@@ -5,15 +5,21 @@ local TeleportService     = game:GetService("TeleportService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local RunService          = game:GetService("RunService")
 
-getgenv().IsHopping = false
+-- ====== ГЛОБАЛЬНОЕ СОСТОЯНИЕ ======
+getgenv().IsHopping      = getgenv().IsHopping or false
+getgenv().VisitedServers = getgenv().VisitedServers or {}
+getgenv().HopAttempts    = getgenv().HopAttempts or 0
 
 -- ====== НАСТРОЙКИ ======
-local HOP_DELAY            = 2
+local HOP_DELAY             = 2
 local MOUNTAIN_MONDO_RADIUS = 200
-local MANSING_RADIUS       = 18
-local SERVER_FETCH_LIMIT   = 300
-local FLY_SPEED            = 50
-local WALK_SPEED           = 50
+local MANSING_RADIUS        = 18
+local SERVER_FETCH_LIMIT    = 100
+local FLY_SPEED             = 50
+local WALK_SPEED            = 50
+local MAX_VISITED           = 40
+local HOP_COOLDOWN          = 4
+local JOBID_CHECK_DELAY     = 8
 
 -- ====== HTTP ======
 local function httpGet(url)
@@ -22,84 +28,167 @@ local function httpGet(url)
         if ok and res and res.Body then return res.Body end
     end
     if game.HttpGet then
-        return game:HttpGet(url)
+        local ok, body = pcall(game.HttpGet, game, url)
+        if ok then return body end
+    end
+    return nil
+end
+
+-- ====== ОЧИСТКА ПАМЯТИ ======
+local function rememberServer(jobId)
+    local visited = getgenv().VisitedServers
+    visited[jobId] = true
+
+    local count = 0
+    for _ in pairs(visited) do count += 1 end
+
+    if count > MAX_VISITED then
+        local oldest
+        for id in pairs(visited) do oldest = id break end
+        if oldest then visited[oldest] = nil end
     end
 end
 
 -- ====== СБОР СПИСКА ДОСТУПНЫХ СЕРВЕРОВ ======
 local function fetchAvailableServers()
-    local body = httpGet("https://games.roblox.com/v1/games/" ..
-        game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=" .. SERVER_FETCH_LIMIT)
+    local order = (math.random(1, 2) == 1) and "Asc" or "Desc"
+    local url = "https://games.roblox.com/v1/games/" ..
+        game.PlaceId .. "/servers/Public?sortOrder=" .. order ..
+        "&limit=" .. SERVER_FETCH_LIMIT
 
+    local body = httpGet(url)
     if not body then return {} end
+
     local ok, decoded = pcall(HttpService.JSONDecode, HttpService, body)
     if not ok or not decoded or not decoded.data then return {} end
 
     local currentJobId = game.JobId
+    local visited = getgenv().VisitedServers
     local available = {}
 
     for _, server in ipairs(decoded.data) do
-        if server.id ~= currentJobId and server.playing < server.maxPlayers then
+        if server.id ~= currentJobId
+            and server.playing < server.maxPlayers
+            and not visited[server.id] then
             table.insert(available, server)
+        end
+    end
+
+    -- Если всё отфильтровалось — сбрасываем историю и пробуем снова
+    if #available == 0 then
+        print("[Hop] Все серверы посещены — сброс истории")
+        getgenv().VisitedServers = {}
+        for _, server in ipairs(decoded.data) do
+            if server.id ~= currentJobId and server.playing < server.maxPlayers then
+                table.insert(available, server)
+            end
         end
     end
 
     return available
 end
 
--- ====== ХОП ======
-local function hopToRandomServer()
-    if getgenv().IsHopping then return end
-    getgenv().IsHopping = true
+-- ====== ПЕРЕЗАПУСК СКРИПТА НА НОВОМ СЕРВЕРЕ ======
+getgenv().LastJobId = game.JobId
 
-    print("[Hop] Ждём " .. HOP_DELAY .. " сек...")
-    task.wait(HOP_DELAY)
+local function setupQueueOnTeleport()
+    if not queue_on_teleport then return false end
+    local ok = pcall(function()
+        queue_on_teleport([[
+            -- авто-перезапуск основного скрипта на новом сервере
+            task.wait(3)
+            if getgenv and getgenv().ReloadMain then
+                pcall(getgenv().ReloadMain)
+            end
+        ]])
+    end)
+    return ok
+end
+
+-- ====== ХОП ======
+local function hopToRandomServer(reason)
+    if getgenv().IsHopping then
+        print("[Hop] Уже хопаем — пропуск")
+        return
+    end
+
+    -- защита от слишком частых хопов подряд
+    if getgenv().LastHopTime and (tick() - getgenv().LastHopTime) < HOP_COOLDOWN then
+        local wait = HOP_COOLDOWN - (tick() - getgenv().LastHopTime)
+        print("[Hop] Кулдаун — ждём", string.format("%.1f", wait))
+        task.wait(wait)
+    end
+
+    getgenv().IsHopping = true
+    getgenv().LastHopTime = tick()
+    getgenv().HopAttempts = (getgenv().HopAttempts or 0) + 1
+    print("[Hop] Причина:", reason or "manual")
 
     local lp = Players.LocalPlayer
-    if not lp then return end
+    if not lp then
+        getgenv().IsHopping = false
+        return
+    end
+
+    task.wait(HOP_DELAY)
+
+    -- запоминаем текущий сервер как посещённый
+    rememberServer(game.JobId)
 
     local available = fetchAvailableServers()
 
     if #available == 0 then
-        print("[Hop] Нет доступных серверов — Teleport в случайный")
-        local ok = pcall(function()
-            TeleportService:Teleport(game.PlaceId, lp)
+        print("[Hop] Нет доступных — Teleport в случайный")
+        pcall(function() TeleportService:Teleport(game.PlaceId, lp) end)
+        -- если телепорт не удался — сбрасываем через таймаут
+        task.delay(JOBID_CHECK_DELAY, function()
+            if game.JobId == getgenv().LastJobId then
+                getgenv().IsHopping = false
+            end
         end)
-        if not ok then
-            print("[Hop] Teleport не сработал")
-            getgenv().IsHopping = false
-        end
         return
     end
 
+    -- Фишер-Йетс
     for i = #available, 2, -1 do
         local j = math.random(i)
         available[i], available[j] = available[j], available[i]
     end
 
     local chosen = available[1]
-    print("[Hop] Хоп на:", chosen.id, "|", chosen.playing .. "/" .. chosen.maxPlayers)
+    print("[Hop] Цель:", chosen.id, "|", chosen.playing .. "/" .. chosen.maxPlayers)
 
-    local ok = pcall(function()
+    -- запоминаем ЦЕЛЕВОЙ сервер тоже (чтобы не вернуться на него случайно)
+    rememberServer(chosen.id)
+
+    -- пробуем TeleportToPlaceInstance (работает не из всех executor'ов)
+    local ok1 = pcall(function()
         TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, lp)
     end)
-    if ok then
-        print("[Hop] ✅ TeleportToPlaceInstance")
-        return
+
+    if ok1 then
+        print("[Hop] ✅ TeleportToPlaceInstance отправлен")
+    else
+        print("[Hop] TeleportToPlaceInstance упал — TeleportAsync")
+        local ok2 = pcall(function()
+            TeleportService:TeleportAsync(game.PlaceId, {lp})
+        end)
+        if ok2 then
+            print("[Hop] ✅ TeleportAsync отправлен")
+        else
+            print("[Hop] TeleportAsync упал — Teleport")
+            pcall(function()
+                TeleportService:Teleport(game.PlaceId, lp)
+            end)
+        end
     end
 
-    print("[Hop] TeleportToPlaceInstance упал — TeleportAsync")
-    local ok2 = pcall(function()
-        TeleportService:TeleportAsync(game.PlaceId, {lp})
-    end)
-    if ok2 then
-        print("[Hop] ✅ TeleportAsync")
-        return
-    end
-
-    print("[Hop] Оба способа упали — Teleport")
-    pcall(function()
-        TeleportService:Teleport(game.PlaceId, lp)
+    -- Страховка: если через JOBID_CHECK_DELAY JobId не сменился — сбрасываем флаг
+    task.delay(JOBID_CHECK_DELAY, function()
+        if game.JobId == getgenv().LastJobId then
+            warn("[Hop] JobId не сменился — сброс IsHopping")
+            getgenv().IsHopping = false
+        end
     end)
 end
 
@@ -151,13 +240,13 @@ local function findFreeHive()
     print("[Hunt] ❌ Свободных ульев нет")
 end
 
--- ====== FLY (из первого скрипта) ======
+-- ====== FLY ======
 local function flyTo(target, offset)
     local success, result = pcall(function()
         local char = Players.LocalPlayer.Character
         if not char then return false end
         local hrp = char:FindFirstChild("HumanoidRootPart")
-        local hum = char:FindFirstChildOfClass("Humanoid")
+            local hum = char:FindFirstChildOfClass("Humanoid")
         if not hrp or not target or not hum then return false end
 
         offset = offset or Vector3.new(0, 3, 0)
@@ -172,7 +261,9 @@ local function flyTo(target, offset)
         targetPos = targetPos + offset
 
         for _, child in ipairs(hrp:GetChildren()) do
-            if child.ClassName == "AlignPosition" or child.ClassName == "AlignOrientation" then child:Destroy() end
+            if child.ClassName == "AlignPosition" or child.ClassName == "AlignOrientation" then
+                child:Destroy()
+            end
         end
 
         hum:ChangeState(Enum.HumanoidStateType.Freefall)
@@ -239,7 +330,7 @@ local function occupyHive(hive)
     return true
 end
 
--- ====== МАНСИНГ (из первого скрипта) ======
+-- ====== МАНСИНГ ======
 local function startMansing(bee)
     local running = true
     local connection
@@ -268,7 +359,7 @@ local function startMansing(bee)
     connection = RunService.RenderStepped:Connect(function(dt)
         if not running then return end
         dt = math.min(dt, 0.05)
-        local char = Players.LocalPlayer.Character
+            local char = Players.LocalPlayer.Character
         if not char then return end
         local hrp, hum = char:FindFirstChild("HumanoidRootPart"), char:FindFirstChildOfClass("Humanoid")
         if not hrp or not hum or not bee or not bee.Parent then return end
@@ -285,7 +376,9 @@ local function startMansing(bee)
         local now = tick()
         if now - lastJump > 1.2 then
             local st = hum:GetState()
-            if st == Enum.HumanoidStateType.Running or st == Enum.HumanoidStateType.Landed then hum.Jump = true end
+            if st == Enum.HumanoidStateType.Running or st == Enum.HumanoidStateType.Landed then
+                hum.Jump = true
+            end
             lastJump = now
         end
 
@@ -307,14 +400,25 @@ local function startMansing(bee)
             local dirToThorn = (thornPos - beeHrp.Position).Unit
             targetPos = thornPos - dirToThorn * 5
         else
-            local offset = Vector3.new(math.cos(finalAngle) * MANSING_RADIUS, 0, math.sin(finalAngle) * MANSING_RADIUS)
+            local offset = Vector3.new(
+                math.cos(finalAngle) * MANSING_RADIUS,
+                0,
+                math.sin(finalAngle) * MANSING_RADIUS
+            )
             targetPos = beeHrp.Position + offset
         end
 
         local rayParams = RaycastParams.new()
-        rayParams.FilterDescendantsInstances = {char}; rayParams.FilterType = Enum.RaycastFilterType.Exclude
-        local ground = workspace:Raycast(Vector3.new(targetPos.X, targetPos.Y + 30, targetPos.Z), Vector3.new(0, -100, 0), rayParams)
-        if ground then targetPos = Vector3.new(targetPos.X, ground.Position.Y + 3, targetPos.Z) end
+        rayParams.FilterDescendantsInstances = {char}
+        rayParams.FilterType = Enum.RaycastFilterType.Exclude
+        local ground = workspace:Raycast(
+            Vector3.new(targetPos.X, targetPos.Y + 30, targetPos.Z),
+            Vector3.new(0, -100, 0),
+            rayParams
+        )
+        if ground then
+            targetPos = Vector3.new(targetPos.X, ground.Position.Y + 3, targetPos.Z)
+        end
 
         if now - lastMoveTime > 0.1 or (targetPos - lastTarget).Magnitude > 4 then
             hum:MoveTo(targetPos); lastMoveTime = now; lastTarget = targetPos
@@ -336,7 +440,7 @@ end
 
 -- ====== ОСНОВНАЯ ЛОГИКА ======
 local function huntViciousBee()
-    print("[Hunt] === НОВЫЙ СЕРВЕР ===")
+    print("[Hunt] === НОВЫЙ СЕРВЕР === JobId:", game.JobId)
     task.wait(2)
 
     local lp = Players.LocalPlayer
@@ -351,7 +455,7 @@ local function huntViciousBee()
     end
     if not char or not hrp then
         print("[Hunt] Персонаж не прогрузился — хоп")
-        hopToRandomServer()
+        hopToRandomServer("no character")
         return
     end
 
@@ -359,14 +463,14 @@ local function huntViciousBee()
     local bee = findViciousBee()
     if not bee then
         print("[Hunt] Пчела не найдена — хоп")
-        hopToRandomServer()
+        hopToRandomServer("no bee")
         return
     end
     print("[Hunt] ✅ Пчела найдена:", bee.Name)
 
     if shouldHopFromBee(bee) then
         print("[Hunt] Пчела на горе (рядом с Mondo) — хоп")
-        hopToRandomServer()
+        hopToRandomServer("bee on mountain")
         return
     end
     print("[Hunt] Летим убивать")
@@ -375,7 +479,7 @@ local function huntViciousBee()
     local hive = findFreeHive()
     if not hive then
         print("[Hunt] Улей не найден — хоп")
-        hopToRandomServer()
+        hopToRandomServer("no hive")
         return
     end
     print("[Hunt] ✅ Выбран улей:", hive.Name)
@@ -397,7 +501,7 @@ local function huntViciousBee()
     end
     if not reached then
         print("[Hunt] Не долетели до улья — хоп")
-        hopToRandomServer()
+        hopToRandomServer("hive unreachable")
         return
     end
     print("[Hunt] ✅ Долетели до улья")
@@ -416,7 +520,7 @@ local function huntViciousBee()
         ownerValue = owner and owner.Value or nil
         if ownerValue ~= lp then
             print("[Hunt] Улей не занят — хоп")
-            hopToRandomServer()
+            hopToRandomServer("hive not occupied")
             return
         end
     end
@@ -452,8 +556,9 @@ local function huntViciousBee()
         print("[Hunt] Ошибка в фазе атаки — хоп")
     end
 
-    print("[Hunt] Хоп на другой сервер...")
-    hopToRandomServer()
+    print("[Hunt] Хоп на другой сервер после охоты...")
+    task.wait(2)
+    hopToRandomServer("after hunt")
 end
 
 -- ====== ОБРАБОТКА ОШИБОК ТЕЛЕПОРТА ======
@@ -462,18 +567,47 @@ TeleportService.TeleportInitFailed:Connect(function(_, result, err)
     local code = result and result.Value or -1
     warn("[Teleport] Ошибка:", name, err, "| Код:", code)
     getgenv().IsHopping = false
+
+    -- при неудаче меняем порядок сортировки, чтобы получить другой список
     task.wait(2)
-    pcall(hopToRandomServer)
+    pcall(function()
+        -- сбрасываем память о последних 5 серверах, чтобы точно не зациклиться
+        local visited = getgenv().VisitedServers
+        local removed = 0
+        for id in pairs(visited) do
+            visited[id] = nil
+            removed += 1
+            if removed >= 5 then break end
+        end
+        hopToRandomServer("after init fail")
+    end)
 end)
 
 -- ====== БЕСКОНЕЧНЫЙ ЦИКЛ ======
+print("[Init] JobId:", game.JobId)
+print("[Init] Visited:", (function()
+    local n = 0
+    for _ in pairs(getgenv().VisitedServers) do n += 1 end
+    return n
+end)())
+
+setupQueueOnTeleport()
+
 task.wait(5)
 while true do
     if not getgenv().IsHopping then
         local ok, err = pcall(huntViciousBee)
         if not ok then
             warn("[Hunt] Ошибка в цикле:", err)
-            pcall(hopToRandomServer)
+            getgenv().IsHopping = false
+            pcall(function() hopToRandomServer("cycle error") end)
+        end
+    else
+        -- если долго висим в IsHopping — сбрасываем (защита от зависания)
+        task.wait(30)
+        if getgenv().IsHopping then
+            warn("[Hunt] IsHopping висит — сброс")
+            getgenv().IsHopping = false
         end
     end
     task.wait(1)
