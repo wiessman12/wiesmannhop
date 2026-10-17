@@ -107,7 +107,7 @@ local function hopToRandomServer()
     end
 
     if #candidates == 0 then 
-        print("[Hop] Все сервера в блеклисте. Очистка блеклиста...")
+        print("[Hop] Все сервера в блеклисте. Очистка...")
         getgenv().VisitedServers = {}
         saveVisitedServers(getgenv().VisitedServers)
         TeleportService:Teleport(game.PlaceId, player)
@@ -188,19 +188,35 @@ local function flyTo(target, offset)
     return result
 end
 
--- ====== ПОИСК ======
+-- ====== ПОИСК (КАК В СТАРОМ КОДЕ) ======
 local function findViciousBee()
     local monsters = workspace:FindFirstChild("Monsters")
     if not monsters then return nil end
     for _, obj in ipairs(monsters:GetChildren()) do
-        if string.find(string.lower(obj.Name), "vicious") then
-            local hum = obj:FindFirstChild("Humanoid")
-            if hum and hum.Health > 0 then
-                return obj 
-            end
+        if obj.Name:find("Vicious Bee", 1, true) then
+            local humanoid = obj:FindFirstChild("Humanoid")
+            if humanoid and humanoid.Health > 0 then return obj end
         end
     end
     return nil
+end
+
+local function findMondoChick()
+    local monsters = workspace:FindFirstChild("Monsters")
+    if not monsters then return nil end
+    for _, obj in ipairs(monsters:GetChildren()) do
+        if obj.Name:find("Mondo Chick", 1, true) then
+            local humanoid = obj:FindFirstChild("Humanoid")
+            if humanoid and humanoid.Health > 0 then return obj end
+        end
+    end
+    return nil
+end
+
+local function isViciousBeeNearMondo(bee)
+    local mondo = findMondoChick()
+    if not mondo then return false end
+    return (bee:GetPivot().Position - mondo:GetPivot().Position).Magnitude < 200
 end
 
 local function findFreeHive()
@@ -300,7 +316,7 @@ local function startMansing(bee)
 
         local rayParams = RaycastParams.new()
         rayParams.FilterDescendantsInstances = {char}; rayParams.FilterType = Enum.RaycastFilterType.Exclude
-        local ground = workspace:Raycast(Vector3.new(targetPos.X, targetPos.Y + 30, targetPos.Z), Vector3.new(0, -100, 0), rayParams)
+            local ground = workspace:Raycast(Vector3.new(targetPos.X, targetPos.Y + 30, targetPos.Z), Vector3.new(0, -100, 0), rayParams)
         if ground then targetPos = Vector3.new(targetPos.X, ground.Position.Y + 3, targetPos.Z) end
 
         if now - lastMoveTime > 0.1 or (targetPos - lastTarget).Magnitude > 4 then
@@ -315,28 +331,31 @@ end
 local function huntViciousBee()
     if not Stats.Running then return end
     task.wait(2)
-    local t = 0
-    while not workspace:FindFirstChild("Monsters") and t < 10 do task.wait(0.5); t = t + 0.5 end
 
-    -- 1. Сначала ищем пчелу
+    -- 1. Ищем пчелу (как в старом коде)
     local bee = findViciousBee()
     if not bee then 
         hopToRandomServer() return 
     end
-    
-    -- 2. Ищем улей
+
+    -- 2. Проверяем, не на горе ли она (если на горе, хопаем)
+    if isViciousBeeNearMondo(bee) then 
+        print("[Hunt] Пчела на горе. Хоп...")
+        hopToRandomServer() return 
+    end
+
+    -- 3. Ищем улей
     local hive = findFreeHive()
     if not hive then 
         hopToRandomServer() return 
     end
 
-    -- 3. Только ТЕПЕРЬ создаем меню
+    -- 4. Создаем меню при первом успехе
     if not guiCreated then
         guiCreated = true
         createGUI()
     end
 
-    -- 4. Продолжаем убийство
     local platform = hive:FindFirstChild("Platform")
     local target = (platform and platform.Value) and platform.Value or hive
     if not flyTo(target, Vector3.new(0, 3, 0)) then hopToRandomServer() return end
@@ -407,7 +426,6 @@ local function createGUI()
     title.TextColor3 = Color3.fromRGB(180, 130, 255)
     title.Font = Enum.Font.GothamBold; title.TextSize = 14
     title.TextXAlignment = Enum.TextXAlignment.Left; title.Parent = titleBar
-
     local content = Instance.new("Frame")
     content.Size = UDim2.new(1, -20, 1, -50); content.Position = UDim2.new(0, 10, 0, 45)
     content.BackgroundTransparency = 1; content.Parent = main
@@ -470,7 +488,7 @@ local function createGUI()
             local val = math.floor(min + (max - min) * pos)
             fill.Size = UDim2.new(pos, 0, 1, 0); knob.Position = UDim2.new(pos, -6, 0.5, -6)
             lbl.Text = name .. ": " .. val; Settings[key] = val
-        end
+            end
 
         bg.InputBegan:Connect(function(i)
             if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then 
@@ -483,7 +501,7 @@ local function createGUI()
             if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then update(i) end
         end)
         UserInputService.InputEnded:Connect(function(i)
-                if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
                 if dragging then 
                     dragging = false
                     main.Draggable = true
