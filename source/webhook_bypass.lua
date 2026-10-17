@@ -4,17 +4,14 @@ local HttpService         = game:GetService("HttpService")
 local TeleportService     = game:GetService("TeleportService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local RunService          = game:GetService("RunService")
-local UserInputService    = game:GetService("UserInputService")
-local TweenService        = game:GetService("TweenService")
 
 local lp = Players.LocalPlayer
-local playerGui = lp:WaitForChild("PlayerGui")
 
 -- ====== КОНСТАНТЫ ======
 local MOUNTAIN_MONDO_RADIUS = 200
-local FLY_SPEED    = 100
-local WALK_SPEED   = 60
-local MANSING_RADIUS = 18
+local FLY_SPEED     = 50
+local WALK_SPEED    = 40
+local MANSING_RADIUS = 20
 
 getgenv().IsHopping = false
 getgenv().VisitedServers = getgenv().VisitedServers or {}
@@ -53,6 +50,7 @@ end
 local function findFreeHive()
     local honeycombs = workspace:FindFirstChild("Honeycombs")
     if not honeycombs then return nil end
+
     for i = 1, 6 do
         local hive = honeycombs:FindFirstChild("Hive" .. i)
         if hive then
@@ -96,7 +94,7 @@ local function flyTo(target, offset)
         ap.Attachment0 = hrp:FindFirstChild("RootAttachment") or hrp.RootAttachment
         ap.Responsiveness = 200
         ap.MaxForce = math.huge
-        ap.MaxVelocity = Settings and Settings.FlySpeed or FLY_SPEED
+        ap.MaxVelocity = FLY_SPEED
         ap.Position = targetPos
         ap.Parent = hrp
 
@@ -106,10 +104,11 @@ local function flyTo(target, offset)
         ao.RigidityEnabled = true
         ao.CFrame = hrp.CFrame
         ao.Parent = hrp
-            hum:ChangeState(Enum.HumanoidStateType.Physics)
+
+        hum:ChangeState(Enum.HumanoidStateType.Physics)
         local noclip = RunService.PreSimulation:Connect(function()
             for _, part in ipairs(char:GetDescendants()) do
-                if part:IsA("BasePart") then part.CanCollide = false end
+                        if part:IsA("BasePart") then part.CanCollide = false end
             end
         end)
 
@@ -187,9 +186,7 @@ local function startMansing(bee)
         local hrp, hum = char:FindFirstChild("HumanoidRootPart"), char:FindFirstChildOfClass("Humanoid")
         if not hrp or not hum or not bee or not bee.Parent then return end
 
-        local ws = Settings and Settings.WalkSpeed or WALK_SPEED
-        local mr = Settings and Settings.MansRadius or MANSING_RADIUS
-        hum.PlatformStand = false; hrp.CanCollide = true; hum.WalkSpeed = ws
+        hum.PlatformStand = false; hrp.CanCollide = true; hum.WalkSpeed = WALK_SPEED
         local beeHrp = bee:FindFirstChild("HumanoidRootPart")
         if not beeHrp then return end
 
@@ -215,15 +212,15 @@ local function startMansing(bee)
 
         zigzagPhase = zigzagPhase + dt * 5
         local zigzag = math.sin(zigzagPhase) * 0.45
-        angle = angle + (ws / mr) * dt
-            local finalAngle = angle + zigzag
+        angle = angle + (WALK_SPEED / MANSING_RADIUS) * dt
+        local finalAngle = angle + zigzag
 
         local targetPos
         if thornPos then
             local dirToThorn = (thornPos - beeHrp.Position).Unit
             targetPos = thornPos - dirToThorn * 5
         else
-            local offset = Vector3.new(math.cos(finalAngle) * mr, 0, math.sin(finalAngle) * mr)
+                local offset = Vector3.new(math.cos(finalAngle) * MANSING_RADIUS, 0, math.sin(finalAngle) * MANSING_RADIUS)
             targetPos = beeHrp.Position + offset
         end
 
@@ -297,247 +294,6 @@ local function hopToRandomServer()
         getgenv().IsHopping = false
         pcall(function() TeleportService:Teleport(game.PlaceId, lp) end)
     end
-end
-
--- ====== НАСТРОЙКИ + МЕНЮ (из первого скрипта) ======
-local Palette = {
-    Background   = Color3.fromRGB(14, 22, 33),
-    Card         = Color3.fromRGB(22, 34, 47),
-    Accent       = Color3.fromRGB(79, 195, 247),
-    Accent2      = Color3.fromRGB(38, 166, 154),
-    Text         = Color3.fromRGB(224, 247, 250),
-    TextDim      = Color3.fromRGB(160, 190, 200),
-    SliderBg     = Color3.fromRGB(30, 45, 60),
-    StrokeColor  = Color3.fromRGB(50, 80, 100),
-    StopRed      = Color3.fromRGB(229, 115, 115),
-    StartGreen   = Color3.fromRGB(129, 199, 132),
-}
-
-local CONFIG_FILE = "wiesmann_vichop_v3.json"
-
-local function loadSettings()
-    local defaults = {
-        WalkSpeed = WALK_SPEED,
-        FlySpeed = FLY_SPEED,
-        MansRadius = MANSING_RADIUS,
-        Running = true,
-    }
-    if isfile and isfile(CONFIG_FILE) then
-        local ok, data = pcall(function() return HttpService:JSONDecode(readfile(CONFIG_FILE)) end)
-        if ok and data then
-            for k, v in pairs(data) do if defaults[k] ~= nil then defaults[k] = v end end
-        end
-    end
-    return defaults
-end
-
-Settings = loadSettings()
-
-local Stats = { StartTime = tick(), ViciousKilled = 0, StingersCollected = 0, Running = Settings.Running }
-
-local function saveSettings()
-    if writefile then
-        pcall(function() writefile(CONFIG_FILE, HttpService:JSONEncode(Settings)) end)
-    end
-end
-
-local function countStingers()
-    local count = 0
-    local function check(c)
-        if not c then return end
-        for _, i in ipairs(c:GetChildren()) do
-            if i.Name:lower():find("stinger") then count = count + 1 end
-        end
-    end
-    check(lp:FindFirstChild("Backpack"))
-    check(lp.Character)
-    return count
-end
-
-local function createGUI()
-    local old = playerGui:FindFirstChild("wiesmann_vichop")
-    if old then old:Destroy() end
-
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "wiesmann_vichop"
-    gui.ResetOnSpawn = false
-    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    gui.Parent = playerGui
-
-    local main = Instance.new("Frame")
-    main.Size = UDim2.new(0, 500, 0, 320)
-    main.Position = UDim2.new(0.5, -250, 0.5, -160)
-    main.BackgroundColor3 = Palette.Background
-    main.BorderSizePixel = 0
-    main.Active = true
-    main.Draggable = true
-    main.Parent = gui
-    Instance.new("UICorner", main).CornerRadius = UDim.new(0, 12)
-
-    local stroke = Instance.new("UIStroke", main)
-    stroke.Color = Palette.StrokeColor
-    stroke.Thickness = 1
-    stroke.Transparency = 0.3
-    stroke.Parent = main
-
-    local titleBar = Instance.new("Frame")
-    titleBar.Size = UDim2.new(1, 0, 0, 42)
-    titleBar.BackgroundColor3 = Palette.Card
-    titleBar.BorderSizePixel = 0
-    titleBar.Parent = main
-    Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 12)
-
-    local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, -20, 1, 0)
-    title.Position = UDim2.new(0, 15, 0, 0)
-    title.BackgroundTransparency = 1
-    title.Text = "  wiesmann vichop"
-    title.TextColor3 = Palette.Text
-    title.Font = Enum.Font.GothamBold
-    title.TextSize = 15
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.Parent = titleBar
-
-    local content = Instance.new("Frame")
-    content.Size = UDim2.new(1, -20, 1, -60)
-    content.Position = UDim2.new(0, 10, 0, 50)
-    content.BackgroundTransparency = 1
-    content.Parent = main
-
-    local statsCard = Instance.new("Frame")
-    statsCard.Size = UDim2.new(0.42, -5, 1, 0)
-    statsCard.BackgroundColor3 = Palette.Card
-    statsCard.BorderSizePixel = 0
-    statsCard.Parent = content
-    Instance.new("UICorner", statsCard).CornerRadius = UDim.new(0, 10)
-
-    local statsText = Instance.new("TextLabel")
-    statsText.Size = UDim2.new(1, -20, 1, -20)
-    statsText.Position = UDim2.new(0, 12, 0, 12)
-    statsText.BackgroundTransparency = 1
-    statsText.TextColor3 = Palette.Text
-    statsText.Font = Enum.Font.Gotham
-    statsText.TextSize = 12
-    statsText.TextXAlignment = Enum.TextXAlignment.Left
-    statsText.TextYAlignment = Enum.TextYAlignment.Top
-    statsText.Parent = statsCard
-
-    local settingsCard = Instance.new("Frame")
-    settingsCard.Size = UDim2.new(0.58, -5, 1, 0)
-    settingsCard.Position = UDim2.new(0.42, 5, 0, 0)
-    settingsCard.BackgroundColor3 = Palette.Card
-    settingsCard.BorderSizePixel = 0
-    settingsCard.Parent = content
-    Instance.new("UICorner", settingsCard).CornerRadius = UDim.new(0, 10)
-
-    local toggleBtn = Instance.new("TextButton")
-    toggleBtn.Size = UDim2.new(1, -20, 0, 38)
-    toggleBtn.Position = UDim2.new(0, 10, 1, -48)
-    toggleBtn.BackgroundColor3 = Stats.Running and Palette.StopRed or Palette.StartGreen
-    toggleBtn.Text = Stats.Running and "STOP" or "START"
-    toggleBtn.TextColor3 = Palette.Text
-    toggleBtn.Font = Enum.Font.GothamBold
-    toggleBtn.TextSize = 14
-    toggleBtn.AutoButtonColor = false
-    toggleBtn.Parent = settingsCard
-    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 8)
-
-    toggleBtn.MouseButton1Click:Connect(function()
-        Stats.Running = not Stats.Running
-        Settings.Running = Stats.Running
-        saveSettings()
-        toggleBtn.Text = Stats.Running and "STOP" or "START"
-        toggleBtn.BackgroundColor3 = Stats.Running and Palette.StopRed or Palette.StartGreen
-    end)
-
-    local function makeSlider(name, key, min, max, yPos)
-        local c = Instance.new("Frame")
-        c.Size = UDim2.new(1, -20, 0, 40)
-        c.Position = UDim2.new(0, 10, 0, yPos)
-        c.BackgroundTransparency = 1
-        c.Parent = settingsCard
-
-        local lbl = Instance.new("TextLabel")
-        lbl.Size = UDim2.new(1, 0, 0, 15)
-        lbl.BackgroundTransparency = 1
-        lbl.Text = name .. ": " .. Settings[key]
-        lbl.TextColor3 = Palette.TextDim
-        lbl.Font = Enum.Font.Gotham
-        lbl.TextSize = 11
-        lbl.TextXAlignment = Enum.TextXAlignment.Left
-        lbl.Parent = c
-
-        local bg = Instance.new("Frame")
-        bg.Size = UDim2.new(1, 0, 0, 6)
-        bg.Position = UDim2.new(0, 0, 0, 25)
-        bg.BackgroundColor3 = Palette.SliderBg
-        bg.BorderSizePixel = 0
-        bg.Parent = c
-        Instance.new("UICorner", bg).CornerRadius = UDim.new(1, 0)
-
-        local fill = Instance.new("Frame")
-        fill.Size = UDim2.new((Settings[key] - min) / (max - min), 0, 1, 0)
-        fill.BackgroundColor3 = Palette.Accent
-        fill.BorderSizePixel = 0
-        fill.Parent = bg
-        Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
-
-        local knob = Instance.new("Frame")
-        knob.Size = UDim2.new(0, 14, 0, 14)
-        knob.Position = UDim2.new((Settings[key] - min) / (max - min), -7, 0.5, -7)
-        knob.BackgroundColor3 = Palette.Text
-        knob.BorderSizePixel = 0
-        knob.Parent = bg
-        Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
-        local knobStroke = Instance.new("UIStroke", knob)
-        knobStroke.Color = Palette.Accent
-        knobStroke.Thickness = 2
-        knobStroke.Parent = knob
-
-        local dragging = false
-        local function update(input)
-            local pos = math.clamp((input.Position.X - bg.AbsolutePosition.X) / bg.AbsoluteSize.X, 0, 1)
-            local val = math.floor(min + (max - min) * pos)
-            fill.Size = UDim2.new(pos, 0, 1, 0)
-            knob.Position = UDim2.new(pos, -7, 0.5, -7)
-            lbl.Text = name .. ": " .. val
-            Settings[key] = val
-        end
-
-        bg.InputBegan:Connect(function(i)
-            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-                dragging = true
-                main.Draggable = false
-                update(i)
-            end
-        end)
-        UserInputService.InputChanged:Connect(function(i)
-            if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then update(i) end
-        end)
-        UserInputService.InputEnded:Connect(function(i)
-            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-                if dragging then dragging = false; main.Draggable = true; saveSettings() end
-            end
-        end)
-    end
-
-    makeSlider("Walk Speed", "WalkSpeed", 30, 90, 10)
-    makeSlider("Fly Speed", "FlySpeed", 1, 100, 58)
-    makeSlider("Mans Radius", "MansRadius", 10, 50, 106)
-
-    task.spawn(function()
-        while gui.Parent do
-            local uptime = math.floor(tick() - Stats.StartTime)
-            Stats.StingersCollected = countStingers()
-            statsText.Text = string.format(
-                "Uptime\n  %02d:%02d\n\nVicious Killed\n  %d\n\nStingers\n  %d\n\nStatus\n  %s",
-                math.floor(uptime / 60), uptime % 60,
-                Stats.ViciousKilled, Stats.StingersCollected,
-                Stats.Running and "Running" or "Stopped"
-            )
-                task.wait(1)
-        end
-    end)
 end
 
 -- ====== ОСНОВНАЯ ЛОГИКА ======
@@ -622,51 +378,39 @@ local function huntViciousBee()
     end
     print("[Hunt] Улей занят")
 
-    -- 4. GUI (после улья)
-    if not getgenv().VichopGUI then
-        getgenv().VichopGUI = true
-        createGUI()
-        print("[Hunt] GUI создан")
+    -- 4. Летим к пчеле + мансинг
+    print("[Hunt] Летим к пчеле...")
+    for attempt = 1, 3 do
+        if not bee or not bee.Parent then break end
+        if flyTo(bee, Vector3.new(0, 5, 10)) then break end
+        task.wait(0.3)
     end
 
-    -- 5. Летим к пчеле + мансинг
-    local attackOk = pcall(function()
-        print("[Hunt] Летим к пчеле...")
-        for attempt = 1, 3 do
-            if not bee or not bee.Parent then break end
-            if flyTo(bee, Vector3.new(0, 5, 10)) then break end
-            task.wait(0.3)
-        end
-
-        print("[Hunt] Мансинг вокруг пчелы (радиус " .. (Settings.MansRadius or MANSING_RADIUS) .. ")...")
-        local stopMansing = startMansing(bee)
-
-        local maxWait = 90
-        local waited = 0
-        while waited < maxWait do
-            task.wait(0.3)
-            waited += 0.3
-            if not Stats.Running then break end
-            if not bee or not bee.Parent then
-                print("[Hunt] Пчела убита!")
-                break
-            end
-            local h = bee:FindFirstChild("Humanoid")
-            if h and h.Health <= 0 then
-                print("[Hunt] Пчела убита!")
-                break
-            end
-        end
-
-        if stopMansing then stopMansing() end
-    end)
-
-    if attackOk then
-        Stats.ViciousKilled = Stats.ViciousKilled + 1
-        Stats.StingersCollected = countStingers()
-    else
-        print("[Hunt] Ошибка в фазе атаки")
+    if not bee or not bee.Parent then
+        print("[Hunt] Пчела исчезла — хоп")
+        hopToRandomServer(); return
     end
+
+    print("[Hunt] Мансинг вокруг пчелы (радиус " .. MANSING_RADIUS .. ")...")
+    local stopMansing = startMansing(bee)
+
+    local maxWait = 90
+    local waited = 0
+    while waited < maxWait do
+        task.wait(0.3)
+        waited += 0.3
+        if not bee or not bee.Parent then
+            print("[Hunt] Пчела убита!")
+            break
+        end
+        local h = bee:FindFirstChild("Humanoid")
+        if h and h.Health <= 0 then
+            print("[Hunt] Пчела убита!")
+            break
+        end
+    end
+
+    if stopMansing then stopMansing() end
 
     print("[Hunt] Хоп на другой сервер...")
     hopToRandomServer()
@@ -674,7 +418,7 @@ end
 
 -- ====== ОБРАБОТКА ОШИБОК ТЕЛЕПОРТА ======
 TeleportService.TeleportInitFailed:Connect(function(_, result, err)
-        warn("[Teleport] Ошибка:", result.Name, err, "| Код:", result.Value)
+    warn("[Teleport] Ошибка:", result.Name, err, "| Код:", result.Value)
     getgenv().IsHopping = false
     task.wait(2)
     pcall(hopToRandomServer)
