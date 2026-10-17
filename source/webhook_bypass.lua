@@ -6,16 +6,12 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local RunService          = game:GetService("RunService")
 
 -- ====== НАСТРОЙКИ ======
-local HOP_DELAY             = 1
-local MOUNTAIN_MONDO_RADIUS = 200
-local MANSING_RADIUS        = 14
-local WALK_SPEED            = 60
-local FLY_SPEED             = 50
-local MAX_HISTORY           = 500
-local HISTORY_FILE          = "vichop_history.json"
-local CURRENT_FILE          = "vichop_current.txt"
-local API_PAGES             = 5
-local HOP_TRY_COUNT         = 15
+local HOP_DELAY      = 1
+local MANSING_RADIUS = 14
+local WALK_SPEED     = 60
+local FLY_SPEED      = 50
+local API_PAGES      = 5
+local HOP_TRY_COUNT  = 15
 
 -- ====== HTTP ======
 local function httpGet(url)
@@ -30,68 +26,19 @@ local function httpGet(url)
     return nil
 end
 
--- ====== ИСТОРИЯ В ФАЙЛЕ ======
-local function loadHistory()
-    if isfile and isfile(HISTORY_FILE) then
-        local ok, data = pcall(function() return HttpService:JSONDecode(readfile(HISTORY_FILE)) end)
-        if ok and type(data) == "table" then return data end
-    end
-    return {}
-end
+-- ====== ХОП (простой, без истории/ЧС) ======
+getgenv().IsHopping = getgenv().IsHopping or false
 
-local function saveHistory(history)
-    if writefile then
-        pcall(function() writefile(HISTORY_FILE, HttpService:JSONEncode(history)) end)
-    end
-end
-
-local function addToHistory(jobId)
-    if not jobId or jobId == "" then return end
-    local history = loadHistory()
-    for _, id in ipairs(history) do
-        if id == jobId then return end
-    end
-    table.insert(history, jobId)
-    while #history > MAX_HISTORY do
-        table.remove(history, 1)
-    end
-    saveHistory(history)
-    print("[History] Добавлен. Всего:", #history)
-end
-
--- ====== ТЕКУЩИЙ СЕРВЕР ======
-local function saveCurrentJob()
-    if writefile then
-        pcall(function() writefile(CURRENT_FILE, game.JobId) end)
-    end
-end
-
-local function getLastJob()
-    if isfile and isfile(CURRENT_FILE) then
-        local ok, data = pcall(readfile, CURRENT_FILE)
-        if ok then return data end
-    end
-    return nil
-end
-
-local function checkSameServer()
-    local last = getLastJob()
-    return last and last == game.JobId
-end
-
--- ====== СБОР СПИСКА ДОСТУПНЫХ СЕРВЕРОВ (с пагинацией) ======
-local function fetchAvailableServers()
+local function fetchServers()
     local all = {}
     local cursor = nil
     local pages = 0
+    local order = (math.random(1, 2) == 1) and "Asc" or "Desc"
 
     repeat
-        local order = (math.random(1, 2) == 1) and "Asc" or "Desc"
         local url = "https://games.roblox.com/v1/games/" .. game.PlaceId ..
             "/servers/Public?sortOrder=" .. order .. "&limit=100"
-        if cursor then
-            url = url .. "&cursor=" .. cursor
-        end
+        if cursor then url = url .. "&cursor=" .. cursor end
 
         local body = httpGet(url)
         if not body then break end
@@ -99,109 +46,74 @@ local function fetchAvailableServers()
         local ok, decoded = pcall(HttpService.JSONDecode, HttpService, body)
         if not ok or not decoded or not decoded.data then break end
 
-        for _, server in ipairs(decoded.data) do
-            table.insert(all, server)
+        for _, s in ipairs(decoded.data) do
+            table.insert(all, s)
         end
 
         cursor = decoded.nextPageCursor
         pages = pages + 1
     until not cursor or pages >= API_PAGES
 
-    print("[API] Всего серверов получено:", #all)
-
-    local currentJobId = game.JobId
-    local history = loadHistory()
-    local available = {}
-
-    -- НЕ фильтруем по playing — Roblox сам решит
-    for _, server in ipairs(all) do
-        if server.id ~= currentJobId then
-            local inHistory = false
-            for _, id in ipairs(history) do
-                if id == server.id then inHistory = true; break end
-            end
-            if not inHistory then
-                table.insert(available, server)
-            end
-        end
-    end
-
-    print("[API] Доступных (не текущий, не в истории):", #available)
-
-    -- Если пусто — очищаем историю и пробуем снова
-    if #available == 0 and #history > 0 then
-        print("[Hop] Все в истории — очищаем")
-        saveHistory({})
-        for _, server in ipairs(all) do
-            if server.id ~= currentJobId then
-                table.insert(available, server)
-            end
-        end
-        print("[API] После очистки доступных:", #available)
-    end
-
-    return available
+    return all
 end
 
--- ====== ХОП ======
-getgenv().IsHopping = getgenv().IsHopping or false
-
 local function hopToRandomServer(reason)
-    if getgenv().IsHopping then
-        print("[Hop] Уже хопаем — пропуск")
-        return
-    end
+    if getgenv().IsHopping then return end
     getgenv().IsHopping = true
 
     print("[Hop] Причина:", reason or "manual")
     local lp = Players.LocalPlayer
-    if not lp then
-        getgenv().IsHopping = false
-        return
-    end
-
-    addToHistory(game.JobId)
-    saveCurrentJob()
+    if not lp then getgenv().IsHopping = false return end
 
     task.wait(HOP_DELAY)
 
-    local available = fetchAvailableServers()
+    local servers = fetchServers()
 
-    if #available == 0 then
-        print("[Hop] Нет доступных серверов — НЕ хопаем, работаем на текущем")
+    -- Убираем ТОЛЬКО текущий сервер
+    local pool = {}
+    for _, s in ipairs(servers) do
+        if s.id ~= game.JobId then
+            table.insert(pool, s)
+        end
+    end
+
+    print("[Hop] Всего:", #servers, "| Доступно (не текущий):", #pool)
+
+    if #pool == 0 then
+        print("[Hop] ❌ Нет серверов — ждём 5 сек")
         getgenv().IsHopping = false
+        task.wait(5)
         return
     end
 
     -- Перемешиваем
-    for i = #available, 2, -1 do
+    for i = #pool, 2, -1 do
         local j = math.random(i)
-        available[i], available[j] = available[j], available[i]
+        pool[i], pool[j] = pool[j], pool[i]
     end
 
-    -- Перебираем серверы
-    local tries = math.min(HOP_TRY_COUNT, #available)
+    local tries = math.min(HOP_TRY_COUNT, #pool)
     for i = 1, tries do
-        local chosen = available[i]
-        print("[Hop] Пробуем:", chosen.id, "|", chosen.playing .. "/" .. chosen.maxPlayers)
+        local chosen = pool[i]
+        print("[Hop]", i, "->", chosen.id, "|", chosen.playing .. "/" .. chosen.maxPlayers)
 
         local ok = pcall(function()
             TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, lp)
         end)
+
         if ok then
             print("[Hop] ✅ Отправлен на", chosen.id)
             return
         end
 
-        print("[Hop] ❌ Упал, следующий")
         task.wait(0.3)
     end
 
-    print("[Hop] Все " .. tries .. " попыток упали — НЕ хопаем")
+    print("[Hop] ⚠️ Все попытки провалились")
     getgenv().IsHopping = false
 end
 
--- ====== ПОИСК ОБЪЕКТОВ ======
+-- ====== ПОИСК ПЧЕЛЫ ======
 local function findViciousBee()
     local monsters = workspace:FindFirstChild("Monsters")
     if not monsters then return nil end
@@ -261,7 +173,7 @@ local function flyTo(target, offset)
         local ap = Instance.new("AlignPosition")
         ap.Mode = Enum.PositionAlignmentMode.OneAttachment
         ap.Attachment0 = hrp:FindFirstChild("RootAttachment") or hrp.RootAttachment
-            ap.Responsiveness = 200
+        ap.Responsiveness = 200
         ap.MaxForce = math.huge
         ap.MaxVelocity = FLY_SPEED
         ap.Position = targetPos
@@ -375,7 +287,8 @@ local function startMansing(bee)
                 lastAttack = now
             end
         end
-            if now - lastJump > 1.2 then
+
+        if now - lastJump > 1.2 then
             local st = hum:GetState()
             if st == Enum.HumanoidStateType.Running or st == Enum.HumanoidStateType.Landed then
                 hum.Jump = true
@@ -441,22 +354,8 @@ end
 
 -- ====== ОСНОВНАЯ ЛОГИКА ======
 local function huntViciousBee()
-    print("[Hunt] === НОВЫЙ СЕРВЕР === JobId:", game.JobId)
+    print("[Hunt] === JobId:", game.JobId)
     task.wait(1)
-
-    -- Проверка «тот же сервер»
-    if checkSameServer() then
-        print("[Hunt] ⚠️ Тот же сервер")
-        local available = fetchAvailableServers()
-        if #available > 0 then
-            print("[Hunt] Есть другие — хопаем")
-            hopToRandomServer("same server")
-            return
-        else
-            print("[Hunt] Других нет — работаем на этом")
-        end
-    end
-    saveCurrentJob()
 
     -- Ждём персонажа
     local lp = Players.LocalPlayer
@@ -466,7 +365,7 @@ local function huntViciousBee()
         if char and char:FindFirstChild("HumanoidRootPart") then
             hrp = char.HumanoidRootPart
             break
-        end
+            end
         task.wait(0.2)
     end
     if not char or not hrp then
@@ -598,16 +497,12 @@ TeleportService.TeleportInitFailed:Connect(function(_, result, err)
     local code = result and result.Value or -1
     warn("[Teleport] Ошибка:", name, err, "| Код:", code)
     getgenv().IsHopping = false
-    task.wait(2)
+    task.wait(3)
     pcall(function() hopToRandomServer("after init fail") end)
 end)
 
 -- ====== СТАРТ ======
 print("[Init] JobId:", game.JobId)
-print("[Init] History:", #loadHistory())
-
-addToHistory(game.JobId)
-saveCurrentJob()
 
 task.wait(3)
 while true do
