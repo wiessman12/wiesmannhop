@@ -33,9 +33,9 @@ print("[Init] ✅ Игра и интерфейс полностью загруж
 
 -- ====== НАСТРОЙКИ (ИЗ ATLAS 2) ======
 _G.unlocktween = true
-local TWEEN_SPEED = 75       -- Скорость полета Tween (стадс/сек)
-local WALK_SPEED = 60        -- Скорость бега при мансинге
-local MANSING_RADIUS = 28    -- Радиус кружения вокруг Vicious Bee
+local TWEEN_SPEED = 90       -- Скорость полета Tween (стадс/сек)
+local WALK_SPEED = 50        -- Скорость бега при мансинге
+local MANSING_RADIUS = 15    -- Радиус кружения вокруг Vicious Bee
 local THORN_AVOID_DIST = 11  -- Безопасная дистанция отступа от шипов (WarningDisk)
 
 local DATA_FILE = "hop_data.json"
