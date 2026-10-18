@@ -19,34 +19,38 @@ local MANSING_MAX_DIST = 60
 local WALK_SPEED = 60
 
 -- ============================================================
--- ====== СЕРВЕР-ХОП (УЛУЧШЕННЫЙ) ======
+-- ====== СЕРВЕР-ХОП (ФИКС) ======
 -- ============================================================
 local FILE_NAME = "visited_servers.json"
-local EXPIRE_TIME = 20 * 60 -- 20 минут
-local HOP_DELAY = 2
+local EXPIRE_TIME = 15 * 60
+local HOP_DELAY = 1
 local HOP_TIMEOUT = 25
-local MAX_PAGES = 5
 
 getgenv().IsHopping = false
 
--- Универсальный HTTP GET
-local function httpGet(url)
-    for _, fn in ipairs({
-        function() return request and request({Url = url, Method = "GET"}) end,
-        function() return syn and syn.request and syn.request({Url = url, Method = "GET"}) end,
-        function() return http and http.request and http.request({Url = url, Method = "GET"}) end,
-        function() return game.HttpGet and game:HttpGet(url) end,
-    }) do
-        local ok, res = pcall(fn)
+local function httpRequest(url)
+    local req = (syn and syn.request) 
+        or (http and http.request) 
+        or http_request 
+        or (fluxus and fluxus.request) 
+        or request
+
+    if req then
+        local ok, res = pcall(req, {Url = url, Method = "GET"})
         if ok and res then
             local body = type(res) == "table" and (res.Body or res.body) or res
             if body and body ~= "" then return body end
         end
     end
+
+    if game.HttpGet then
+        local ok, body = pcall(game.HttpGet, game, url)
+        if ok and body and body ~= "" then return body end
+    end
+
     return nil
 end
 
--- Загрузка истории серверов из файла / памяти
 local function loadVisited()
     local visited = {}
     if readfile and isfile and isfile(FILE_NAME) then
@@ -60,7 +64,6 @@ local function loadVisited()
         visited = getgenv().VisitedServers or {}
     end
 
-    -- Очистка серверов старше EXPIRE_TIME
     local now = os.time()
     for id, timestamp in pairs(visited) do
         if type(timestamp) == "number" and (now - timestamp > EXPIRE_TIME) then
@@ -70,7 +73,6 @@ local function loadVisited()
     return visited
 end
 
--- Сохранение истории
 local function saveVisited(visited)
     getgenv().VisitedServers = visited
     if writefile then
@@ -80,25 +82,31 @@ local function saveVisited(visited)
     end
 end
 
--- Поиск доступных серверов с поддержкой пагинации
 local function fetchAvailableServers(visited)
     local available = {}
     local cursor = ""
-    local page = 0
+    local maxPages = 3
 
-    while page < MAX_PAGES do
-        page = page + 1
+    for page = 1, maxPages do
         local url = string.format(
-            "https://games.roblox.com/v1/games/%s/servers/Public?sortOrder=Desc&limit=100%s",
+            "https://games.roblox.com/v1/games/%s/servers/Public?sortOrder=Asc&limit=100%s",
             tostring(game.PlaceId),
             (cursor ~= "" and "&cursor=" .. cursor or "")
         )
 
-        local body = httpGet(url)
-        if not body then break end
+        local body = httpRequest(url)
+        if not body then
+            warn("[Hop] Ошибка: эксплойт не смог получить ответ от API Роблокса")
+            break
+        end
 
         local ok, decoded = pcall(HttpService.JSONDecode, HttpService, body)
-        if not ok or not decoded or not decoded.data then break end
+        if not ok or not decoded or not decoded.data then
+            warn("[Hop] Ошибка декодирования ответа API:", body:sub(1, 100))
+            break
+        end
+
+        print(string.format("[Hop] Страница %d: получено %d серверов от API", page, #decoded.data))
 
         for _, s in ipairs(decoded.data) do
             if s.id ~= game.JobId and s.playing < s.maxPlayers and not visited[s.id] then
@@ -106,10 +114,16 @@ local function fetchAvailableServers(visited)
             end
         end
 
+        if #available >= 15 then
+            break
+        end
+
         cursor = decoded.nextPageCursor
         if not cursor or cursor == "" then
             break
         end
+
+        task.wait(0.3)
     end
 
     return available
@@ -132,16 +146,14 @@ local function hopToRandomServer()
     end
 
     local visited = loadVisited()
-    -- Добавляем текущий сервер в список
     if game.JobId and game.JobId ~= "" then
         visited[game.JobId] = os.time()
     end
 
     local available = fetchAvailableServers(visited)
 
-    -- Если все найденные сервера уже посещались — сбрасываем историю
     if #available == 0 then
-        warn("[Hop] Все известные сервера посещены, сброс истории...")
+        print("[Hop] Доступные сервера исчерпаны, очистка истории...")
         visited = {}
         if game.JobId and game.JobId ~= "" then
             visited[game.JobId] = os.time()
@@ -155,7 +167,7 @@ local function hopToRandomServer()
         visited[chosen.id] = os.time()
         saveVisited(visited)
 
-        print(string.format("[Hop] Переход на сервер: %s (Игроков: %d/%d)", chosen.id, chosen.playing, chosen.maxPlayers))
+        print(string.format("[Hop] ✅ Переход на сервер: %s (%d/%d игроков)", chosen.id, chosen.playing, chosen.maxPlayers))
 
         local ok, err = pcall(function()
             TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, lp)
@@ -164,18 +176,17 @@ local function hopToRandomServer()
         if ok then
             return
         else
-            warn("[Hop] Ошибка TeleportToPlaceInstance:", err)
+            warn("[Hop] Ошибка вызова TeleportToPlaceInstance:", err)
         end
     else
-        warn("[Hop] Не удалось найти подходящий сервер через API!")
+        warn("[Hop] Не найдено подходящих серверов со свободными местами.")
     end
 
     getgenv().IsHopping = false
 end
 
--- Обработка сбоя телепортации
 TeleportService.TeleportInitFailed:Connect(function(player, result, errorMessage)
-    warn("[Teleport] Не удалось телепортироваться:", result.Name, errorMessage)
+    warn("[Teleport] Сбой телепортации:", result.Name, errorMessage)
     getgenv().IsHopping = false
     task.wait(3)
     hopToRandomServer()
