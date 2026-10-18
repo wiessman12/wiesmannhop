@@ -1,11 +1,10 @@
 -- ============================================================
--- VICIOUS BEE SERVER HOPPER (ATLAS 2 TWEEN & DODGE)
+-- VICIOUS BEE SERVER HOPPER (PRO ATLAS 2 AUDITED EDITION)
 -- ============================================================
 
--- ====== 1. ОЖИДАНИЕ ЗАГРУЗКИ ИГРЫ ======
+-- ====== 1. ОЖИДАНИЕ ЗАГРУЗКИ ИГРЫ (ATLAS 2 СТРОКИ 7-28) ======
 repeat task.wait(0.2) until game:IsLoaded()
 
--- ====== 2. СЕРВИСЫ ======
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
@@ -19,8 +18,8 @@ while not lp do
     lp = Players.LocalPlayer
 end
 
--- Ждем закрытия экрана загрузки Bee Swarm Simulator (из atlas2.lua)
-local playerGui = lp:WaitForChild("PlayerGui", 20)
+-- Ждем закрытия экрана загрузки Bee Swarm Simulator
+local playerGui = lp:WaitForChild("PlayerGui", 25)
 if playerGui then
     local loadingGui = playerGui:FindFirstChild("LoadingScreenGui")
     if loadingGui then
@@ -32,46 +31,51 @@ if playerGui then
 end
 print("[Init] ✅ Игра и интерфейс полностью загружены!")
 
--- ====== НАСТРОЙКИ ======
+-- ====== НАСТРОЙКИ (ИЗ ATLAS 2) ======
 _G.unlocktween = true
 local TWEEN_SPEED = 75       -- Скорость полета Tween (стадс/сек)
 local WALK_SPEED = 60        -- Скорость бега при мансинге
 local MANSING_RADIUS = 28    -- Радиус кружения вокруг Vicious Bee
-local THORN_AVOID_DIST = 10  -- Безопасная дистанция отступа от шипов
+local THORN_AVOID_DIST = 11  -- Безопасная дистанция отступа от шипов (WarningDisk)
 
 local DATA_FILE = "hop_data.json"
-local EXPIRE_TIME = 20 * 60  -- Сервер хранится 20 минут
+local EXPIRE_TIME = 20 * 60  -- Сервер хранится 20 минут в истории
 local HOP_DELAY = 1.5
 
 getgenv().IsHopping = false
 
 -- ============================================================
--- ====== ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ПОЛУЧЕНИЯ ПОЗИЦИИ ======
+-- ====== ИЗВЛЕЧЕНИЕ КООРДИНАТ (СТРОГО VECTOR3) ======
 -- ============================================================
 local function getPosition(obj)
-    if typeof(obj) == "Vector3" then
-        return obj
-    elseif typeof(obj) == "CFrame" then
-        return obj.Position
-    elseif typeof(obj) == "Instance" then
-        if obj:IsA("BasePart") then
-            return obj.Position
-        elseif obj:IsA("Model") then
-            return obj.PrimaryPart and obj.PrimaryPart.Position or obj:GetPivot().Position
-        elseif obj:IsA("ObjectValue") and obj.Value then
-            return getPosition(obj.Value)
-        end
-        -- Специфика ульев Bee Swarm Simulator (из atlas2.lua)
+    if not obj then return nil end
+    if typeof(obj) == "Vector3" then return obj end
+    if typeof(obj) == "CFrame" then return obj.Position end
+    if typeof(obj) == "Instance" then
+        -- Улей в Bee Swarm Simulator (строка 42590 atlas2.lua)
         if obj:FindFirstChild("patharrow") and obj.patharrow:FindFirstChild("Base") then
             return obj.patharrow.Base.Position
         end
         if obj:FindFirstChild("Platform") then
             local plat = obj.Platform
-            if plat:IsA("ObjectValue") and plat.Value then
-                return getPosition(plat.Value)
+            if plat:IsA("ObjectValue") and plat.Value and plat.Value:IsA("BasePart") then
+                return plat.Value.Position
             elseif plat:IsA("BasePart") then
                 return plat.Position
             end
+        end
+        if obj:IsA("BasePart") then
+            return obj.Position
+        elseif obj:IsA("Model") then
+            if obj.PrimaryPart then
+                return obj.PrimaryPart.Position
+            end
+            local ok, pivot = pcall(function() return obj:GetPivot().Position end)
+            if ok and pivot then return pivot end
+            local anyPart = obj:FindFirstChildWhichIsA("BasePart", true)
+            if anyPart then return anyPart.Position end
+        elseif obj:IsA("ObjectValue") and obj.Value then
+            return getPosition(obj.Value)
         end
         local anyPart = obj:FindFirstChildWhichIsA("BasePart", true)
         if anyPart then
@@ -82,7 +86,7 @@ local function getPosition(obj)
 end
 
 -- ============================================================
--- ====== СЕРВЕР-ХОП (ОЧЕРЕДЬ В ФАЙЛЕ — БЕЗ РЕЙТ-ЛИМИТОВ) ======
+-- ====== СЕРВЕР-ХОП С КЭШЕМ ОЧЕРЕДИ (БЕЗ РЕЙТ-ЛИМИТОВ) ======
 -- ============================================================
 local function httpRequest(url)
     local req = (syn and syn.request) 
@@ -244,13 +248,14 @@ local function tweenTo(target, speed, offset)
     if not hrp or not hum or hum.Health <= 0 then return false end
 
     local targetPos = getPosition(target)
-    if not targetPos then
-        warn("[Tween] ❌ Не удалось определить координаты цели:", tostring(target))
+    if not targetPos or typeof(targetPos) ~= "Vector3" then
+        warn("[Tween] ❌ Ошибка: не удалось получить координаты цели:", tostring(target))
         return false
     end
 
-    offset = offset or Vector3.zero
-    targetPos = targetPos + offset
+    if typeof(offset) == "Vector3" then
+        targetPos = targetPos + offset
+    end
 
     local maxVelocity = speed or TWEEN_SPEED
     local distance = (targetPos - hrp.Position).Magnitude
@@ -311,15 +316,18 @@ local function tweenTo(target, speed, offset)
 end
 
 -- ============================================================
--- ====== ПОИСК ОБЪЕКТОВ ======
+-- ====== ПОИСК ОБЪЕКТОВ (ВЕРСИЯ ATLAS 2) ======
 -- ============================================================
 local function findViciousBee()
     local m = workspace:FindFirstChild("Monsters")
     if not m then return nil end
     for _, o in ipairs(m:GetChildren()) do
-        if o.Name:find("Vicious Bee") then
-            local h = o:FindFirstChild("Humanoid")
-            if h and h.Health > 0 then return o end
+        -- Поддержка Vicious Bee и Gifted Vicious Bee
+        if (o.Name:find("Vicious") or o.Name:find("Gifted Vicious")) and o:FindFirstChild("HumanoidRootPart") then
+            local h = o:FindFirstChildOfClass("Humanoid")
+            if not h or h.Health > 0 then
+                return o
+            end
         end
     end
     return nil
@@ -341,7 +349,8 @@ local function getFieldAt(pos)
     if not fz then return nil end
     rp.FilterDescendantsInstances = { fz }
     rp.FilterType = Enum.RaycastFilterType.Include
-    local hit = workspace:Raycast(pos + Vector3.new(0, 15, 0), Vector3.new(0, -60, 0), rp)
+    -- Точный Raycast из atlas2.lua (строка 5009)
+    local hit = workspace:Raycast(pos + Vector3.new(0, 20, 0), Vector3.new(0, -70, 0), rp)
     if hit and hit.Instance and hit.Instance.Parent and hit.Instance.Parent.Name == "FlowerZones" then 
         return hit.Instance.Name 
     end
@@ -406,6 +415,7 @@ local function startMansing(bee)
     local lastAttack = 0
     local trackedAvoid = {}
 
+    -- Отслеживание шипов WarningDisk (строки 5711, 5773 в atlas2.lua)
     local particles = workspace:FindFirstChild("Particles")
     local connAdd, connRem
 
@@ -465,10 +475,12 @@ local function startMansing(bee)
         local distToBee = (hrp.Position - beeHrp.Position).Magnitude
 
         if distToBee > 75 then
-            tweenTo(beeHrp.Position, TWEEN_SPEED, Vector3.new(0, 5, 10))
+            local pos = getPosition(beeHrp)
+            if pos then tweenTo(pos, TWEEN_SPEED, Vector3.new(0, 5, 10)) end
             return
         end
 
+        -- Клик тулзой для атаки пчелами
         if now - lastAttack > 0.2 then
             local tool = charStep:FindFirstChildOfClass("Tool")
             if tool and distToBee < 35 then
@@ -477,6 +489,7 @@ local function startMansing(bee)
             end
         end
 
+        -- Кружение вокруг пчелы
         angle = angle + (WALK_SPEED / MANSING_RADIUS) * dt
         local targetPos = beeHrp.Position + Vector3.new(
             math.cos(angle) * MANSING_RADIUS, 
@@ -484,13 +497,14 @@ local function startMansing(bee)
             math.sin(angle) * MANSING_RADIUS
         )
 
+        -- Направление к шипу WaitingThorn, если он появился
         local waitingThorn = getWaitingThorn()
         if waitingThorn and waitingThorn.Parent then
             local toThorn = (waitingThorn.Position - beeHrp.Position).Unit
             targetPos = waitingThorn.Position - toThorn * 4
         end
 
-        -- Уворот от шипов (WarningDisks)
+        -- Уворот от шипов WarningDisk
         for threat, dangerDist in pairs(trackedAvoid) do
             if threat and threat.Parent then
                 local threatPos = threat.Position
@@ -511,6 +525,7 @@ local function startMansing(bee)
             end
         end
 
+        -- Корректировка высоты по цветкам
         local rp = RaycastParams.new()
         rp.FilterDescendantsInstances = { charStep }
         rp.FilterType = Enum.RaycastFilterType.Exclude
@@ -603,7 +618,14 @@ local function huntViciousBee()
     end
 
     print("[Hunt] 🚀 Tween к улью:", hive.Name)
-    local reachedHive = tweenTo(hive, TWEEN_SPEED, Vector3.new(0, 3, 0))
+    local hivePos = getPosition(hive)
+    if not hivePos then
+        print("[Hunt] ❌ Не удалось определить координаты улья — ХОП")
+        hopToRandomServer()
+        return
+    end
+
+    local reachedHive = tweenTo(hivePos, TWEEN_SPEED, Vector3.new(0, 3, 0))
     if not reachedHive then
         print("[Hunt] ❌ Не долетели до улья — ХОП")
         hopToRandomServer()
@@ -630,10 +652,10 @@ local function huntViciousBee()
 
     print("[Hunt] 🚀 Tween к Vicious Bee на поле...")
     local waitingThorn = getWaitingThorn()
-    if waitingThorn then
-        tweenTo(waitingThorn, TWEEN_SPEED, Vector3.new(0, 4, 0))
-    else
-        tweenTo(beeHrp, TWEEN_SPEED, Vector3.new(0, 6, 12))
+    local targetPos = (waitingThorn and getPosition(waitingThorn)) or getPosition(beeHrp)
+
+    if targetPos then
+        tweenTo(targetPos, TWEEN_SPEED, Vector3.new(0, 6, 10))
     end
 
     -- 3. Запуск боя и мансинга
@@ -641,17 +663,64 @@ local function huntViciousBee()
     local stopMansing = startMansing(bee)
 
     local maxWait, waited = 90, 0
+    local lastDeathPos = getPosition(beeHrp) or hrp.Position
+
     while waited < maxWait do
         task.wait(0.3)
         waited = waited + 0.3
-        local h = bee:FindFirstChild("Humanoid")
-        if not bee.Parent or not h or h.Health <= 0 then
-            print("[Hunt] 🎉 Vicious Bee убита!")
+
+        -- Проверка на смерть персонажа игрока
+        local myChar = curLp.Character
+        local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
+        if not myHum or myHum.Health <= 0 then
+            warn("[Hunt] 💀 Персонаж погиб! Ожидание возрождения...")
+            if stopMansing then stopMansing() end
+            
+            -- Ждем респавна
+            curLp.CharacterAdded:Wait()
+            task.wait(1.5)
+            
+            -- Если пчела еще жива — летим обратно
+            if bee and bee.Parent then
+                local bHrp = bee:FindFirstChild("HumanoidRootPart")
+                if bHrp then
+                    print("[Hunt] 🚀 Возврат на поле боя к пчеле...")
+                    tweenTo(bHrp.Position, TWEEN_SPEED, Vector3.new(0, 6, 10))
+                    stopMansing = startMansing(bee)
+                end
+            else
+                break
+            end
+        end
+
+        if bee and bee.Parent then
+            local bHrp = bee:FindFirstChild("HumanoidRootPart")
+            if bHrp then lastDeathPos = bHrp.Position end
+            local h = bee:FindFirstChildOfClass("Humanoid")
+            if h and h.Health <= 0 then
+                break
+            end
+        else
             break
         end
     end
 
     if stopMansing then stopMansing() end
+
+    -- 4. Сбор жал (Stingers) перед уходом с сервера
+    print("[Hunt] 🎉 Vicious Bee убита! Собираем жала (Stingers)...")
+    local collectStart = tick()
+    while tick() - collectStart < 3.5 do
+        local myChar = curLp.Character
+        local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
+        if myHum and myHum.Health > 0 then
+            -- Крутимся вокруг точки смерти для гарантированного подбора всех выпавших жал
+            local angle = (tick() - collectStart) * 5
+            local offset = Vector3.new(math.cos(angle) * 12, 0, math.sin(angle) * 12)
+            myHum:MoveTo(lastDeathPos + offset)
+        end
+        task.wait(0.2)
+    end
 
     print("[Hunt] Хоп на следующий сервер...")
     hopToRandomServer()
