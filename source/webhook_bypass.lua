@@ -42,7 +42,7 @@ local THORN_AVOID_DIST = 11  -- Безопасная дистанция отст
 local DATA_FILE = "hop_data.json"
 local EXPIRE_TIME = 20 * 60   -- Сервер хранится 20 минут в черном списке
 local QUEUE_MAX_AGE = 8 * 60  -- Список серверов обновляется раз в 8 минут (защита от закрытых серверов)
-local HOP_DELAY = 1.5         -- Задержка хопа (не больше 3 сек)
+local HOP_DELAY = 2.5         -- Задержка хопа (не больше 3 сек)
 
 getgenv().IsHopping = false
 
