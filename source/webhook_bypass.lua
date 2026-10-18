@@ -324,6 +324,7 @@ end
 -- ============================================================
 local function occupyHive(hive)
     local lp = Players.LocalPlayer
+    if not lp then return false end
     local s = tick()
     while not lp:FindFirstChild("Honeycomb") and tick() - s < 5 do
         local prompt = hive:FindFirstChildOfClass("ProximityPrompt")
@@ -365,16 +366,17 @@ local function startMansing(bee)
         if mh then mt = mh.Position end
     end
     local thorn = getWaitingThorn()
-    local c0 = Players.LocalPlayer.Character
+    local lp0 = Players.LocalPlayer
+    if not lp0 then return function() end end
+    local c0 = lp0.Character
     if c0 then
         local h0 = c0:FindFirstChildOfClass("Humanoid")
         if h0 then h0.PlatformStand = false; h0.WalkSpeed = 16 end
         local r0 = c0:FindFirstChild("HumanoidRootPart")
         if r0 then r0.CanCollide = true end
     end
-    local sc = Players.LocalPlayer.Character
-    if sc and bee and bee.Parent then
-        local h, b = sc:FindFirstChild("HumanoidRootPart"), bee:FindFirstChild("HumanoidRootPart")
+    if c0 and bee and bee.Parent then
+        local h, b = c0:FindFirstChild("HumanoidRootPart"), bee:FindFirstChild("HumanoidRootPart")
         if h and b then
             local v = h.Position - b.Position
             if v.Magnitude > 1 then angle = math.atan2(v.Z, v.X) end
@@ -383,7 +385,9 @@ local function startMansing(bee)
     conn = RunService.RenderStepped:Connect(function(dt)
         if not running then return end
         dt = math.min(dt, 0.05)
-        local char = Players.LocalPlayer.Character
+        local lp = Players.LocalPlayer
+        if not lp then return end
+        local char = lp.Character
         if not char then return end
         local hrp, hum = char:FindFirstChild("HumanoidRootPart"), char:FindFirstChildOfClass("Humanoid")
         if not hrp or not hum or not bee or not bee.Parent then return end
@@ -434,12 +438,15 @@ local function startMansing(bee)
     return function()
         running = false
         if conn then conn:Disconnect() end
-        local char = Players.LocalPlayer.Character
-        if char then
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            if hum then hum.PlatformStand = false; hum.WalkSpeed = 16 end
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            if hrp then hrp.CanCollide = true end
+        local lp = Players.LocalPlayer
+        if lp then
+            local char = lp.Character
+            if char then
+                local hum = char:FindFirstChildOfClass("Humanoid")
+                if hum then hum.PlatformStand = false; hum.WalkSpeed = 16 end
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                if hrp then hrp.CanCollide = true end
+            end
         end
     end
 end
@@ -449,40 +456,94 @@ end
 -- ============================================================
 local function huntViciousBee()
     print("[Hunt] === НОВЫЙ СЕРВЕР ===")
+
+    -- Ждём LocalPlayer (после телепорта его может не быть)
     local lp = Players.LocalPlayer
+    local waitStart = tick()
+    while not lp and tick() - waitStart < 15 do
+        task.wait(0.2)
+        lp = Players.LocalPlayer
+    end
+    if not lp then
+        print("[Hunt] ❌ LocalPlayer не появился — хоп")
+        hopToRandomServer()
+        return
+    end
+
+    -- Ждём персонажа
     local char, hrp
     for _ = 1, 30 do
         char = lp.Character
-        if char and char:FindFirstChild("HumanoidRootPart") then hrp = char.HumanoidRootPart; break end
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            hrp = char.HumanoidRootPart
+            break
+        end
         task.wait(0.2)
     end
-    if not char or not hrp then print("[Hunt] Персонаж не прогрузился — хоп"); hopToRandomServer(); return end
+    if not char or not hrp then
+        print("[Hunt] Персонаж не прогрузился — хоп")
+        hopToRandomServer()
+        return
+    end
+
     local monsters = workspace:WaitForChild("Monsters", 3)
-    if not monsters then print("[Hunt] Monsters не прогрузились — хоп"); hopToRandomServer(); return end
+    if not monsters then
+        print("[Hunt] Monsters не прогрузились — хоп")
+        hopToRandomServer()
+        return
+    end
+
     task.wait(1)
+
     print("[Hunt] Ищем Vicious Bee...")
     local bee = findViciousBee()
-    if not bee then print("[Hunt] ❌ Vicious не найден — ХОП"); hopToRandomServer(); return end
+    if not bee then
+        print("[Hunt] ❌ Vicious не найден — ХОП")
+        hopToRandomServer()
+        return
+    end
     print("[Hunt] ✅ Vicious найден:", bee.Name)
-    if shouldHopFromBee(bee) then print("[Hunt] ❌ Vicious на Mountain Top — ХОП"); hopToRandomServer(); return end
+
+    if shouldHopFromBee(bee) then
+        print("[Hunt] ❌ Vicious на Mountain Top — ХОП")
+        hopToRandomServer()
+        return
+    end
     print("[Hunt] ✅ Vicious не на горе — летим убивать")
+
     print("[Hunt] Ищем улей...")
     local hive = findFreeHive()
-    if not hive then print("[Hunt] ❌ Улей не найден — ХОП"); hopToRandomServer(); return end
+    if not hive then
+        print("[Hunt] ❌ Улей не найден — ХОП")
+        hopToRandomServer()
+        return
+    end
     print("[Hunt] ✅ Выбран улей:", hive.Name)
+
     local platform = hive:FindFirstChild("Platform")
     local ht = (platform and platform.Value) or hive
+
     local reached = false
     for _ = 1, 3 do
         if flyTo(ht, Vector3.new(0, 3, 0)) then reached = true; break end
         task.wait(0.3)
     end
-    if not reached then print("[Hunt] ❌ Не долетели до улья — ХОП"); hopToRandomServer(); return end
+    if not reached then
+        print("[Hunt] ❌ Не долетели до улья — ХОП")
+        hopToRandomServer()
+        return
+    end
+
     task.wait(0.7)
     print("[Hunt] Занимаем улей...")
     local occupied = occupyHive(hive)
-    if not occupied then print("[Hunt] ❌ Улей не занят — ХОП"); hopToRandomServer(); return end
+    if not occupied then
+        print("[Hunt] ❌ Улей не занят — ХОП")
+        hopToRandomServer()
+        return
+    end
     print("[Hunt] ✅ Улей занят")
+
     local thorn = getWaitingThorn()
     if thorn then
         print("[Hunt] Летим к шипу...")
@@ -497,16 +558,23 @@ local function huntViciousBee()
             task.wait(0.3)
         end
     end
+
     print("[Hunt] Мансинг вокруг пчелы...")
     local stopMansing = startMansing(bee)
+
     local maxWait, waited = 90, 0
     while waited < maxWait do
         task.wait(0.3)
         waited += 0.3
         local h = bee:FindFirstChild("Humanoid")
-        if not bee.Parent or not h or h.Health <= 0 then print("[Hunt] ✅ Пчела убита!"); break end
+        if not bee.Parent or not h or h.Health <= 0 then
+            print("[Hunt] ✅ Пчела убита!")
+            break
+        end
     end
+
     if stopMansing then stopMansing() end
+
     print("[Hunt] Хоп на следующий сервер...")
     hopToRandomServer()
 end
@@ -516,11 +584,14 @@ end
 -- ============================================================
 task.wait(5)
 while true do
-    if not getgenv().IsHopping then
+    -- Проверяем LocalPlayer перед вызовом
+    if Players.LocalPlayer and not getgenv().IsHopping then
         local ok, err = pcall(huntViciousBee)
         if not ok then
             warn("[Hunt] Ошибка в цикле:", err)
-            pcall(hopToRandomServer)
+            if Players.LocalPlayer then
+                pcall(hopToRandomServer)
+            end
         end
     end
     task.wait(1)
