@@ -1,5 +1,5 @@
 -- ============================================================
--- VICIOUS BEE SERVER HOPPER (PRO ATLAS 2 AUDITED EDITION)
+-- VICIOUS BEE SERVER HOPPER (PRO ATLAS 2 AUDITED + ANTI-279)
 -- ============================================================
 
 -- ====== 1. ОЖИДАНИЕ ЗАГРУЗКИ ИГРЫ (ATLAS 2 СТРОКИ 7-28) ======
@@ -10,6 +10,7 @@ local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local RunService = game:GetService("RunService")
+local GuiService = game:GetService("GuiService")
 
 -- Ждем появления LocalPlayer
 local lp = Players.LocalPlayer
@@ -31,16 +32,17 @@ if playerGui then
 end
 print("[Init] ✅ Игра и интерфейс полностью загружены!")
 
--- ====== НАСТРОЙКИ (ИЗ ATLAS 2) ======
+-- ====== НАСТРОЙКИ ======
 _G.unlocktween = true
-local TWEEN_SPEED = 90       -- Скорость полета Tween (стадс/сек)
-local WALK_SPEED = 50        -- Скорость бега при мансинге
-local MANSING_RADIUS = 15    -- Радиус кружения вокруг Vicious Bee
+local TWEEN_SPEED = 75       -- Скорость полета Tween (стадс/сек)
+local WALK_SPEED = 60        -- Скорость бега при мансинге
+local MANSING_RADIUS = 28    -- Радиус кружения вокруг Vicious Bee
 local THORN_AVOID_DIST = 11  -- Безопасная дистанция отступа от шипов (WarningDisk)
 
 local DATA_FILE = "hop_data.json"
-local EXPIRE_TIME = 20 * 60  -- Сервер хранится 20 минут в истории
-local HOP_DELAY = 1.5
+local EXPIRE_TIME = 20 * 60   -- Сервер хранится 20 минут в черном списке
+local QUEUE_MAX_AGE = 8 * 60  -- Список серверов обновляется раз в 8 минут (защита от закрытых серверов)
+local HOP_DELAY = 1.5         -- Задержка хопа (не больше 3 сек)
 
 getgenv().IsHopping = false
 
@@ -52,7 +54,6 @@ local function getPosition(obj)
     if typeof(obj) == "Vector3" then return obj end
     if typeof(obj) == "CFrame" then return obj.Position end
     if typeof(obj) == "Instance" then
-        -- Улей в Bee Swarm Simulator (строка 42590 atlas2.lua)
         if obj:FindFirstChild("patharrow") and obj.patharrow:FindFirstChild("Base") then
             return obj.patharrow.Base.Position
         end
@@ -86,7 +87,7 @@ local function getPosition(obj)
 end
 
 -- ============================================================
--- ====== СЕРВЕР-ХОП С КЭШЕМ ОЧЕРЕДИ (БЕЗ РЕЙТ-ЛИМИТОВ) ======
+-- ====== СЕРВЕР-ХОП С ЗАЩИТОЙ ОТ МЕРТВЫХ СЕРВЕРОВ (ОШИБКИ 279) ======
 -- ============================================================
 local function httpRequest(url)
     local req = (syn and syn.request) 
@@ -111,7 +112,7 @@ local function httpRequest(url)
 end
 
 local function loadData()
-    local defaultData = { queue = {}, visited = {} }
+    local defaultData = { queue = {}, visited = {}, fetchedAt = 0 }
     if readfile and isfile and isfile(DATA_FILE) then
         local ok, data = pcall(function()
             return HttpService:JSONDecode(readfile(DATA_FILE))
@@ -119,6 +120,8 @@ local function loadData()
         if ok and type(data) == "table" then
             data.queue = data.queue or {}
             data.visited = data.visited or {}
+            data.fetchedAt = data.fetchedAt or 0
+            
             local now = os.time()
             for id, t in pairs(data.visited) do
                 if type(t) == "number" and (now - t > EXPIRE_TIME) then
@@ -139,8 +142,9 @@ local function saveData(data)
     end
 end
 
+-- Запрашивает свежие сервера и фильтрует надежные
 local function fetchNewServers(data)
-    print("[Hop] 🌐 Запрос новой пачки серверов от API...")
+    print("[Hop] 🌐 Запрос свежей пачки серверов от API...")
     local url = string.format("https://games.roblox.com/v1/games/%s/servers/Public?sortOrder=Asc&limit=100", tostring(game.PlaceId))
     local body = httpRequest(url)
     if not body then return false end
@@ -151,16 +155,32 @@ local function fetchNewServers(data)
         return false
     end
 
-    local added = 0
+    local stableServers = {}
+    local otherServers = {}
+
     for _, s in ipairs(decoded.data) do
         if s.id ~= game.JobId and s.playing < s.maxPlayers and not data.visited[s.id] then
-            table.insert(data.queue, s.id)
-            added = added + 1
+            -- Сервера с 2-5 игроками живые и активные (не закроются внезапно)
+            if s.playing >= 2 then
+                table.insert(stableServers, s.id)
+            else
+                table.insert(otherServers, s.id)
+            end
         end
     end
 
-    print(string.format("[Hop] ✅ Получено %d серверов в очередь!", added))
-    return added > 0
+    data.queue = {}
+    -- Сначала добавляем стабильные сервера, затем остальные
+    for _, id in ipairs(stableServers) do
+        table.insert(data.queue, id)
+    end
+    for _, id in ipairs(otherServers) do
+        table.insert(data.queue, id)
+    end
+
+    data.fetchedAt = os.time()
+    print(string.format("[Hop] ✅ Получено %d серверов (Стабильных: %d)!", #data.queue, #stableServers))
+    return #data.queue > 0
 end
 
 local function hopToRandomServer()
@@ -180,6 +200,13 @@ local function hopToRandomServer()
         data.visited[game.JobId] = os.time()
     end
 
+    -- Если пачка серверов устарела (старше 8 минут) — очищаем, чтобы не ловить Ошибку 279
+    local now = os.time()
+    if (now - (data.fetchedAt or 0)) > QUEUE_MAX_AGE then
+        data.queue = {}
+    end
+
+    -- Очищаем очередь от уже посещенных
     local validQueue = {}
     for _, id in ipairs(data.queue) do
         if not data.visited[id] and id ~= game.JobId then
@@ -198,13 +225,14 @@ local function hopToRandomServer()
             pcall(function() TeleportService:Teleport(game.PlaceId, currentLp) end)
             
             local w = tick()
-            while tick() - w < 12 do task.wait(1) end
+            while tick() - w < 10 do task.wait(1) end
             getgenv().IsHopping = false
             return
         end
     end
 
-    local chosenIndex = math.random(1, #data.queue)
+    -- Извлекаем первый доступный сервер
+    local chosenIndex = math.random(1, math.min(#data.queue, 15)) -- берем из начала списка
     local targetJobId = table.remove(data.queue, chosenIndex)
 
     data.visited[targetJobId] = os.time()
@@ -218,7 +246,7 @@ local function hopToRandomServer()
 
     if ok then
         local startWait = tick()
-        while tick() - startWait < 15 and getgenv().IsHopping do
+        while tick() - startWait < 12 and getgenv().IsHopping do
             task.wait(1)
         end
     else
@@ -227,10 +255,22 @@ local function hopToRandomServer()
     end
 end
 
+-- ====== АВТО-РЕКОННЕКТ ПРИ ОШИБКЕ 279 / ДИСКОННЕКТЕ (ИЗ ATLAS 2 СТРОКА 5592) ======
+GuiService.ErrorMessageChanged:Connect(function(msg)
+    if msg and msg ~= "" then
+        warn(string.format("[Auto-Reconnect] ⚠️ Перехвачена ошибка соединения (%s). Авто-хоп через 2 сек...", tostring(msg)))
+        pcall(function() TeleportService:TeleportCancel() end)
+        getgenv().IsHopping = false
+        task.wait(2) -- Задержка 2с (не более 3с)
+        hopToRandomServer()
+    end
+end)
+
 TeleportService.TeleportInitFailed:Connect(function(_, result, err)
-    warn("[Teleport] Не удалось войти:", result.Name, err)
+    warn("[Teleport] ❌ Не удалось войти на сервер:", result.Name, err)
+    pcall(function() TeleportService:TeleportCancel() end)
     getgenv().IsHopping = false
-    task.wait(3)
+    task.wait(2) -- Задержка 2с (не более 3с)
     hopToRandomServer()
 end)
 
@@ -316,13 +356,12 @@ local function tweenTo(target, speed, offset)
 end
 
 -- ============================================================
--- ====== ПОИСК ОБЪЕКТОВ (ВЕРСИЯ ATLAS 2) ======
+-- ====== ПОИСК ОБЪЕКТОВ ======
 -- ============================================================
 local function findViciousBee()
     local m = workspace:FindFirstChild("Monsters")
     if not m then return nil end
     for _, o in ipairs(m:GetChildren()) do
-        -- Поддержка Vicious Bee и Gifted Vicious Bee
         if (o.Name:find("Vicious") or o.Name:find("Gifted Vicious")) and o:FindFirstChild("HumanoidRootPart") then
             local h = o:FindFirstChildOfClass("Humanoid")
             if not h or h.Health > 0 then
@@ -349,7 +388,6 @@ local function getFieldAt(pos)
     if not fz then return nil end
     rp.FilterDescendantsInstances = { fz }
     rp.FilterType = Enum.RaycastFilterType.Include
-    -- Точный Raycast из atlas2.lua (строка 5009)
     local hit = workspace:Raycast(pos + Vector3.new(0, 20, 0), Vector3.new(0, -70, 0), rp)
     if hit and hit.Instance and hit.Instance.Parent and hit.Instance.Parent.Name == "FlowerZones" then 
         return hit.Instance.Name 
@@ -415,7 +453,6 @@ local function startMansing(bee)
     local lastAttack = 0
     local trackedAvoid = {}
 
-    -- Отслеживание шипов WarningDisk (строки 5711, 5773 в atlas2.lua)
     local particles = workspace:FindFirstChild("Particles")
     local connAdd, connRem
 
@@ -480,7 +517,6 @@ local function startMansing(bee)
             return
         end
 
-        -- Клик тулзой для атаки пчелами
         if now - lastAttack > 0.2 then
             local tool = charStep:FindFirstChildOfClass("Tool")
             if tool and distToBee < 35 then
@@ -489,7 +525,6 @@ local function startMansing(bee)
             end
         end
 
-        -- Кружение вокруг пчелы
         angle = angle + (WALK_SPEED / MANSING_RADIUS) * dt
         local targetPos = beeHrp.Position + Vector3.new(
             math.cos(angle) * MANSING_RADIUS, 
@@ -497,14 +532,13 @@ local function startMansing(bee)
             math.sin(angle) * MANSING_RADIUS
         )
 
-        -- Направление к шипу WaitingThorn, если он появился
         local waitingThorn = getWaitingThorn()
         if waitingThorn and waitingThorn.Parent then
             local toThorn = (waitingThorn.Position - beeHrp.Position).Unit
             targetPos = waitingThorn.Position - toThorn * 4
         end
 
-        -- Уворот от шипов WarningDisk
+        -- Уворот от шипов
         for threat, dangerDist in pairs(trackedAvoid) do
             if threat and threat.Parent then
                 local threatPos = threat.Position
@@ -525,7 +559,6 @@ local function startMansing(bee)
             end
         end
 
-        -- Корректировка высоты по цветкам
         local rp = RaycastParams.new()
         rp.FilterDescendantsInstances = { charStep }
         rp.FilterType = Enum.RaycastFilterType.Exclude
@@ -608,7 +641,7 @@ local function huntViciousBee()
     end
     print("[Hunt] ✅ Vicious не на горе — готовимся к охоте")
 
-    -- 1. Tween к свободному улью (позиция по стрелке patharrow.Base из Atlas 2)
+    -- 1. Tween к свободному улью
     print("[Hunt] Ищем улей...")
     local hive = findFreeHive()
     if not hive then
@@ -676,11 +709,9 @@ local function huntViciousBee()
             warn("[Hunt] 💀 Персонаж погиб! Ожидание возрождения...")
             if stopMansing then stopMansing() end
             
-            -- Ждем респавна
             curLp.CharacterAdded:Wait()
             task.wait(1.5)
             
-            -- Если пчела еще жива — летим обратно
             if bee and bee.Parent then
                 local bHrp = bee:FindFirstChild("HumanoidRootPart")
                 if bHrp then
@@ -714,7 +745,6 @@ local function huntViciousBee()
         local myChar = curLp.Character
         local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
         if myHum and myHum.Health > 0 then
-            -- Крутимся вокруг точки смерти для гарантированного подбора всех выпавших жал
             local angle = (tick() - collectStart) * 5
             local offset = Vector3.new(math.cos(angle) * 12, 0, math.sin(angle) * 12)
             myHum:MoveTo(lastDeathPos + offset)
