@@ -1,24 +1,18 @@
 -- ============================================================
--- VICIOUS BEE SERVER HOPPER (ATLAS 2 INITIALIZATION & DODGE)
+-- VICIOUS BEE SERVER HOPPER (ATLAS 2 TWEEN & DODGE)
 -- ============================================================
 
--- ====== 1. ОЖИДАНИЕ ЗАГРУЗКИ ИГРЫ (КАК В ATLAS 2) ======
-if not game:IsLoaded() then
-    print("[Init] ⏳ Ожидание полной загрузки игры (game:IsLoaded)...")
-    game.Loaded:Wait()
-end
+-- ====== 1. ОЖИДАНИЕ ЗАГРУЗКИ ИГРЫ (БЕЗОПАСНО) ======
+repeat task.wait(0.2) until game:IsLoaded()
 
-local function getService(serviceName)
-    return cloneref and cloneref(game:GetService(serviceName)) or game:GetService(serviceName)
-end
+-- ====== 2. СЕРВИСЫ (НАПРЯМУЮ БЕЗ CLONEREF) ======
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local RunService = game:GetService("RunService")
 
-local Players = getService("Players")
-local HttpService = getService("HttpService")
-local TeleportService = getService("TeleportService")
-local VirtualInputManager = getService("VirtualInputManager")
-local RunService = getService("RunService")
-
--- Ждем пока появится объект LocalPlayer
+-- Ждем пока появится LocalPlayer
 local lp = Players.LocalPlayer
 while not lp do
     task.wait(0.3)
@@ -26,14 +20,13 @@ while not lp do
 end
 
 -- Ждем закрытия экрана загрузки Bee Swarm Simulator (из atlas2.lua)
-print("[Init] ⏳ Ожидание закрытия экрана загрузки плейса...")
-local playerGui = lp:WaitForChild("PlayerGui", 25)
+local playerGui = lp:WaitForChild("PlayerGui", 20)
 if playerGui then
-    local loadingGui = playerGui:WaitForChild("LoadingScreenGui", 10)
+    local loadingGui = playerGui:FindFirstChild("LoadingScreenGui")
     if loadingGui then
         local msg = loadingGui:FindFirstChild("LoadingMessage")
         while msg and msg.Visible do
-            RunService.Heartbeat:Wait()
+            task.wait(0.3)
         end
     end
 end
@@ -47,13 +40,13 @@ local MANSING_RADIUS = 28    -- Радиус кружения вокруг Vicio
 local THORN_AVOID_DIST = 10  -- Безопасная дистанция отступа от шипов
 
 local DATA_FILE = "hop_data.json"
-local EXPIRE_TIME = 20 * 60  -- Сервер забывается через 20 минут
+local EXPIRE_TIME = 20 * 60  -- Сервер хранится 20 минут
 local HOP_DELAY = 1.5
 
 getgenv().IsHopping = false
 
 -- ============================================================
--- ====== СЕРВЕР-ХОП (С КЭШЕМ ОЧЕРЕДИ — БЕЗ РЕЙТ-ЛИМИТОВ) ======
+-- ====== СЕРВЕР-ХОП (ОЧЕРЕДЬ В ФАЙЛЕ — БЕЗ РЕЙТ-ЛИМИТОВ) ======
 -- ============================================================
 local function httpRequest(url)
     local req = (syn and syn.request) 
@@ -112,7 +105,7 @@ local function fetchNewServers(data)
     local body = httpRequest(url)
     if not body then return false end
 
-    local ok, decoded = pcall(HttpService:JSONDecode, HttpService, body)
+    local ok, decoded = pcall(HttpService.JSONDecode, HttpService, body)
     if not ok or not decoded or decoded.errors or not decoded.data then
         warn("[Hop] ⚠️ Ошибка ответа API. Используем резервный вход.")
         return false
@@ -164,7 +157,6 @@ local function hopToRandomServer()
             warn("[Hop] Очередь пуста. Резервный хоп через матчмейкинг...")
             pcall(function() TeleportService:Teleport(game.PlaceId, currentLp) end)
             
-            -- Ожидаем телепортации
             local w = tick()
             while tick() - w < 12 do task.wait(1) end
             getgenv().IsHopping = false
@@ -185,7 +177,7 @@ local function hopToRandomServer()
     end)
 
     if ok then
-        -- Замораживаем выполнение скрипта, пока идет процесс телепортации
+        -- Ждем завершения телепортации, чтобы не крутить цикл охоты
         local startWait = tick()
         while tick() - startWait < 15 and getgenv().IsHopping do
             task.wait(1)
@@ -204,7 +196,7 @@ TeleportService.TeleportInitFailed:Connect(function(_, result, err)
 end)
 
 -- ============================================================
--- ====== ATLAS 2 TWEEN SYSTEM ======
+-- ====== ATLAS 2 TWEEN SYSTEM (С ПОЛНЫМ NOCLIP) ======
 -- ============================================================
 local function tweenTo(target, speed, offset)
     local curLp = Players.LocalPlayer
@@ -255,7 +247,8 @@ local function tweenTo(target, speed, offset)
 
     hum:ChangeState(Enum.HumanoidStateType.Physics)
 
-    local noclipConn = RunService.PreSimulation:Connect(function()
+    local stepSignal = RunService.PreSimulation or RunService.Stepped
+    local noclipConn = stepSignal:Connect(function()
         for _, p in ipairs(char:GetDescendants()) do
             if p:IsA("BasePart") and p.CanCollide then
                 p.CanCollide = false
@@ -637,7 +630,6 @@ end
 -- ============================================================
 task.wait(1)
 while true do
-    -- Запускаем охоту только если не в процессе телепортации
     if not getgenv().IsHopping then
         local ok, err = pcall(huntViciousBee)
         if not ok then
