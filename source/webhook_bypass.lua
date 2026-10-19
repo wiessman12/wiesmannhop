@@ -39,10 +39,10 @@ local WALK_SPEED = 60        -- Скорость бега при мансинг�
 local MANSING_RADIUS = 28    -- Радиус кружения вокруг Vicious Bee
 local THORN_AVOID_DIST = 11  -- Безопасная дистанция отступа от шипов (WarningDisk)
 
-local DATA_FILE = "hop_data.json" -- Файл для хранения черного списка серверов
-local EXPIRE_TIME = 20 * 60       -- Сервер хранится 20 минут в черном списке (в секундах)
-local QUEUE_MAX_AGE = 8 * 60      -- Список серверов обновляется раз в 8 минут (защита от закрытых серверов)
-local HOP_DELAY = 1.5             -- Задержка хопа (не больше 3 сек)
+local DATA_FILE = "hop_data.json"
+local EXPIRE_TIME = 20 * 60   -- Сервер хранится 20 минут в черном списке
+local QUEUE_MAX_AGE = 8 * 60  -- Список серверов обновляется раз в 8 минут (защита от закрытых серверов)
+local HOP_DELAY = 1.5         -- Задержка хопа (не больше 3 сек)
 
 getgenv().IsHopping = false
 
@@ -99,6 +99,131 @@ local function httpRequest(url)
     if req then
         local ok, res = pcall(req, {Url = url, Method = "GET"})
         if ok and res then
+            local body = type(res) == "table" and (res.Body or res.body) or res
+            if body and body ~= "" then return body end
+        end
+    end
+
+    if game.HttpGet then
+        local ok, body = pcall(game.HttpGet, game, url)
+        if ok and body and body ~= "" then return body end
+    end
+    return nil
+end
+
+local function loadData()
+    local defaultData = { queue = {}, visited = {}, fetchedAt = 0 }
+    if readfile and isfile and isfile(DATA_FILE) then
+        local ok, data = pcall(function()
+            return HttpService:JSONDecode(readfile(DATA_FILE))
+        end)
+        if ok and type(data) == "table" then
+            data.queue = data.queue or {}
+            data.visited = data.visited or {}
+            data.fetchedAt = data.fetchedAt or 0
+            
+            local now = os.time()
+            for id, t in pairs(data.visited) do
+                if type(t) == "number" and (now - t > EXPIRE_TIME) then
+                    data.visited[id] = nil
+                end
+            end
+            return data
+        end
+    end
+    return defaultData
+end
+
+local function saveData(data)
+    if writefile then
+        pcall(function()
+            writefile(DATA_FILE, HttpService:JSONEncode(data))
+        end)
+    end
+end
+
+-- Запрашивает свежие сервера и фильтрует надежные
+local function fetchNewServers(data)
+    print("[Hop] 🌐 Запрос свежей пачки серверов от API...")
+    local url = string.format("https://games.roblox.com/v1/games/%s/servers/Public?sortOrder=Asc&limit=100", tostring(game.PlaceId))
+    local body = httpRequest(url)
+    if not body then return false end
+
+    local ok, decoded = pcall(HttpService.JSONDecode, HttpService, body)
+    if not ok or not decoded or decoded.errors or not decoded.data then
+        warn("[Hop] ⚠️ Ошибка ответа API. Используем резервный вход.")
+        return false
+    end
+
+    local stableServers = {}
+    local otherServers = {}
+
+    for _, s in ipairs(decoded.data) do
+        if s.id ~= game.JobId and s.playing < s.maxPlayers and not data.visited[s.id] then
+            -- Сервера с 2-5 игроками живые и активные (не закроются внезапно)
+            if s.playing >= 2 then
+                table.insert(stableServers, s.id)
+            else
+                table.insert(otherServers, s.id)
+            end
+        end
+    end
+
+    data.queue = {}
+    -- Сначала добавляем стабильные сервера, затем остальные
+    for _, id in ipairs(stableServers) do
+        table.insert(data.queue, id)
+    end
+    for _, id in ipairs(otherServers) do
+        table.insert(data.queue, id)
+    end
+
+    data.fetchedAt = os.time()
+    print(string.format("[Hop] ✅ Получено %d серверов (Стабильных: %d)!", #data.queue, #stableServers))
+    return #data.queue > 0
+end
+
+local function hopToRandomServer()
+    if getgenv().IsHopping then return end
+    getgenv().IsHopping = true
+
+    task.wait(HOP_DELAY)
+
+    local currentLp = Players.LocalPlayer
+    if not currentLp then
+        task.wait(1)
+        currentLp = Players.LocalPlayer
+    end
+
+    local data = loadData()
+    if game.JobId and game.JobId ~= "" then
+        data.visited[game.JobId] = os.time()
+    end
+
+    -- Если пачка серверов устарела (старше 8 минут) — очищаем, чтобы не ловить Ошибку 279
+    local now = os.time()
+    if (now - (data.fetchedAt or 0)) > QUEUE_MAX_AGE then
+        data.queue = {}
+    end
+
+    -- Очищаем очередь от уже посещенных
+    local validQueue = {}
+    for _, id in ipairs(data.queue) do
+        if not data.visited[id] and id ~= game.JobId then
+            table.insert(validQueue, id)
+        end
+    end
+    data.queue = validQueue
+
+    if #data.queue == 0 then
+        local ok = fetchNewServers(data)
+        if not ok or #data.queue == 0 then
+            data.visited = {}
+            if game.JobId and game.JobId ~= "" then data.visited[game.JobId] = os.time() end
+            saveData(data)
+            warn("[Hop] Очередь пуста. Резервный хоп через матчмейкинг...")
+            pcall(function() TeleportService:Teleport(game.PlaceId, currentLp) end)
+            
             local w = tick()
             while tick() - w < 10 do task.wait(1) end
             getgenv().IsHopping = false
@@ -435,7 +560,7 @@ local function startMansing(bee)
         end
 
         local rp = RaycastParams.new()
-            rp.FilterDescendantsInstances = { charStep }
+        rp.FilterDescendantsInstances = { charStep }
         rp.FilterType = Enum.RaycastFilterType.Exclude
         local hit = workspace:Raycast(Vector3.new(targetPos.X, targetPos.Y + 25, targetPos.Z), Vector3.new(0, -60, 0), rp)
         if hit then
@@ -564,7 +689,7 @@ local function huntViciousBee()
 
     if targetPos then
         tweenTo(targetPos, TWEEN_SPEED, Vector3.new(0, 6, 10))
-        end
+    end
 
     -- 3. Запуск боя и мансинга
     print("[Hunt] ⚔️ Начинаем бой и мансинг вокруг пчелы...")
@@ -583,10 +708,10 @@ local function huntViciousBee()
         if not myHum or myHum.Health <= 0 then
             warn("[Hunt] 💀 Персонаж погиб! Ожидание возрождения...")
             if stopMansing then stopMansing() end
-
+            
             curLp.CharacterAdded:Wait()
             task.wait(1.5)
-
+            
             if bee and bee.Parent then
                 local bHrp = bee:FindFirstChild("HumanoidRootPart")
                 if bHrp then
