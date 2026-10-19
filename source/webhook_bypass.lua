@@ -1,8 +1,23 @@
 -- ============================================================
--- VICIOUS BEE SERVER HOPPER (PRO ATLAS 2 AUDITED + ANTI-279 v2)
+-- VICIOUS BEE SERVER HOPPER (PRO ATLAS 2 AUDITED + ANTI-279 v3)
 -- ============================================================
 
--- ====== 1. ОЖИДАНИЕ ЗАГРУЗКИ ИГРЫ ======
+-- ===== ФИКС СОВМЕСТИМОСТИ ДЛЯ СТАРЫХ ЭКЗЕКУТОРОВ =====
+if not task then
+    task = {}
+    task.wait = wait
+    task.spawn = spawn
+    task.delay = delay
+    task.cancel = function(t) if type(t) == "thread" then pcall(coroutine.close, t) end end
+end
+if not typeof then
+    typeof = type
+end
+if not getgenv then
+    getgenv = function() return _G end
+end
+
+-- ===== 1. ОЖИДАНИЕ ЗАГРУЗКИ ИГРЫ =====
 repeat task.wait(0.2) until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -12,14 +27,12 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local RunService = game:GetService("RunService")
 local GuiService = game:GetService("GuiService")
 
--- Ждем появления LocalPlayer
 local lp = Players.LocalPlayer
 while not lp do
     task.wait(0.3)
     lp = Players.LocalPlayer
 end
 
--- Ждем закрытия экрана загрузки Bee Swarm Simulator
 local playerGui = lp:WaitForChild("PlayerGui", 25)
 if playerGui then
     local loadingGui = playerGui:FindFirstChild("LoadingScreenGui")
@@ -39,7 +52,7 @@ local WALK_SPEED = 60
 local MANSING_RADIUS = 28
 local THORN_AVOID_DIST = 11
 
--- 🔧 ФЛАГ: проверять живой ли сервер перед телепортом.
+-- 🔧 ФЛАГ ПРОВЕРКИ ЖИВОСТИ СЕРВЕРА
 -- true  = +200мс на хоп, но ~100% защита от 279
 -- false = быстрее, но иногда 279 (watchdog всё равно спасёт)
 local USE_ALIVE_CHECK = true
@@ -112,6 +125,7 @@ local function httpRequest(url)
             if body and body ~= "" then return body end
         end
     end
+
     if game.HttpGet then
         local ok, body = pcall(game.HttpGet, game, url)
         if ok and body and body ~= "" then return body end
@@ -206,7 +220,6 @@ local function startHopWatchdog(timeout)
     end)
 end
 
--- Проверка живости сервера через API (можно отключить USE_ALIVE_CHECK)
 local function isServerAlive(jobId)
     if not jobId or jobId == "" then return false end
     if not USE_ALIVE_CHECK then return true end
@@ -232,6 +245,7 @@ local function hopToRandomServer(forceFallback)
         warn("[Hop] Уже хопаем — пропуск дубликата")
         return
     end
+
     startHopWatchdog(25)
 
     task.wait(HOP_DELAY)
@@ -264,7 +278,6 @@ local function hopToRandomServer(forceFallback)
     end
     data.queue = validQueue
 
-    -- Fallback через матчмейкинг
     if forceFallback or #data.queue == 0 then
         if not forceFallback then
             fetchNewServers(data)
@@ -288,7 +301,6 @@ local function hopToRandomServer(forceFallback)
         end
     end
 
-    -- Валидация сервера
     local targetJobId = nil
     local attempts = 0
     while #data.queue > 0 and attempts < 5 do
@@ -329,7 +341,6 @@ local function hopToRandomServer(forceFallback)
         return hopToRandomServer(true)
     end
 
-    -- Ждём телепорт
     local waitStart = tick()
     local initialJobId = game.JobId
     while tick() - waitStart < 15 do
@@ -364,10 +375,11 @@ GuiService.ErrorMessageChanged:Connect(function(msg)
 end)
 
 TeleportService.TeleportInitFailed:Connect(function(_, result, err)
-    warn("[Teleport] ❌ TeleportInitFailed:", tostring(result), tostring(err))
+        warn("[Teleport] ❌ TeleportInitFailed:", tostring(result), tostring(err))
     pcall(function() TeleportService:TeleportCancel() end)
     forceResetHopState()
-        task.delay(2, function()
+
+    task.delay(2, function()
         pcall(function() hopToRandomServer(true) end)
     end)
 end)
@@ -603,7 +615,7 @@ local function startMansing(bee)
 
     local connUpdate = RunService.RenderStepped:Connect(function(dt)
         if not running then return end
-            dt = math.min(dt, 0.05)
+        dt = math.min(dt, 0.05)
 
         local lpStep = Players.LocalPlayer
         if not lpStep then return end
@@ -704,8 +716,9 @@ local function startMansing(bee)
         end
     end
 end
+
 -- ============================================================
--- ====== ГЛАВНАЯ ЛОГИКА ======
+-- ====== ГЛАВНАЯ ЛОГИКА ОХОТЫ ======
 -- ============================================================
 local function huntViciousBee()
     local curLp = Players.LocalPlayer
@@ -848,4 +861,4 @@ local function huntViciousBee()
     local collectStart = tick()
     while tick() - collectStart < 3.5 do
         local myChar = curLp.Character
-        local myHum = myChar and myChar:FindFirstChildOfClass
+        local myHum =
