@@ -1,8 +1,8 @@
 -- ============================================================
--- VICIOUS BEE SERVER HOPPER (PRO ATLAS 2 AUDITED + ANTI-279)
+-- VICIOUS BEE SERVER HOPPER (PRO ATLAS 2 AUDITED + ANTI-279 v2)
 -- ============================================================
 
--- ====== 1. ОЖИДАНИЕ ЗАГРУЗКИ ИГРЫ (ATLAS 2 СТРОКИ 7-28) ======
+-- ====== 1. ОЖИДАНИЕ ЗАГРУЗКИ ИГРЫ ======
 repeat task.wait(0.2) until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -34,20 +34,29 @@ print("[Init] ✅ Игра и интерфейс полностью загруж
 
 -- ====== НАСТРОЙКИ ======
 _G.unlocktween = true
-local TWEEN_SPEED = 75       -- Скорость полета Tween (стадс/сек)
-local WALK_SPEED = 60        -- Скорость бега при мансинге
-local MANSING_RADIUS = 28    -- Радиус кружения вокруг Vicious Bee
-local THORN_AVOID_DIST = 11  -- Безопасная дистанция отступа от шипов (WarningDisk)
+local TWEEN_SPEED = 75
+local WALK_SPEED = 60
+local MANSING_RADIUS = 28
+local THORN_AVOID_DIST = 11
+
+-- 🔧 ФЛАГ: проверять живой ли сервер перед телепортом.
+-- true  = +200мс на хоп, но ~100% защита от 279
+-- false = быстрее, но иногда 279 (watchdog всё равно спасёт)
+local USE_ALIVE_CHECK = true
 
 local DATA_FILE = "hop_data.json"
-local EXPIRE_TIME = 20 * 60   -- Сервер хранится 20 минут в черном списке
-local QUEUE_MAX_AGE = 8 * 60  -- Список серверов обновляется раз в 8 минут (защита от закрытых серверов)
-local HOP_DELAY = 1.5         -- Задержка хопа (не больше 3 сек)
+local EXPIRE_TIME = 20 * 60
+local QUEUE_MAX_AGE = 8 * 60
+local HOP_DELAY = 1.5
 
 getgenv().IsHopping = false
+getgenv()._hopWatchdog = nil
+getgenv()._lastHopTime = 0
+getgenv()._lastErrorHop = 0
+getgenv()._errorHopDebounce = false
 
 -- ============================================================
--- ====== ИЗВЛЕЧЕНИЕ КООРДИНАТ (СТРОГО VECTOR3) ======
+-- ====== ИЗВЛЕЧЕНИЕ КООРДИНАТ ======
 -- ============================================================
 local function getPosition(obj)
     if not obj then return nil end
@@ -87,13 +96,13 @@ local function getPosition(obj)
 end
 
 -- ============================================================
--- ====== СЕРВЕР-ХОП С ЗАЩИТОЙ ОТ МЕРТВЫХ СЕРВЕРОВ (ОШИБКИ 279) ======
+-- ====== HTTP / ДАННЫЕ ======
 -- ============================================================
 local function httpRequest(url)
-    local req = (syn and syn.request) 
-        or (http and http.request) 
-        or http_request 
-        or (fluxus and fluxus.request) 
+    local req = (syn and syn.request)
+        or (http and http.request)
+        or http_request
+        or (fluxus and fluxus.request)
         or request
 
     if req then
@@ -103,7 +112,6 @@ local function httpRequest(url)
             if body and body ~= "" then return body end
         end
     end
-
     if game.HttpGet then
         local ok, body = pcall(game.HttpGet, game, url)
         if ok and body and body ~= "" then return body end
@@ -121,7 +129,7 @@ local function loadData()
             data.queue = data.queue or {}
             data.visited = data.visited or {}
             data.fetchedAt = data.fetchedAt or 0
-            
+
             local now = os.time()
             for id, t in pairs(data.visited) do
                 if type(t) == "number" and (now - t > EXPIRE_TIME) then
@@ -142,7 +150,6 @@ local function saveData(data)
     end
 end
 
--- Запрашивает свежие сервера и фильтрует надежные
 local function fetchNewServers(data)
     print("[Hop] 🌐 Запрос свежей пачки серверов от API...")
     local url = string.format("https://games.roblox.com/v1/games/%s/servers/Public?sortOrder=Asc&limit=100", tostring(game.PlaceId))
@@ -160,7 +167,6 @@ local function fetchNewServers(data)
 
     for _, s in ipairs(decoded.data) do
         if s.id ~= game.JobId and s.playing < s.maxPlayers and not data.visited[s.id] then
-            -- Сервера с 2-5 игроками живые и активные (не закроются внезапно)
             if s.playing >= 2 then
                 table.insert(stableServers, s.id)
             else
@@ -170,22 +176,63 @@ local function fetchNewServers(data)
     end
 
     data.queue = {}
-    -- Сначала добавляем стабильные сервера, затем остальные
-    for _, id in ipairs(stableServers) do
-        table.insert(data.queue, id)
-    end
-    for _, id in ipairs(otherServers) do
-        table.insert(data.queue, id)
-    end
+    for _, id in ipairs(stableServers) do table.insert(data.queue, id) end
+    for _, id in ipairs(otherServers) do table.insert(data.queue, id) end
 
     data.fetchedAt = os.time()
     print(string.format("[Hop] ✅ Получено %d серверов (Стабильных: %d)!", #data.queue, #stableServers))
     return #data.queue > 0
 end
 
-local function hopToRandomServer()
-    if getgenv().IsHopping then return end
+-- ============================================================
+-- ====== СЕРВЕР-ХОП С ЗАЩИТОЙ ОТ 279 ======
+-- ============================================================
+local function forceResetHopState()
+    getgenv().IsHopping = false
+    if getgenv()._hopWatchdog then
+        pcall(function() task.cancel(getgenv()._hopWatchdog) end)
+        getgenv()._hopWatchdog = nil
+    end
+end
+
+local function startHopWatchdog(timeout)
+    forceResetHopState()
     getgenv().IsHopping = true
+    getgenv()._lastHopTime = tick()
+    getgenv()._hopWatchdog = task.delay(timeout or 25, function()
+        warn("[Watchdog] ⏰ Хоп завис — принудительный сброс!")
+        pcall(function() TeleportService:TeleportCancel() end)
+        forceResetHopState()
+    end)
+end
+
+-- Проверка живости сервера через API (можно отключить USE_ALIVE_CHECK)
+local function isServerAlive(jobId)
+    if not jobId or jobId == "" then return false end
+    if not USE_ALIVE_CHECK then return true end
+
+    local url = string.format(
+        "https://games.roblox.com/v1/games/%s/servers/Public?sortOrder=Asc&limit=100",
+        tostring(game.PlaceId)
+    )
+    local body = httpRequest(url)
+    if not body then return true end
+    local ok, decoded = pcall(HttpService.JSONDecode, HttpService, body)
+    if not ok or not decoded or not decoded.data then return true end
+    for _, s in ipairs(decoded.data) do
+        if s.id == jobId then
+            return s.playing < s.maxPlayers
+        end
+    end
+    return false
+end
+
+local function hopToRandomServer(forceFallback)
+    if getgenv().IsHopping then
+        warn("[Hop] Уже хопаем — пропуск дубликата")
+        return
+    end
+    startHopWatchdog(25)
 
     task.wait(HOP_DELAY)
 
@@ -194,19 +241,21 @@ local function hopToRandomServer()
         task.wait(1)
         currentLp = Players.LocalPlayer
     end
+    if not currentLp then
+        forceResetHopState()
+        return
+    end
 
     local data = loadData()
     if game.JobId and game.JobId ~= "" then
         data.visited[game.JobId] = os.time()
     end
 
-    -- Если пачка серверов устарела (старше 8 минут) — очищаем, чтобы не ловить Ошибку 279
     local now = os.time()
     if (now - (data.fetchedAt or 0)) > QUEUE_MAX_AGE then
         data.queue = {}
     end
 
-    -- Очищаем очередь от уже посещенных
     local validQueue = {}
     for _, id in ipairs(data.queue) do
         if not data.visited[id] and id ~= game.JobId then
@@ -215,67 +264,131 @@ local function hopToRandomServer()
     end
     data.queue = validQueue
 
-    if #data.queue == 0 then
-        local ok = fetchNewServers(data)
-        if not ok or #data.queue == 0 then
+    -- Fallback через матчмейкинг
+    if forceFallback or #data.queue == 0 then
+        if not forceFallback then
+            fetchNewServers(data)
+        end
+        if forceFallback or #data.queue == 0 then
             data.visited = {}
             if game.JobId and game.JobId ~= "" then data.visited[game.JobId] = os.time() end
             saveData(data)
-            warn("[Hop] Очередь пуста. Резервный хоп через матчмейкинг...")
-            pcall(function() TeleportService:Teleport(game.PlaceId, currentLp) end)
-            
-            local w = tick()
-            while tick() - w < 10 do task.wait(1) end
-            getgenv().IsHopping = false
+            warn("[Hop] 🔄 Fallback: Teleport через матчмейкинг (обход 279)")
+            local ok = pcall(function()
+                TeleportService:Teleport(game.PlaceId, currentLp)
+            end)
+            if not ok then
+                pcall(function()
+                    TeleportService:Teleport(game.PlaceId)
+                end)
+            end
+            task.wait(15)
+            forceResetHopState()
             return
         end
     end
 
-    -- Извлекаем первый доступный сервер
-    local chosenIndex = math.random(1, math.min(#data.queue, 15)) -- берем из начала списка
-    local targetJobId = table.remove(data.queue, chosenIndex)
+    -- Валидация сервера
+    local targetJobId = nil
+    local attempts = 0
+    while #data.queue > 0 and attempts < 5 do
+        attempts = attempts + 1
+        local idx = math.random(1, math.min(#data.queue, 10))
+        local candidate = data.queue[idx]
+        table.remove(data.queue, idx)
+        if isServerAlive(candidate) then
+            targetJobId = candidate
+            break
+        else
+            warn("[Hop] 💀 Сервер мёртв (не в API):", candidate)
+            data.visited[candidate] = os.time()
+        end
+    end
+
+    if not targetJobId then
+        warn("[Hop] Не осталось живых серверов — fallback")
+        saveData(data)
+        forceResetHopState()
+        task.wait(1)
+        return hopToRandomServer(true)
+    end
 
     data.visited[targetJobId] = os.time()
     saveData(data)
 
-    print(string.format("[Hop] 🚀 Переход на сервер: %s (Осталось в запасе: %d)", targetJobId, #data.queue))
+    print(string.format("[Hop] 🚀 Телепорт на живой сервер: %s (в запасе: %d)", targetJobId, #data.queue))
 
-    local ok, err = pcall(function()
+    local teleportOk, teleportErr = pcall(function()
         TeleportService:TeleportToPlaceInstance(game.PlaceId, targetJobId, currentLp)
     end)
 
-    if ok then
-        local startWait = tick()
-        while tick() - startWait < 12 and getgenv().IsHopping do
-            task.wait(1)
-        end
-    else
-        warn("[Hop] Ошибка TeleportToPlaceInstance:", err)
-        getgenv().IsHopping = false
+    if not teleportOk then
+        warn("[Hop] ❌ TeleportToPlaceInstance упал:", teleportErr)
+        forceResetHopState()
+        task.wait(1)
+        return hopToRandomServer(true)
     end
+
+    -- Ждём телепорт
+    local waitStart = tick()
+    local initialJobId = game.JobId
+    while tick() - waitStart < 15 do
+        task.wait(0.5)
+        if not Players.LocalPlayer then break end
+        if game.JobId ~= "" and game.JobId ~= initialJobId then break end
+    end
+
+    forceResetHopState()
 end
 
--- ====== АВТО-РЕКОННЕКТ ПРИ ОШИБКЕ 279 / ДИСКОННЕКТЕ (ИЗ ATLAS 2 СТРОКА 5592) ======
+-- ====== АВТО-РЕКОННЕКТ ПРИ ОШИБКЕ 279 ======
 GuiService.ErrorMessageChanged:Connect(function(msg)
-    if msg and msg ~= "" then
-        warn(string.format("[Auto-Reconnect] ⚠️ Перехвачена ошибка соединения (%s). Авто-хоп через 2 сек...", tostring(msg)))
-        pcall(function() TeleportService:TeleportCancel() end)
-        getgenv().IsHopping = false
-        task.wait(2) -- Задержка 2с (не более 3с)
-        hopToRandomServer()
+    if not msg or msg == "" then return end
+
+    local now = tick()
+    if getgenv()._errorHopDebounce or (now - getgenv()._lastErrorHop) < 4 then
+        return
     end
+    getgenv()._errorHopDebounce = true
+    getgenv()._lastErrorHop = now
+
+    warn(string.format("[Auto-Reconnect] ⚠️ Ошибка соединения: %s", tostring(msg)))
+
+    pcall(function() TeleportService:TeleportCancel() end)
+    forceResetHopState()
+
+    task.delay(2, function()
+        getgenv()._errorHopDebounce = false
+        pcall(function() hopToRandomServer(true) end)
+    end)
 end)
 
 TeleportService.TeleportInitFailed:Connect(function(_, result, err)
-    warn("[Teleport] ❌ Не удалось войти на сервер:", result.Name, err)
+    warn("[Teleport] ❌ TeleportInitFailed:", tostring(result), tostring(err))
     pcall(function() TeleportService:TeleportCancel() end)
-    getgenv().IsHopping = false
-    task.wait(2) -- Задержка 2с (не более 3с)
-    hopToRandomServer()
+    forceResetHopState()
+        task.delay(2, function()
+        pcall(function() hopToRandomServer(true) end)
+    end)
+end)
+
+-- Монитор пропажи персонажа (кик/дисконнект)
+task.spawn(function()
+    while true do
+        task.wait(3)
+        local lpCheck = Players.LocalPlayer
+        if lpCheck and not lpCheck.Character then
+            task.wait(3)
+            if lpCheck and not lpCheck.Character and not getgenv().IsHopping then
+                warn("[Recovery] 🚨 Персонаж отсутствует — переподключение...")
+                pcall(function() hopToRandomServer(true) end)
+            end
+        end
+    end
 end)
 
 -- ============================================================
--- ====== ATLAS 2 TWEEN SYSTEM (С ПОЛНЫМ NOCLIP) ======
+-- ====== ATLAS 2 TWEEN SYSTEM ======
 -- ============================================================
 local function tweenTo(target, speed, offset)
     local curLp = Players.LocalPlayer
@@ -289,7 +402,7 @@ local function tweenTo(target, speed, offset)
 
     local targetPos = getPosition(target)
     if not targetPos or typeof(targetPos) ~= "Vector3" then
-        warn("[Tween] ❌ Ошибка: не удалось получить координаты цели:", tostring(target))
+        warn("[Tween] ❌ Ошибка: не удалось получить координаты:", tostring(target))
         return false
     end
 
@@ -389,8 +502,8 @@ local function getFieldAt(pos)
     rp.FilterDescendantsInstances = { fz }
     rp.FilterType = Enum.RaycastFilterType.Include
     local hit = workspace:Raycast(pos + Vector3.new(0, 20, 0), Vector3.new(0, -70, 0), rp)
-    if hit and hit.Instance and hit.Instance.Parent and hit.Instance.Parent.Name == "FlowerZones" then 
-        return hit.Instance.Name 
+    if hit and hit.Instance and hit.Instance.Parent and hit.Instance.Parent.Name == "FlowerZones" then
+        return hit.Instance.Name
     end
     return nil
 end
@@ -444,7 +557,7 @@ local function occupyHive(hive)
 end
 
 -- ============================================================
--- ====== СИСТЕМА УВОРОТА И МАНСИНГА (ATLAS 2) ======
+-- ====== МАНСИНГ ======
 -- ============================================================
 local function startMansing(bee)
     local running = true
@@ -490,7 +603,7 @@ local function startMansing(bee)
 
     local connUpdate = RunService.RenderStepped:Connect(function(dt)
         if not running then return end
-        dt = math.min(dt, 0.05)
+            dt = math.min(dt, 0.05)
 
         local lpStep = Players.LocalPlayer
         if not lpStep then return end
@@ -527,8 +640,8 @@ local function startMansing(bee)
 
         angle = angle + (WALK_SPEED / MANSING_RADIUS) * dt
         local targetPos = beeHrp.Position + Vector3.new(
-            math.cos(angle) * MANSING_RADIUS, 
-            0, 
+            math.cos(angle) * MANSING_RADIUS,
+            0,
             math.sin(angle) * MANSING_RADIUS
         )
 
@@ -538,7 +651,6 @@ local function startMansing(bee)
             targetPos = waitingThorn.Position - toThorn * 4
         end
 
-        -- Уворот от шипов
         for threat, dangerDist in pairs(trackedAvoid) do
             if threat and threat.Parent then
                 local threatPos = threat.Position
@@ -592,7 +704,6 @@ local function startMansing(bee)
         end
     end
 end
-
 -- ============================================================
 -- ====== ГЛАВНАЯ ЛОГИКА ======
 -- ============================================================
@@ -600,7 +711,6 @@ local function huntViciousBee()
     local curLp = Players.LocalPlayer
     if not curLp then return end
 
-    -- Ждём персонажа
     local char, hrp
     for _ = 1, 40 do
         char = curLp.Character
@@ -641,7 +751,6 @@ local function huntViciousBee()
     end
     print("[Hunt] ✅ Vicious не на горе — готовимся к охоте")
 
-    -- 1. Tween к свободному улью
     print("[Hunt] Ищем улей...")
     local hive = findFreeHive()
     if not hive then
@@ -675,7 +784,6 @@ local function huntViciousBee()
     end
     print("[Hunt] ✅ Улей успешно занят!")
 
-    -- 2. Tween к Vicious Bee на поле
     local beeHrp = bee:FindFirstChild("HumanoidRootPart")
     if not beeHrp then
         print("[Hunt] ❌ Vicious Bee исчезла — ХОП")
@@ -691,8 +799,7 @@ local function huntViciousBee()
         tweenTo(targetPos, TWEEN_SPEED, Vector3.new(0, 6, 10))
     end
 
-    -- 3. Запуск боя и мансинга
-    print("[Hunt] ⚔️ Начинаем бой и мансинг вокруг пчелы...")
+    print("[Hunt] ⚔️ Начинаем бой и мансинг...")
     local stopMansing = startMansing(bee)
 
     local maxWait, waited = 90, 0
@@ -702,20 +809,19 @@ local function huntViciousBee()
         task.wait(0.3)
         waited = waited + 0.3
 
-        -- Проверка на смерть персонажа игрока
         local myChar = curLp.Character
         local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
         if not myHum or myHum.Health <= 0 then
             warn("[Hunt] 💀 Персонаж погиб! Ожидание возрождения...")
             if stopMansing then stopMansing() end
-            
+
             curLp.CharacterAdded:Wait()
             task.wait(1.5)
-            
+
             if bee and bee.Parent then
                 local bHrp = bee:FindFirstChild("HumanoidRootPart")
                 if bHrp then
-                    print("[Hunt] 🚀 Возврат на поле боя к пчеле...")
+                    print("[Hunt] 🚀 Возврат на поле боя...")
                     tweenTo(bHrp.Position, TWEEN_SPEED, Vector3.new(0, 6, 10))
                     stopMansing = startMansing(bee)
                 end
@@ -738,37 +844,8 @@ local function huntViciousBee()
 
     if stopMansing then stopMansing() end
 
-    -- 4. Сбор жал (Stingers) перед уходом с сервера
-    print("[Hunt] 🎉 Vicious Bee убита! Собираем жала (Stingers)...")
+    print("[Hunt] 🎉 Vicious Bee убита! Собираем жала...")
     local collectStart = tick()
     while tick() - collectStart < 3.5 do
         local myChar = curLp.Character
-        local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
-        if myHum and myHum.Health > 0 then
-            local angle = (tick() - collectStart) * 5
-            local offset = Vector3.new(math.cos(angle) * 12, 0, math.sin(angle) * 12)
-            myHum:MoveTo(lastDeathPos + offset)
-        end
-        task.wait(0.2)
-    end
-
-    print("[Hunt] Хоп на следующий сервер...")
-    hopToRandomServer()
-end
-
--- ============================================================
--- ====== ГЛАВНЫЙ ЦИКЛ ======
--- ============================================================
-task.wait(1)
-while true do
-    if not getgenv().IsHopping then
-        local ok, err = pcall(huntViciousBee)
-        if not ok then
-            warn("[Hunt] Ошибка в цикле:", err)
-            if not getgenv().IsHopping then
-                pcall(hopToRandomServer)
-            end
-        end
-    end
-    task.wait(1.5)
-end
+        local myHum = myChar and myChar:FindFirstChildOfClass
