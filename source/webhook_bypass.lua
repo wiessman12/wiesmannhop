@@ -1,5 +1,5 @@
 -- ============================================================
--- VICIOUS BEE SERVER HOPPER (PRO BULLETPROOF ANTI-279 EDITION)
+-- VICIOUS BEE SERVER HOPPER (PRO UNIVERSAL ANTI-ERROR EDITION)
 -- ============================================================
 
 local Players = game:GetService("Players")
@@ -26,26 +26,35 @@ local QUEUE_MAX_AGE = 8 * 60  -- Список серверов обновляе�
 getgenv().IsHopping = false
 
 -- ============================================================
--- ====== СТРОГИЙ ДЕТЕКТ РЕАЛЬНЫХ ОШИБОК (БЕЗ ЛОЖНЫХ СРАБАТЫВАНИЙ) ======
+-- ====== СТРОГИЙ ДЕТЕКТ РЕАЛЬНЫХ ОШИБОК (ВКЛЮЧАЯ 769, 279 И ДРУГИЕ) ======
 -- ============================================================
 local function isRealErrorString(str)
     if not str or str == "" then return false end
     local lower = tostring(str):lower()
 
-    -- Игнорируем любые нормальные клиентские отмены
+    -- Игнорируем ТОЛЬКО нормальную клиентскую отмену
     if lower:find("disconnectclientinitiated") 
-        or lower:find("teleportcancel") 
         or lower:find("clientinitiated") then
         return false
     end
 
-    -- Реальные маркеры сетевых ошибок
-    if lower:find("error code") 
+    -- Ловим любые ошибки телепорта, сбои подключения, кики и коды ошибок (769, 770, 771, 772, 773, 279, 277 и т.д.)
+    if lower:find("error") 
+        or lower:find("769") 
         or lower:find("279") 
         or lower:find("277") 
         or lower:find("268") 
         or lower:find("267") 
-        or lower:find("connection attempt failed") 
+        or lower:find("770") 
+        or lower:find("771") 
+        or lower:find("772") 
+        or lower:find("773") 
+        or lower:find("524") 
+        or lower:find("529") 
+        or lower:find("610") 
+        or lower:find("teleport") 
+        or lower:find("fail") 
+        or lower:find("connection") 
         or lower:find("lost connection") 
         or lower:find("kicked") then
         return true
@@ -364,7 +373,7 @@ local function hopToRandomServer()
 end
 
 -- ============================================================
--- ====== ПЕРЕХВАТ ОШИБКИ 279 И ДИСКОННЕКТА (БЕЗ ЛОЖНЫХ СРАБАТЫВАНИЙ) ======
+-- ====== ПЕРЕХВАТ ОШИБОК 769, 279 И ДИСКОННЕКТОВ ======
 -- ============================================================
 local isHandlingError = false
 
@@ -376,7 +385,7 @@ local function handleConnectionError(sourceMsg)
     if isHandlingError then return end
     isHandlingError = true
 
-    warn(string.format("[Auto-Reconnect] ⚡ Перехвачена ошибка (%s)! Экстренный хоп...", tostring(sourceMsg)))
+    warn(string.format("[Auto-Reconnect] ⚡ Перехвачена ошибка (%s)! Экстренный хоп на следующий сервер...", tostring(sourceMsg)))
 
     getgenv().IsHopping = false
     pcall(function() GuiService:ClearError() end)
@@ -384,7 +393,7 @@ local function handleConnectionError(sourceMsg)
     task.wait(1.0)
     task.spawn(hopToRandomServer)
 
-    task.delay(4, function()
+    task.delay(3, function()
         isHandlingError = false
     end)
 end
@@ -396,19 +405,23 @@ GuiService.ErrorMessageChanged:Connect(function(msg)
     end
 end)
 
--- 2. Безопасное событие TeleportInitFailed
-TeleportService.TeleportInitFailed:Connect(function(_, result, err)
+-- 2. Безопасное событие TeleportInitFailed (ловит любые сбои телепорта, включая Error 769)
+TeleportService.TeleportInitFailed:Connect(function(player, result, errorMessage, placeId, teleportOptions)
     local resStr = tostring(result or "")
-    local lower = resStr:lower()
+    local errStr = tostring(errorMessage or "")
+    local fullMsg = resStr .. " " .. errStr
+    local lower = fullMsg:lower()
+
+    -- Игнорируем только намеренную отмену клиентом
     if lower:find("disconnectclientinitiated") or lower:find("clientinitiated") then
-        return -- штатная отмена, игнорируем!
+        return
     end
-    if isRealErrorString(resStr) or lower:find("failed") or lower:find("full") then
-        handleConnectionError("TeleportInitFailed: " .. resStr)
-    end
+
+    local finalError = (errStr ~= "" and errStr) or ("TeleportInitFailed (" .. resStr .. ")")
+    handleConnectionError(finalError)
 end)
 
--- 3. Фоновый опрос каждые 0.3 сек (проверяет только видимые ошибки на экране)
+-- 3. Фоновый опрос каждые 0.3 сек (проверяет только реально видимые ошибки на экране)
 task.spawn(function()
     while _G.ViciousHunterRunning do
         task.wait(0.3)
