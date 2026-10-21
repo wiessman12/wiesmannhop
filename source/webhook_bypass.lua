@@ -1,5 +1,5 @@
 -- ============================================================
--- VICIOUS BEE SERVER HOPPER (INSTANT HOP & +10 TWEEN EDITION)
+-- VICIOUS BEE SERVER HOPPER (PRO ANTI-279 & RELIABLE HOP EDITION)
 -- ============================================================
 
 local Players = game:GetService("Players")
@@ -26,30 +26,66 @@ local QUEUE_MAX_AGE = 8 * 60  -- Список серверов обновляе�
 getgenv().IsHopping = false
 
 -- ============================================================
--- ====== 1. ОЖИДАНИЕ ЗАГРУЗКИ ИГРЫ (ВМЕСТО СЕКУНД) ======
+-- ====== ПРОВЕРКА ОШИБОК ПОДКЛЮЧЕНИЯ (ОШИБКА 279, ДИСКОННЕКТ) ======
+-- ============================================================
+local function checkError()
+    -- 1. Проверка через системный GuiService
+    local ok, msg = pcall(function() return GuiService:GetErrorMessage() end)
+    if ok and msg and msg ~= "" then
+        return msg
+    end
+
+    -- 2. Проверка через CoreGui.RobloxPromptGui.promptOverlay
+    local ok2, promptGui = pcall(function() return CoreGui:FindFirstChild("RobloxPromptGui") end)
+    if ok2 and promptGui then
+        local overlay = promptGui:FindFirstChild("promptOverlay")
+        local errorPrompt = overlay and overlay:FindFirstChild("ErrorPrompt")
+        if errorPrompt then
+            local textLabel = errorPrompt:FindFirstChildWhichIsA("TextLabel", true)
+            return (textLabel and textLabel.Text) or "ErrorPrompt Active"
+        end
+    end
+
+    return nil
+end
+
+-- ============================================================
+-- ====== ОЖИДАНИЕ ЗАГРУЗКИ ИГРЫ С ТАЙМАУТОМ И ПРОВЕРКОЙ ОШИБОК ======
 -- ============================================================
 local function waitForGameLoaded()
-    if not game:IsLoaded() then
-        game.Loaded:Wait()
+    local startWait = tick()
+
+    -- 1. Ждем IsLoaded с таймаутом (не более 12 сек)
+    while not game:IsLoaded() and (tick() - startWait < 12) do
+        local err = checkError()
+        if err then return false end
+        task.wait(0.2)
     end
 
+    -- 2. Ждем LocalPlayer с таймаутом
     local curLp = Players.LocalPlayer
-    while not curLp do
-        task.wait(0.1)
+    while not curLp and (tick() - startWait < 15) do
+        local err = checkError()
+        if err then return false end
+        task.wait(0.2)
         curLp = Players.LocalPlayer
     end
+    if not curLp then return false end
 
-    local playerGui = curLp:WaitForChild("PlayerGui", 30)
-    if not playerGui then return end
+    -- 3. Ждем PlayerGui с таймаутом
+    local playerGui = curLp:WaitForChild("PlayerGui", 10)
+    if not playerGui then return false end
 
-    -- Ожидание закрытия экрана загрузки Bee Swarm Simulator
-    local startWait = tick()
-    while tick() - startWait < 30 do
+    -- 4. Ожидание закрытия экрана загрузки Bee Swarm Simulator
+    while (tick() - startWait < 25) do
+        local err = checkError()
+        if err then return false end
+
         local loadingGui = playerGui:FindFirstChild("LoadingScreenGui")
         local msg = loadingGui and loadingGui:FindFirstChild("LoadingMessage")
         if loadingGui and msg then
             if not msg.Visible then
-                break -- Экран загрузки полностью закрылся
+                break -- Экран загрузки успешно закрылся!
             end
         elseif not loadingGui and (tick() - startWait < 2.5) then
             task.wait(0.1)
@@ -58,11 +94,9 @@ local function waitForGameLoaded()
         end
         task.wait(0.1)
     end
-end
 
--- Первичная загрузка
-waitForGameLoaded()
-print("[Init] ✅ Игра и экран загрузки полностью завершены!")
+    return true
+end
 
 -- ============================================================
 -- ====== БЕЗОПАСНОЕ ИЗВЛЕЧЕНИЕ КООРДИНАТ ======
@@ -139,7 +173,7 @@ local function getFieldForPosition(pos)
 end
 
 -- ============================================================
--- ====== СЕРВЕР-ХОП (МГНОВЕННЫЙ ХОП) ======
+-- ====== СЕРВЕР-ХОП (БЕЗ ЗАВИСАНИЙ НА game.Loaded) ======
 -- ============================================================
 local function httpRequest(url)
     local req = (syn and syn.request) 
@@ -234,15 +268,12 @@ end
 
 local function hopToRandomServer()
     if getgenv().IsHopping then
-        if tick() - (getgenv().HopStartTime or 0) > 14 then
+        if tick() - (getgenv().HopStartTime or 0) > 12 then
             getgenv().IsHopping = false
         else
             return
         end
     end
-
-    -- Если экран загрузки еще не завершен — ждем его перед хопом!
-    waitForGameLoaded()
 
     getgenv().IsHopping = true
     getgenv().HopStartTime = tick()
@@ -272,7 +303,7 @@ local function hopToRandomServer()
             data.visited = {}
             if game.JobId and game.JobId ~= "" then data.visited[game.JobId] = os.time() end
             saveData(data)
-            warn("[Hop] Резервный хоп через матчмейкинг...")
+            warn("[Hop] Очередь пуста. Резервный хоп через матчмейкинг...")
             pcall(function() TeleportService:Teleport(game.PlaceId, currentLp) end)
             
             task.wait(6)
@@ -293,75 +324,71 @@ local function hopToRandomServer()
         TeleportService:TeleportToPlaceInstance(game.PlaceId, targetJobId, currentLp)
     end)
 
-    if ok then
-        local startWait = tick()
-        while tick() - startWait < 12 and getgenv().IsHopping do
-            task.wait(0.3)
-        end
-
-        if getgenv().IsHopping then
-            pcall(function() TeleportService:TeleportCancel() end)
-            getgenv().IsHopping = false
-            task.wait(0.2)
-            hopToRandomServer()
-        end
-    else
-        warn("[Hop] Ошибка вызова TeleportToPlaceInstance:", err)
+    if not ok then
+        warn("[Hop] Ошибка вызова TeleportToPlaceInstance:", err, "— резервный вход")
+        pcall(function()
+            TeleportService:Teleport(game.PlaceId, currentLp)
+        end)
         getgenv().IsHopping = false
-        task.wait(0.2)
-        hopToRandomServer()
     end
 end
 
 -- ============================================================
--- ====== МГНОВЕННЫЙ ДЕТЕКТ ОШИБКИ 279 + АНТИ-КРАШ ======
+-- ====== МГНОВЕННЫЙ ПЕРЕХВАТ ОШИБКИ 279 И ДИСКОННЕКТА ======
 -- ============================================================
 local isHandlingError = false
 
 local function handleConnectionError(sourceMsg)
     if isHandlingError then return end
     isHandlingError = true
-    
-    warn(string.format("[Auto-Reconnect] ⚡ Мгновенный перехват ошибки (%s)! Хоп...", tostring(sourceMsg)))
-    pcall(function() TeleportService:TeleportCancel() end)
+
+    warn(string.format("[Auto-Reconnect] ⚡ Перехвачена ошибка (%s)! Экстренный хоп...", tostring(sourceMsg)))
+
+    -- 1. Сбрасываем флаги и отменяем зависший телепорт
     getgenv().IsHopping = false
-    
-    task.wait(0.1)
-    hopToRandomServer()
-    
-    task.delay(3, function()
+    pcall(function() TeleportService:TeleportCancel() end)
+    pcall(function() GuiService:ClearError() end)
+
+    -- 2. Пауза 1.0 сек для сброса сокетов Roblox
+    task.wait(1.0)
+
+    -- 3. Вызываем хоп на следующий сервер
+    task.spawn(hopToRandomServer)
+
+    task.delay(4, function()
         isHandlingError = false
     end)
 end
 
+-- 1. Системное событие GuiService
 GuiService.ErrorMessageChanged:Connect(function(msg)
     if msg and msg ~= "" then
         handleConnectionError(msg)
     end
 end)
 
+-- 2. Событие TeleportInitFailed
 TeleportService.TeleportInitFailed:Connect(function(_, result, err)
-    handleConnectionError(result.Name)
+    handleConnectionError(result and result.Name or "TeleportInitFailed")
 end)
 
+-- 3. Событие добавления окна в CoreGui
 local promptOverlay = CoreGui:FindFirstChild("RobloxPromptGui") and CoreGui.RobloxPromptGui:FindFirstChild("promptOverlay")
 if promptOverlay then
     promptOverlay.ChildAdded:Connect(function(child)
         if child.Name == "ErrorPrompt" then
-            handleConnectionError("ErrorPrompt Window")
+            handleConnectionError("ErrorPrompt in CoreGui")
         end
     end)
 end
 
+-- 4. Фоновый опрос каждые 0.3 сек (страховка)
 task.spawn(function()
     while _G.ViciousHunterRunning do
-        task.wait(0.2)
-        local ok, promptGui = pcall(function() return CoreGui:FindFirstChild("RobloxPromptGui") end)
-        if ok and promptGui then
-            local overlay = promptGui:FindFirstChild("promptOverlay")
-            if overlay and overlay:FindFirstChild("ErrorPrompt") then
-                handleConnectionError("ErrorPrompt Active")
-            end
+        task.wait(0.3)
+        local err = checkError()
+        if err then
+            handleConnectionError(err)
         end
     end
 end)
@@ -584,7 +611,7 @@ local function startMansing(bee, currentFieldPart, onBeeDiedCallback)
     local connUpdate = RunService.RenderStepped:Connect(function(dt)
         if not running then return end
 
-        -- МГНОВЕННЫЙ ДЕТЕКТ СМЕРТИ В КАЖДОМ КАДРЕ (60 РАЗ/СЕК)
+        -- Мгновенный детект смерти в каждом кадре
         if not bee or not bee.Parent or not bee:IsDescendantOf(workspace) then
             if onBeeDiedCallback then onBeeDiedCallback() end
             return
@@ -719,7 +746,17 @@ end
 -- ====== ГЛАВНАЯ ЛОГИКА ОХОТЫ ======
 -- ============================================================
 local function huntViciousBee()
+    -- Ждем корректной прогрузки игры перед началом охоты
+    local loadedOk = waitForGameLoaded()
+    if not loadedOk then
+        warn("[Hunt] Игра не загрузилась или произошла ошибка подключения — хоп!")
+        hopToRandomServer()
+        return
+    end
+
+    print("[Init] ✅ Игра и экран загрузки полностью завершены!")
     print("[Hunt] Ищем Vicious Bee...")
+
     local bee = findViciousBee()
     if not bee then
         print("[Hunt] ❌ Vicious не найден — ХОП")
@@ -847,7 +884,7 @@ local function huntViciousBee()
 
     local maxWait, waited = 90, 0
     while waited < maxWait and not isBeeDead do
-        task.wait(0.05) -- ультрабыстрый опрос каждые 50мс
+        task.wait(0.05)
         waited = waited + 0.05
 
         if not bee or not bee.Parent or not bee:IsDescendantOf(workspace) then
@@ -885,8 +922,8 @@ end
 local serverEntryTime = tick()
 task.spawn(function()
     while _G.ViciousHunterRunning do
-        task.wait(2)
-        if tick() - serverEntryTime > 90 and not getgenv().IsHopping then
+        task.wait(5)
+        if tick() - serverEntryTime > 50 and not getgenv().IsHopping then
             warn("[Watchdog] ⏰ Сервер превысил лимит в 90 сек — принудительный хоп!")
             hopToRandomServer()
             break
