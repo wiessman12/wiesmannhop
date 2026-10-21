@@ -1,5 +1,5 @@
 -- ============================================================
--- VICIOUS BEE SERVER HOPPER (PRO ANTI-279 & RELIABLE HOP EDITION)
+-- VICIOUS BEE SERVER HOPPER (PRO BULLETPROOF ANTI-279 EDITION)
 -- ============================================================
 
 local Players = game:GetService("Players")
@@ -26,39 +26,52 @@ local QUEUE_MAX_AGE = 8 * 60  -- Список серверов обновляе�
 getgenv().IsHopping = false
 
 -- ============================================================
--- ====== ФИЛЬТР РЕАЛЬНЫХ ОШИБОК (БЕЗ ЛОЖНЫХ DisconnectClientInitiated) ======
+-- ====== СТРОГИЙ ДЕТЕКТ РЕАЛЬНЫХ ОШИБОК (БЕЗ ЛОЖНЫХ СРАБАТЫВАНИЙ) ======
 -- ============================================================
-local function isRealError(msg)
-    if not msg or msg == "" then return false end
-    local str = tostring(msg)
+local function isRealErrorString(str)
+    if not str or str == "" then return false end
+    local lower = tostring(str):lower()
 
-    -- Игнорируем любые нормальные клиентские отмены и штатные сбросы телепорта
-    if str:find("DisconnectClientInitiated") 
-        or str:find("TeleportCancel") 
-        or str:find("ClientInitiated") then
+    -- Игнорируем любые нормальные клиентские отмены
+    if lower:find("disconnectclientinitiated") 
+        or lower:find("teleportcancel") 
+        or lower:find("clientinitiated") then
         return false
     end
 
-    return true
+    -- Реальные маркеры сетевых ошибок
+    if lower:find("error code") 
+        or lower:find("279") 
+        or lower:find("277") 
+        or lower:find("268") 
+        or lower:find("267") 
+        or lower:find("connection attempt failed") 
+        or lower:find("lost connection") 
+        or lower:find("kicked") then
+        return true
+    end
+
+    return false
 end
 
-local function checkError()
-    -- 1. Проверка через системный GuiService
+local function checkRealConnectionError()
+    -- 1. Проверка системного сообщения GuiService
     local ok, msg = pcall(function() return GuiService:GetErrorMessage() end)
-    if ok and isRealError(msg) then
+    if ok and msg and msg ~= "" and isRealErrorString(msg) then
         return msg
     end
 
-    -- 2. Проверка через CoreGui.RobloxPromptGui.promptOverlay
+    -- 2. Проверка РЕАЛЬНО ВИДИМОГО окна ErrorPrompt в CoreGui
     local ok2, promptGui = pcall(function() return CoreGui:FindFirstChild("RobloxPromptGui") end)
-    if ok2 and promptGui then
+    if ok2 and promptGui and promptGui.Enabled then
         local overlay = promptGui:FindFirstChild("promptOverlay")
         local errorPrompt = overlay and overlay:FindFirstChild("ErrorPrompt")
-        if errorPrompt then
+        -- Окно ошибки должно быть действительно видимым на экране!
+        if errorPrompt and errorPrompt.Visible then
             local textLabel = errorPrompt:FindFirstChildWhichIsA("TextLabel", true)
             local txt = textLabel and textLabel.Text or ""
-            if isRealError(txt) then
-                return (txt ~= "" and txt) or "ErrorPrompt Active"
+            if isRealErrorString(txt) then
+                return txt
             end
         end
     end
@@ -74,7 +87,7 @@ local function waitForGameLoaded()
 
     -- 1. Ждем IsLoaded с таймаутом (не более 12 сек)
     while not game:IsLoaded() and (tick() - startWait < 12) do
-        local err = checkError()
+        local err = checkRealConnectionError()
         if err then return false end
         task.wait(0.2)
     end
@@ -82,7 +95,7 @@ local function waitForGameLoaded()
     -- 2. Ждем LocalPlayer с таймаутом
     local curLp = Players.LocalPlayer
     while not curLp and (tick() - startWait < 15) do
-        local err = checkError()
+        local err = checkRealConnectionError()
         if err then return false end
         task.wait(0.2)
         curLp = Players.LocalPlayer
@@ -95,7 +108,7 @@ local function waitForGameLoaded()
 
     -- 4. Ожидание закрытия экрана загрузки Bee Swarm Simulator
     while (tick() - startWait < 25) do
-        local err = checkError()
+        local err = checkRealConnectionError()
         if err then return false end
 
         local loadingGui = playerGui:FindFirstChild("LoadingScreenGui")
@@ -356,8 +369,7 @@ end
 local isHandlingError = false
 
 local function handleConnectionError(sourceMsg)
-    -- Строгий фильтр: никогда не реагируем на DisconnectClientInitiated
-    if not isRealError(sourceMsg) then
+    if not isRealErrorString(sourceMsg) then
         return
     end
 
@@ -369,10 +381,7 @@ local function handleConnectionError(sourceMsg)
     getgenv().IsHopping = false
     pcall(function() GuiService:ClearError() end)
 
-    -- Пауза 1.0 сек для сброса сокетов Roblox
     task.wait(1.0)
-
-    -- Вызываем хоп на следующий сервер
     task.spawn(hopToRandomServer)
 
     task.delay(4, function()
@@ -382,40 +391,28 @@ end
 
 -- 1. Системное событие GuiService
 GuiService.ErrorMessageChanged:Connect(function(msg)
-    if isRealError(msg) then
+    if isRealErrorString(msg) then
         handleConnectionError(msg)
     end
 end)
 
--- 2. Событие TeleportInitFailed (игнорирует DisconnectClientInitiated)
+-- 2. Безопасное событие TeleportInitFailed
 TeleportService.TeleportInitFailed:Connect(function(_, result, err)
-    if result == Enum.TeleportResult.DisconnectClientInitiated 
-        or (result and result.Name == "DisconnectClientInitiated") then
-        -- Это штатная отмена со стороны клиента — игнорируем!
-        return
+    local resStr = tostring(result or "")
+    local lower = resStr:lower()
+    if lower:find("disconnectclientinitiated") or lower:find("clientinitiated") then
+        return -- штатная отмена, игнорируем!
     end
-    handleConnectionError(result and result.Name or "TeleportInitFailed")
+    if isRealErrorString(resStr) or lower:find("failed") or lower:find("full") then
+        handleConnectionError("TeleportInitFailed: " .. resStr)
+    end
 end)
 
--- 3. Событие добавления окна в CoreGui
-local promptOverlay = CoreGui:FindFirstChild("RobloxPromptGui") and CoreGui.RobloxPromptGui:FindFirstChild("promptOverlay")
-if promptOverlay then
-    promptOverlay.ChildAdded:Connect(function(child)
-        if child.Name == "ErrorPrompt" then
-            local textLabel = child:FindFirstChildWhichIsA("TextLabel", true)
-            local txt = textLabel and textLabel.Text or ""
-            if isRealError(txt) then
-                handleConnectionError("ErrorPrompt in CoreGui")
-            end
-        end
-    end)
-end
-
--- 4. Фоновый опрос каждые 0.3 сек (только реальные ошибки)
+-- 3. Фоновый опрос каждые 0.3 сек (проверяет только видимые ошибки на экране)
 task.spawn(function()
     while _G.ViciousHunterRunning do
         task.wait(0.3)
-        local err = checkError()
+        local err = checkRealConnectionError()
         if err then
             handleConnectionError(err)
         end
