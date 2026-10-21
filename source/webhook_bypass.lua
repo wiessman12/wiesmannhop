@@ -26,12 +26,26 @@ local QUEUE_MAX_AGE = 8 * 60  -- Список серверов обновляе�
 getgenv().IsHopping = false
 
 -- ============================================================
--- ====== ПРОВЕРКА ОШИБОК ПОДКЛЮЧЕНИЯ (ОШИБКА 279, ДИСКОННЕКТ) ======
+-- ====== ФИЛЬТР РЕАЛЬНЫХ ОШИБОК (БЕЗ ЛОЖНЫХ DisconnectClientInitiated) ======
 -- ============================================================
+local function isRealError(msg)
+    if not msg or msg == "" then return false end
+    local str = tostring(msg)
+
+    -- Игнорируем любые нормальные клиентские отмены и штатные сбросы телепорта
+    if str:find("DisconnectClientInitiated") 
+        or str:find("TeleportCancel") 
+        or str:find("ClientInitiated") then
+        return false
+    end
+
+    return true
+end
+
 local function checkError()
     -- 1. Проверка через системный GuiService
     local ok, msg = pcall(function() return GuiService:GetErrorMessage() end)
-    if ok and msg and msg ~= "" then
+    if ok and isRealError(msg) then
         return msg
     end
 
@@ -42,7 +56,10 @@ local function checkError()
         local errorPrompt = overlay and overlay:FindFirstChild("ErrorPrompt")
         if errorPrompt then
             local textLabel = errorPrompt:FindFirstChildWhichIsA("TextLabel", true)
-            return (textLabel and textLabel.Text) or "ErrorPrompt Active"
+            local txt = textLabel and textLabel.Text or ""
+            if isRealError(txt) then
+                return (txt ~= "" and txt) or "ErrorPrompt Active"
+            end
         end
     end
 
@@ -173,7 +190,7 @@ local function getFieldForPosition(pos)
 end
 
 -- ============================================================
--- ====== СЕРВЕР-ХОП (БЕЗ ЗАВИСАНИЙ НА game.Loaded) ======
+-- ====== СЕРВЕР-ХОП ======
 -- ============================================================
 local function httpRequest(url)
     local req = (syn and syn.request) 
@@ -334,25 +351,28 @@ local function hopToRandomServer()
 end
 
 -- ============================================================
--- ====== МГНОВЕННЫЙ ПЕРЕХВАТ ОШИБКИ 279 И ДИСКОННЕКТА ======
+-- ====== ПЕРЕХВАТ ОШИБКИ 279 И ДИСКОННЕКТА (БЕЗ ЛОЖНЫХ СРАБАТЫВАНИЙ) ======
 -- ============================================================
 local isHandlingError = false
 
 local function handleConnectionError(sourceMsg)
+    -- Строгий фильтр: никогда не реагируем на DisconnectClientInitiated
+    if not isRealError(sourceMsg) then
+        return
+    end
+
     if isHandlingError then return end
     isHandlingError = true
 
     warn(string.format("[Auto-Reconnect] ⚡ Перехвачена ошибка (%s)! Экстренный хоп...", tostring(sourceMsg)))
 
-    -- 1. Сбрасываем флаги и отменяем зависший телепорт
     getgenv().IsHopping = false
-    pcall(function() TeleportService:TeleportCancel() end)
     pcall(function() GuiService:ClearError() end)
 
-    -- 2. Пауза 1.0 сек для сброса сокетов Roblox
+    -- Пауза 1.0 сек для сброса сокетов Roblox
     task.wait(1.0)
 
-    -- 3. Вызываем хоп на следующий сервер
+    -- Вызываем хоп на следующий сервер
     task.spawn(hopToRandomServer)
 
     task.delay(4, function()
@@ -362,13 +382,18 @@ end
 
 -- 1. Системное событие GuiService
 GuiService.ErrorMessageChanged:Connect(function(msg)
-    if msg and msg ~= "" then
+    if isRealError(msg) then
         handleConnectionError(msg)
     end
 end)
 
--- 2. Событие TeleportInitFailed
+-- 2. Событие TeleportInitFailed (игнорирует DisconnectClientInitiated)
 TeleportService.TeleportInitFailed:Connect(function(_, result, err)
+    if result == Enum.TeleportResult.DisconnectClientInitiated 
+        or (result and result.Name == "DisconnectClientInitiated") then
+        -- Это штатная отмена со стороны клиента — игнорируем!
+        return
+    end
     handleConnectionError(result and result.Name or "TeleportInitFailed")
 end)
 
@@ -377,12 +402,16 @@ local promptOverlay = CoreGui:FindFirstChild("RobloxPromptGui") and CoreGui.Robl
 if promptOverlay then
     promptOverlay.ChildAdded:Connect(function(child)
         if child.Name == "ErrorPrompt" then
-            handleConnectionError("ErrorPrompt in CoreGui")
+            local textLabel = child:FindFirstChildWhichIsA("TextLabel", true)
+            local txt = textLabel and textLabel.Text or ""
+            if isRealError(txt) then
+                handleConnectionError("ErrorPrompt in CoreGui")
+            end
         end
     end)
 end
 
--- 4. Фоновый опрос каждые 0.3 сек (страховка)
+-- 4. Фоновый опрос каждые 0.3 сек (только реальные ошибки)
 task.spawn(function()
     while _G.ViciousHunterRunning do
         task.wait(0.3)
@@ -923,7 +952,7 @@ local serverEntryTime = tick()
 task.spawn(function()
     while _G.ViciousHunterRunning do
         task.wait(5)
-        if tick() - serverEntryTime > 50 and not getgenv().IsHopping then
+        if tick() - serverEntryTime > 90 and not getgenv().IsHopping then
             warn("[Watchdog] ⏰ Сервер превысил лимит в 90 сек — принудительный хоп!")
             hopToRandomServer()
             break
