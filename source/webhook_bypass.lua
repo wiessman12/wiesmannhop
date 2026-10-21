@@ -1,8 +1,15 @@
 -- ============================================================
--- VICIOUS BEE SERVER HOPPER (PRO WATCHDOG + ANTI-FREEZE EDITION)
+-- VICIOUS BEE SERVER HOPPER (TURBO & ANTI-CRASH EDITION)
 -- ============================================================
 
--- ====== 1. ОЖИДАНИЕ ЗАГРУЗКИ ИГРЫ (С ТАЙМАУТОМ ОТ ЗАВИСАНИЯ) ======
+-- Защита от дублирования скрипта в памяти
+if _G.ViciousHunterRunning then
+    _G.ViciousHunterRunning = false
+    task.wait(0.5)
+end
+_G.ViciousHunterRunning = true
+
+-- ====== 1. ОЖИДАНИЕ ЗАГРУЗКИ ИГРЫ ======
 local loadStart = tick()
 while not game:IsLoaded() do
     if tick() - loadStart > 20 then break end
@@ -17,15 +24,13 @@ local RunService = game:GetService("RunService")
 local GuiService = game:GetService("GuiService")
 local CoreGui = game:GetService("CoreGui")
 
--- Ждем появления LocalPlayer (таймаут 15 сек)
 local lp = Players.LocalPlayer
 local lpStart = tick()
 while not lp and tick() - lpStart < 15 do
-    task.wait(0.3)
+    task.wait(0.2)
     lp = Players.LocalPlayer
 end
 
--- Ждем закрытия экрана загрузки Bee Swarm Simulator (таймаут 15 сек от зависания)
 local playerGui = lp and lp:WaitForChild("PlayerGui", 15)
 if playerGui then
     local loadingGui = playerGui:FindFirstChild("LoadingScreenGui")
@@ -33,23 +38,23 @@ if playerGui then
         local msg = loadingGui:FindFirstChild("LoadingMessage")
         local msgStart = tick()
         while msg and msg.Visible and tick() - msgStart < 15 do
-            task.wait(0.3)
+            task.wait(0.2)
         end
     end
 end
 print("[Init] ✅ Инициализация завершена!")
 
--- ====== НАСТРОЙКИ ======
+-- ====== НАСТРОЙКИ (ПО ВАШИМ ТРЕБОВАНИЯМ) ======
 _G.unlocktween = true
-local TWEEN_SPEED = 75       -- Скорость полета Tween (стадс/сек)
+local TWEEN_SPEED = 150       -- [П.4] Флай ускорен в 2 раза (было 75)
 local WALK_SPEED = 60        -- Скорость бега при мансинге
-local MANSING_RADIUS = 28    -- Радиус кружения вокруг Vicious Bee
-local THORN_AVOID_DIST = 11  -- Безопасная дистанция отступа от шипов
+local MANSING_RADIUS = 14    -- [П.3] Радиус мансинга в 2 раза меньше (было 28)
+local THORN_AVOID_DIST = 9   -- Зона уворота от шипов (подстроена под радиус 14)
 
 local DATA_FILE = "hop_data.json"
-local EXPIRE_TIME = 20 * 60   -- Сервер хранится 20 минут в черном списке
-local QUEUE_MAX_AGE = 8 * 60  -- Список обновляется раз в 8 минут
-local HOP_DELAY = 1.5         -- Задержка хопа (строго <= 3 сек)
+local EXPIRE_TIME = 20 * 60  
+local QUEUE_MAX_AGE = 8 * 60 
+local HOP_DELAY = 3.2        -- [П.2] Задержка хопа ровно 3.2с
 
 getgenv().IsHopping = false
 getgenv().HopStartTime = 0
@@ -95,7 +100,7 @@ local function getPosition(obj)
 end
 
 -- ============================================================
--- ====== СЕРВЕР-ХОП С ЗАЩИТОЙ ОТ ЗАВИСАНИЙ И МЕРТВЫХ СЕРВЕРОВ ======
+-- ====== СЕРВЕР-ХОП (БЕЗ ВЫЛЕТОВ И РЕЙТ-ЛИМИТОВ) ======
 -- ============================================================
 local function httpRequest(url)
     local req = (syn and syn.request) 
@@ -167,7 +172,6 @@ local function fetchNewServers(data)
 
     for _, s in ipairs(decoded.data) do
         if s.id ~= game.JobId and s.playing < s.maxPlayers and not data.visited[s.id] then
-            -- Сервера с 2-5 игроками живые и активные
             if s.playing >= 2 then
                 table.insert(stableServers, s.id)
             else
@@ -190,10 +194,8 @@ local function fetchNewServers(data)
 end
 
 local function hopToRandomServer()
-    -- Защита: если хоп висит дольше 15 секунд — принудительно сбрасываем флаг!
     if getgenv().IsHopping then
-        if tick() - (getgenv().HopStartTime or 0) > 15 then
-            warn("[Hop] ⚠️ Сброс зависшего флага IsHopping по таймауту!")
+        if tick() - (getgenv().HopStartTime or 0) > 14 then
             getgenv().IsHopping = false
         else
             return
@@ -203,7 +205,7 @@ local function hopToRandomServer()
     getgenv().IsHopping = true
     getgenv().HopStartTime = tick()
 
-    task.wait(HOP_DELAY)
+    task.wait(HOP_DELAY) -- [П.2] Задержка 3.2 сек
 
     local currentLp = Players.LocalPlayer or lp
     local data = loadData()
@@ -230,10 +232,10 @@ local function hopToRandomServer()
             data.visited = {}
             if game.JobId and game.JobId ~= "" then data.visited[game.JobId] = os.time() end
             saveData(data)
-            warn("[Hop] Очередь пуста. Резервный хоп через матчмейкинг...")
+            warn("[Hop] Резервный хоп через матчмейкинг...")
             pcall(function() TeleportService:Teleport(game.PlaceId, currentLp) end)
             
-            task.wait(10)
+            task.wait(8)
             getgenv().IsHopping = false
             return
         end
@@ -245,74 +247,91 @@ local function hopToRandomServer()
     data.visited[targetJobId] = os.time()
     saveData(data)
 
-    print(string.format("[Hop] 🚀 Переход на сервер: %s (Осталось в запасе: %d)", targetJobId, #data.queue))
+    print(string.format("[Hop] 🚀 Переход на сервер: %s (Осталось: %d)", targetJobId, #data.queue))
 
     local ok, err = pcall(function()
         TeleportService:TeleportToPlaceInstance(game.PlaceId, targetJobId, currentLp)
     end)
 
     if ok then
-        -- Ждем телепортации максимум 12 секунд
         local startWait = tick()
         while tick() - startWait < 12 and getgenv().IsHopping do
-            task.wait(1)
+            task.wait(0.5)
         end
 
-        -- ЕСЛИ МЫ ВСЕ ЕЩЕ НА СТАРОМ СЕРВЕРЕ — ТЕЛЕПОРТ ЗАВИС/НЕ УДАЛСЯ!
         if getgenv().IsHopping then
-            warn("[Hop] ⚠️ Сервер " .. tostring(targetJobId) .. " не ответил за 12 сек! Отмена и следующий хоп...")
             pcall(function() TeleportService:TeleportCancel() end)
             getgenv().IsHopping = false
-            task.wait(1)
+            task.wait(0.5)
             hopToRandomServer()
         end
     else
         warn("[Hop] Ошибка вызова TeleportToPlaceInstance:", err)
         getgenv().IsHopping = false
-        task.wait(1)
+        task.wait(0.5)
         hopToRandomServer()
     end
 end
 
--- ====== ПЕРЕХВАТЧИК ОШИБОК 279 / ДИСКОННЕКТОВ ======
+-- ============================================================
+-- ====== [П.1, П.5] МГНОВЕННЫЙ ДЕТЕКТ ОШИБКИ 279 + АНТИ-КРАШ ======
+-- ============================================================
+local isHandlingError = false
+
+local function handleConnectionError(sourceMsg)
+    if isHandlingError then return end
+    isHandlingError = true
+    
+    warn(string.format("[Auto-Reconnect] ⚡ Мгновенный перехват ошибки (%s)! Хоп...", tostring(sourceMsg)))
+    pcall(function() TeleportService:TeleportCancel() end)
+    getgenv().IsHopping = false
+    
+    task.wait(0.3) -- моментальная реакция
+    hopToRandomServer()
+    
+    task.delay(3, function()
+        isHandlingError = false
+    end)
+end
+
+-- 1. Системное событие ошибки GuiService
 GuiService.ErrorMessageChanged:Connect(function(msg)
     if msg and msg ~= "" then
-        warn(string.format("[Auto-Reconnect] ⚠️ Ошибка подключения: %s. Хоп через 1.5 сек...", tostring(msg)))
-        pcall(function() TeleportService:TeleportCancel() end)
-        getgenv().IsHopping = false
-        task.wait(1.5)
-        hopToRandomServer()
+        handleConnectionError(msg)
     end
 end)
 
+-- 2. Сбой телепорта
 TeleportService.TeleportInitFailed:Connect(function(_, result, err)
-    warn("[Teleport] ❌ Не удалось войти на сервер:", result.Name, err)
-    pcall(function() TeleportService:TeleportCancel() end)
-    getgenv().IsHopping = false
-    task.wait(1.5)
-    hopToRandomServer()
+    handleConnectionError(result.Name)
 end)
 
--- Фоновый наблюдатель за всплывающими окнами ошибок (ErrorPrompt) в CoreGui
+-- 3. Мгновенный перехват появления модального окна ErrorPrompt в CoreGui
+local promptOverlay = CoreGui:FindFirstChild("RobloxPromptGui") and CoreGui.RobloxPromptGui:FindFirstChild("promptOverlay")
+if promptOverlay then
+    promptOverlay.ChildAdded:Connect(function(child)
+        if child.Name == "ErrorPrompt" then
+            handleConnectionError("ErrorPrompt Window")
+        end
+    end)
+end
+
+-- Фоновая быстрая проверка каждые 0.2с
 task.spawn(function()
-    while true do
-        task.wait(1.5)
+    while _G.ViciousHunterRunning do
+        task.wait(0.2)
         local ok, promptGui = pcall(function() return CoreGui:FindFirstChild("RobloxPromptGui") end)
         if ok and promptGui then
             local overlay = promptGui:FindFirstChild("promptOverlay")
             if overlay and overlay:FindFirstChild("ErrorPrompt") then
-                warn("[Auto-Reconnect] ⚠️ Обнаружено модальное окно ErrorPrompt! Принудительный хоп...")
-                pcall(function() TeleportService:TeleportCancel() end)
-                getgenv().IsHopping = false
-                task.wait(1.5)
-                hopToRandomServer()
+                handleConnectionError("ErrorPrompt Active")
             end
         end
     end
 end)
 
 -- ============================================================
--- ====== ATLAS 2 TWEEN SYSTEM (С ПОЛНЫМ NOCLIP) ======
+-- ====== [П.4, П.5] БЫСТРЫЙ И БЕЗОПАСНЫЙ TWEEN SYSTEM (СКОРОСТЬ 150) ======
 -- ============================================================
 local function tweenTo(target, speed, offset)
     local curLp = Players.LocalPlayer or lp
@@ -326,7 +345,6 @@ local function tweenTo(target, speed, offset)
 
     local targetPos = getPosition(target)
     if not targetPos or typeof(targetPos) ~= "Vector3" then
-        warn("[Tween] ❌ Ошибка: не удалось получить координаты цели:", tostring(target))
         return false
     end
 
@@ -347,7 +365,7 @@ local function tweenTo(target, speed, offset)
     local ap = Instance.new("AlignPosition")
     ap.Mode = Enum.PositionAlignmentMode.OneAttachment
     ap.Attachment0 = hrp:FindFirstChild("RootAttachment") or hrp.RootAttachment
-    ap.Responsiveness = 25
+    ap.Responsiveness = 35 -- повышен отклик для скорости 150
     ap.MaxForce = math.huge
     ap.MaxVelocity = maxVelocity
     ap.Position = targetPos
@@ -362,17 +380,26 @@ local function tweenTo(target, speed, offset)
 
     hum:ChangeState(Enum.HumanoidStateType.Physics)
 
+    -- [П.5 ФИКС КРАША]: кэшируем детали один раз, а не сканируем GetDescendants() 60 раз/сек!
+    local charParts = {}
+    for _, p in ipairs(char:GetDescendants()) do
+        if p:IsA("BasePart") then
+            table.insert(charParts, p)
+        end
+    end
+
     local stepSignal = RunService.PreSimulation or RunService.Stepped
     local noclipConn = stepSignal:Connect(function()
-        for _, p in ipairs(char:GetDescendants()) do
-            if p:IsA("BasePart") and p.CanCollide then
+        for i = 1, #charParts do
+            local p = charParts[i]
+            if p and p.Parent and p.CanCollide then
                 p.CanCollide = false
             end
         end
     end)
 
     local startClock = os.clock()
-    while (os.clock() - startClock < travelTime + 1.5) and (os.clock() - startClock < 25) do
+    while (os.clock() - startClock < travelTime + 1.2) and (os.clock() - startClock < 20) do
         if not hrp or not hrp.Parent or hum.Health <= 0 then break end
         if (hrp.Position - targetPos).Magnitude < 4.5 then break end
         RunService.Heartbeat:Wait()
@@ -382,8 +409,9 @@ local function tweenTo(target, speed, offset)
     ap:Destroy()
     ao:Destroy()
 
-    for _, p in ipairs(char:GetDescendants()) do
-        if p:IsA("BasePart") then
+    for i = 1, #charParts do
+        local p = charParts[i]
+        if p and p.Parent then
             p.CanCollide = true
         end
     end
@@ -475,13 +503,13 @@ local function occupyHive(hive)
                 VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
             end)
         end
-        task.wait(0.5)
+        task.wait(0.4)
     end
     return curLp:FindFirstChild("Honeycomb") ~= nil
 end
 
 -- ============================================================
--- ====== СИСТЕМА УВОРОТА И МАНСИНГА (ATLAS 2) ======
+-- ====== [П.3] МАНСИНГ (РАДИУС 14 СТАДСОВ) ======
 -- ============================================================
 local function startMansing(bee)
     local running = true
@@ -508,7 +536,7 @@ local function startMansing(bee)
 
         connRem = particles.ChildRemoved:Connect(function(child)
             if child.Name == "WarningDisk" and child.Size.X == 10 then
-                task.delay(1.5, function()
+                task.delay(1.2, function()
                     trackedAvoid[child] = nil
                 end)
             end
@@ -548,20 +576,21 @@ local function startMansing(bee)
         local now = tick()
         local distToBee = (hrp.Position - beeHrp.Position).Magnitude
 
-        if distToBee > 75 then
+        if distToBee > 60 then
             local pos = getPosition(beeHrp)
-            if pos then tweenTo(pos, TWEEN_SPEED, Vector3.new(0, 5, 10)) end
+            if pos then tweenTo(pos, TWEEN_SPEED, Vector3.new(0, 4, 8)) end
             return
         end
 
-        if now - lastAttack > 0.2 then
+        if now - lastAttack > 0.15 then
             local tool = charStep:FindFirstChildOfClass("Tool")
-            if tool and distToBee < 35 then
+            if tool and distToBee < 30 then
                 pcall(function() tool:Activate() end)
                 lastAttack = now
             end
         end
 
+        -- [П.3] Мансинг по радиусу 14
         angle = angle + (WALK_SPEED / MANSING_RADIUS) * dt
         local targetPos = beeHrp.Position + Vector3.new(
             math.cos(angle) * MANSING_RADIUS, 
@@ -572,7 +601,7 @@ local function startMansing(bee)
         local waitingThorn = getWaitingThorn()
         if waitingThorn and waitingThorn.Parent then
             local toThorn = (waitingThorn.Position - beeHrp.Position).Unit
-            targetPos = waitingThorn.Position - toThorn * 4
+            targetPos = waitingThorn.Position - toThorn * 3
         end
 
         -- Уворот от шипов
@@ -586,12 +615,12 @@ local function startMansing(bee)
                     hum.Jump = true
                     local evadeDir = (hrp.Position - threatPos)
                     if evadeDir.Magnitude < 0.1 then evadeDir = Vector3.new(1, 0, 0) else evadeDir = evadeDir.Unit end
-                    targetPos = hrp.Position + evadeDir * (dangerDist + 6)
+                    targetPos = hrp.Position + evadeDir * (dangerDist + 5)
                     break
                 elseif distTargetToThreat < dangerDist then
                     local evadeDir = (targetPos - threatPos)
                     if evadeDir.Magnitude < 0.1 then evadeDir = Vector3.new(1, 0, 0) else evadeDir = evadeDir.Unit end
-                    targetPos = threatPos + evadeDir * (dangerDist + 4)
+                    targetPos = threatPos + evadeDir * (dangerDist + 3)
                 end
             end
         end
@@ -606,7 +635,7 @@ local function startMansing(bee)
 
         hum:MoveTo(targetPos)
 
-        if now - lastJump > 1.4 then
+        if now - lastJump > 1.3 then
             local st = hum:GetState()
             if st == Enum.HumanoidStateType.Running or st == Enum.HumanoidStateType.Landed then
                 hum.Jump = true
@@ -631,21 +660,20 @@ local function startMansing(bee)
 end
 
 -- ============================================================
--- ====== ГЛАВНАЯ ЛОГИКА ======
+-- ====== [П.6] ГЛАВНАЯ ЛОГИКА (БЫСТРЫЙ ДЕТЕКТ СМЕРТИ) ======
 -- ============================================================
 local function huntViciousBee()
     local curLp = Players.LocalPlayer or lp
     if not curLp then return end
 
-    -- Ждём персонажа (максимум 8 сек)
     local char, hrp
-    for _ = 1, 40 do
+    for _ = 1, 35 do
         char = curLp.Character
         if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChildOfClass("Humanoid") then
             hrp = char.HumanoidRootPart
             break
         end
-        task.wait(0.2)
+        task.wait(0.15)
     end
     if not char or not hrp then
         print("[Hunt] Персонаж не прогрузился — хоп")
@@ -653,14 +681,14 @@ local function huntViciousBee()
         return
     end
 
-    local monsters = workspace:WaitForChild("Monsters", 5)
+    local monsters = workspace:WaitForChild("Monsters", 4)
     if not monsters then
         print("[Hunt] Monsters не прогрузились — хоп")
         hopToRandomServer()
         return
     end
 
-    task.wait(0.5)
+    task.wait(0.3)
 
     print("[Hunt] Ищем Vicious Bee...")
     local bee = findViciousBee()
@@ -678,7 +706,7 @@ local function huntViciousBee()
     end
     print("[Hunt] ✅ Vicious не на горе — готовимся к охоте")
 
-    -- 1. Tween к свободному улью
+    -- 1. Tween к свободному улью (скорость 150)
     print("[Hunt] Ищем улей...")
     local hive = findFreeHive()
     if not hive then
@@ -687,10 +715,9 @@ local function huntViciousBee()
         return
     end
 
-    print("[Hunt] 🚀 Tween к улью:", hive.Name)
+    print("[Hunt] 🚀 Быстрый Tween к улью:", hive.Name)
     local hivePos = getPosition(hive)
     if not hivePos then
-        print("[Hunt] ❌ Не удалось определить координаты улья — ХОП")
         hopToRandomServer()
         return
     end
@@ -702,7 +729,7 @@ local function huntViciousBee()
         return
     end
 
-    task.wait(0.5)
+    task.wait(0.3)
     print("[Hunt] Занимаем улей...")
     local occupied = occupyHive(hive)
     if not occupied then
@@ -712,7 +739,7 @@ local function huntViciousBee()
     end
     print("[Hunt] ✅ Улей успешно занят!")
 
-    -- 2. Tween к Vicious Bee на поле
+    -- 2. Tween к Vicious Bee на поле (скорость 150)
     local beeHrp = bee:FindFirstChild("HumanoidRootPart")
     if not beeHrp then
         print("[Hunt] ❌ Vicious Bee исчезла — ХОП")
@@ -720,24 +747,46 @@ local function huntViciousBee()
         return
     end
 
-    print("[Hunt] 🚀 Tween к Vicious Bee на поле...")
+    print("[Hunt] 🚀 Быстрый Tween к Vicious Bee на поле...")
     local waitingThorn = getWaitingThorn()
     local targetPos = (waitingThorn and getPosition(waitingThorn)) or getPosition(beeHrp)
 
     if targetPos then
-        tweenTo(targetPos, TWEEN_SPEED, Vector3.new(0, 6, 10))
+        tweenTo(targetPos, TWEEN_SPEED, Vector3.new(0, 5, 8))
     end
 
     -- 3. Запуск боя и мансинга
-    print("[Hunt] ⚔️ Начинаем бой и мансинг вокруг пчелы...")
+    print("[Hunt] ⚔️ Бой и мансинг вокруг пчелы (радиус 14)...")
     local stopMansing = startMansing(bee)
 
-    local maxWait, waited = 90, 0
+    -- [П.6] МГНОВЕННЫЙ ДЕТЕКТ СМЕРТИ ПЧЕЛЫ ЧЕРЕЗ СОБЫТИЯ
+    local isBeeDead = false
     local lastDeathPos = getPosition(beeHrp) or hrp.Position
+    local deathConns = {}
 
-    while waited < maxWait do
-        task.wait(0.3)
-        waited = waited + 0.3
+    local function onDead()
+        if isBeeDead then return end
+        isBeeDead = true
+        if beeHrp and beeHrp.Parent then
+            lastDeathPos = beeHrp.Position
+        end
+    end
+
+    local beeHum = bee:FindFirstChildOfClass("Humanoid")
+    if beeHum then
+        table.insert(deathConns, beeHum.Died:Connect(onDead))
+        table.insert(deathConns, beeHum:GetPropertyChangedSignal("Health"):Connect(function()
+            if beeHum.Health <= 0 then onDead() end
+        end))
+    end
+    table.insert(deathConns, bee.AncestryChanged:Connect(function(_, parent)
+        if not parent then onDead() end
+    end))
+
+    local maxWait, waited = 90, 0
+    while waited < maxWait and not isBeeDead do
+        task.wait(0.1) -- быстрый опрос каждые 100мс
+        waited = waited + 0.1
 
         -- Проверка на смерть персонажа игрока
         local myChar = curLp.Character
@@ -747,13 +796,13 @@ local function huntViciousBee()
             if stopMansing then stopMansing() end
             
             curLp.CharacterAdded:Wait()
-            task.wait(1.5)
+            task.wait(1)
             
-            if bee and bee.Parent then
+            if not isBeeDead and bee and bee.Parent then
                 local bHrp = bee:FindFirstChild("HumanoidRootPart")
                 if bHrp then
-                    print("[Hunt] 🚀 Возврат на поле боя к пчеле...")
-                    tweenTo(bHrp.Position, TWEEN_SPEED, Vector3.new(0, 6, 10))
+                    print("[Hunt] 🚀 Быстрый возврат к пчеле...")
+                    tweenTo(bHrp.Position, TWEEN_SPEED, Vector3.new(0, 5, 8))
                     stopMansing = startMansing(bee)
                 end
             else
@@ -761,32 +810,31 @@ local function huntViciousBee()
             end
         end
 
-        if bee and bee.Parent then
-            local bHrp = bee:FindFirstChild("HumanoidRootPart")
-            if bHrp then lastDeathPos = bHrp.Position end
-            local h = bee:FindFirstChildOfClass("Humanoid")
-            if h and h.Health <= 0 then
-                break
-            end
-        else
+        if not bee or not bee.Parent then
+            onDead()
             break
+        end
+        if beeHrp and beeHrp.Parent then
+            lastDeathPos = beeHrp.Position
         end
     end
 
+    -- Отключаем слушатели
+    for _, c in ipairs(deathConns) do pcall(function() c:Disconnect() end) end
     if stopMansing then stopMansing() end
 
-    -- 4. Сбор жал (Stingers) перед уходом с сервера
-    print("[Hunt] 🎉 Vicious Bee убита! Собираем жала (Stingers)...")
+    -- [П.6] Быстрый подбор жал (всего 2 секунды вместо 3.5)
+    print("[Hunt] ⚡ Vicious Bee уничтожена! Быстрый сбор жал...")
     local collectStart = tick()
-    while tick() - collectStart < 3.5 do
+    while tick() - collectStart < 2.0 do
         local myChar = curLp.Character
         local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
         if myHum and myHum.Health > 0 then
-            local angle = (tick() - collectStart) * 5
-            local offset = Vector3.new(math.cos(angle) * 12, 0, math.sin(angle) * 12)
+            local angle = (tick() - collectStart) * 8
+            local offset = Vector3.new(math.cos(angle) * 8, 0, math.sin(angle) * 8)
             myHum:MoveTo(lastDeathPos + offset)
         end
-        task.wait(0.2)
+        task.wait(0.1)
     end
 
     print("[Hunt] Хоп на следующий сервер...")
@@ -794,13 +842,12 @@ local function huntViciousBee()
 end
 
 -- ============================================================
--- ====== СЕРВЕРНЫЙ СТОРОЖ (WATCHDOG: МАКСИМУМ 90 СЕК НА СЕРВЕР) ======
+-- ====== СЕРВЕРНЫЙ СТОРОЖ (WATCHDOG 90 СЕК) ======
 -- ============================================================
 local serverEntryTime = tick()
 task.spawn(function()
-    while true do
-        task.wait(5)
-        -- Если находимся на сервере дольше 90 сек и не хопаемся — принудительный хоп!
+    while _G.ViciousHunterRunning do
+        task.wait(4)
         if tick() - serverEntryTime > 90 and not getgenv().IsHopping then
             warn("[Watchdog] ⚠️ Превышено время нахождения на сервере (90 сек). Принудительный хоп!")
             hopToRandomServer()
@@ -812,7 +859,7 @@ end)
 -- ====== ГЛАВНЫЙ ЦИКЛ ======
 -- ============================================================
 task.wait(1)
-while true do
+while _G.ViciousHunterRunning do
     if not getgenv().IsHopping then
         local ok, err = pcall(huntViciousBee)
         if not ok then
@@ -822,5 +869,5 @@ while true do
             end
         end
     end
-    task.wait(1.5)
+    task.wait(1)
 end
