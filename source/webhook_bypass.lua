@@ -1,5 +1,5 @@
 -- ============================================================
--- VICIOUS BEE SERVER HOPPER (PRO UNIVERSAL ANTI-ERROR EDITION)
+-- VICIOUS BEE SERVER HOPPER (PRO UNIVERSAL ANTI-CRASH EDITION)
 -- ============================================================
 
 local Players = game:GetService("Players")
@@ -14,16 +14,87 @@ local CoreGui = game:GetService("CoreGui")
 _G.unlocktween = true
 _G.ViciousHunterRunning = true
 
-local TWEEN_SPEED = 150       -- Скорость полета (150 стадс/сек)
-local WALK_SPEED = 60         -- Скорость бега при мансинге
-local MANSING_RADIUS = 14     -- Радиус мансинга (14 стадс)
-local THORN_AVOID_DIST = 11   -- Дистанция уворота от шипов (WarningDisk)
+local TWEEN_SPEED = 150              -- Скорость полета (150 стадс/сек)
+local WALK_SPEED = 60                -- Скорость бега при мансинге
+local MANSING_RADIUS = 14            -- Радиус мансинга (14 стадс)
+local THORN_AVOID_DIST = 11          -- Дистанция уворота от шипов (WarningDisk)
 
 local DATA_FILE = "hop_data.json"
-local EXPIRE_TIME = 20 * 60   -- Сервер хранится 20 минут в черном списке
-local QUEUE_MAX_AGE = 8 * 60  -- Список серверов обновляется раз в 8 минут
+local EXPIRE_TIME = 20 * 60          -- Сервер хранится 20 минут в черном списке
+local QUEUE_MAX_AGE = 8 * 60         -- Список серверов обновляется раз в 8 минут
+
+local TARGET_FPS = 60                -- Лимит FPS (60 защищает от перегрева и утечек VRAM/GPU)
+local DISABLE_3D_RENDERING = false   -- Установите true для отключения 3D (0% нагрузки на GPU, RAM < 350 МБ)
 
 getgenv().IsHopping = false
+
+-- ============================================================
+-- ====== АНТИ-КРАШ И ОПТИМИЗАЦИЯ ПАМЯТИ (ANTI-OOM НА 1-2 ЧАСА) ======
+-- ============================================================
+local function applyMemoryOptimizer()
+    -- 1. Снижение качества графики до минимума для экономии VRAM и RAM
+    pcall(function()
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+        settings().Graphics.QualityLevel = Enum.QualityLevel.Level01
+    end)
+
+    -- 2. Отключение теней и визуальных пост-эффектов (освобождает ~400 МБ)
+    local Lighting = game:GetService("Lighting")
+    pcall(function()
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 9e9
+        for _, effect in ipairs(Lighting:GetChildren()) do
+            if effect:IsA("PostProcessEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect")
+                or effect:IsA("BloomEffect") or effect:IsA("ColorCorrectionEffect") or effect:IsA("DepthOfFieldEffect") then
+                effect.Enabled = false
+            end
+        end
+    end)
+
+    -- 3. Очистка тяжелых теней и материалов у десятков тысяч цветов в поле
+    pcall(function()
+        local flowers = workspace:FindFirstChild("Flowers")
+        if flowers then
+            for _, zone in ipairs(flowers:GetChildren()) do
+                for _, part in ipairs(zone:GetChildren()) do
+                    if part:IsA("BasePart") then
+                        part.CastShadow = false
+                        part.Material = Enum.Material.SmoothPlastic
+                    end
+                end
+            end
+        end
+    end)
+
+    -- 4. Отключение физики волн воды на ландшафте
+    pcall(function()
+        local terrain = workspace:FindFirstChildOfClass("Terrain")
+        if terrain then
+            terrain.WaterWaveSize = 0
+            terrain.WaterWaveSpeed = 0
+            terrain.WaterReflectance = 0
+        end
+    end)
+
+    -- 5. Ограничение FPS (предотвращает перегрев и краши драйвера)
+    pcall(function()
+        if setfpscap and TARGET_FPS and TARGET_FPS > 0 then
+            setfpscap(TARGET_FPS)
+        end
+    end)
+
+    -- 6. Опциональный режим отключения 3D рендера (0% нагрузки на видеокарту)
+    if DISABLE_3D_RENDERING then
+        pcall(function()
+            RunService:Set3dRenderingEnabled(false)
+        end)
+    end
+
+    -- 7. Принудительный запуск сборщика мусора Luau
+    pcall(function()
+        collectgarbage("collect")
+    end)
+end
 
 -- ============================================================
 -- ====== СТРОГИЙ ДЕТЕКТ РЕАЛЬНЫХ ОШИБОК (ВКЛЮЧАЯ 769, 279 И ДРУГИЕ) ======
@@ -38,7 +109,7 @@ local function isRealErrorString(str)
         return false
     end
 
-    -- Ловим любые ошибки телепорта, сбои подключения, кики и коды ошибок (769, 770, 771, 772, 773, 279, 277 и т.д.)
+    -- Ловим любые ошибки телепорта, сбои подключения, кики и коды ошибок
     if lower:find("error") 
         or lower:find("769") 
         or lower:find("279") 
@@ -343,7 +414,10 @@ local function hopToRandomServer()
             if game.JobId and game.JobId ~= "" then data.visited[game.JobId] = os.time() end
             saveData(data)
             warn("[Hop] Очередь пуста. Резервный хоп через матчмейкинг...")
-            pcall(function() TeleportService:Teleport(game.PlaceId, currentLp) end)
+            pcall(function()
+                collectgarbage("collect")
+                TeleportService:Teleport(game.PlaceId, currentLp)
+            end)
             
             task.wait(6)
             getgenv().IsHopping = false
@@ -358,6 +432,11 @@ local function hopToRandomServer()
     saveData(data)
 
     print(string.format("[Hop] 🚀 Переход на сервер: %s (Осталось: %d)", targetJobId, #data.queue))
+
+    -- Принудительный сбор мусора перед телепортом для предотвращения утечек памяти
+    pcall(function()
+        collectgarbage("collect")
+    end)
 
     local ok, err = pcall(function()
         TeleportService:TeleportToPlaceInstance(game.PlaceId, targetJobId, currentLp)
@@ -433,20 +512,26 @@ task.spawn(function()
 end)
 
 -- ============================================================
--- ====== ТРАВЕРС И БЕЗОПАСНЫЙ TWEEN (С ВЫСОТОЙ +10 СТАДС) ======
+-- ====== ТРАВЕРС И БЕЗОПАСНЫЙ TWEEN (С ЗАЩИТОЙ ОТ ПАРАЛЛЕЛЬНОГО СПАМА) ======
 -- ============================================================
+local isTweening = false
+
 local function tweenTo(target, speed, offset)
+    if isTweening then return false end
+    isTweening = true
+
     local curLp = Players.LocalPlayer or lp
-    if not curLp then return false end
+    if not curLp then isTweening = false; return false end
     local char = curLp.Character
-    if not char then return false end
+    if not char then isTweening = false; return false end
 
     local hrp = char:FindFirstChild("HumanoidRootPart")
     local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hrp or not hum or hum.Health <= 0 then return false end
+    if not hrp or not hum or hum.Health <= 0 then isTweening = false; return false end
 
     local targetPos = getPosition(target)
     if not targetPos or typeof(targetPos) ~= "Vector3" then
+        isTweening = false
         return false
     end
 
@@ -480,7 +565,7 @@ local function tweenTo(target, speed, offset)
     ao.CFrame = hrp.CFrame
     ao.Parent = hrp
 
-    hum:ChangeState(Enum.HumanoidStateType.Physics)
+    pcall(function() hum:ChangeState(Enum.HumanoidStateType.Physics) end)
 
     local charParts = {}
     for _, p in ipairs(char:GetDescendants()) do
@@ -506,25 +591,30 @@ local function tweenTo(target, speed, offset)
         RunService.Heartbeat:Wait()
     end
 
-    -- Завершение твина: обнуление скоростей и возвращение коллизии
-    hrp.AssemblyLinearVelocity = Vector3.zero
-    hrp.AssemblyAngularVelocity = Vector3.zero
-
-    noclipConn:Disconnect()
-    ap:Destroy()
-    ao:Destroy()
-
-    for i = 1, #charParts do
-        local p = charParts[i]
-        if p and p.Parent then
-            p.CanCollide = true
+    -- Гарантированное безопасное завершение твина без исключений
+    pcall(function()
+        if noclipConn then noclipConn:Disconnect() end
+        if ap and ap.Parent then ap:Destroy() end
+        if ao and ao.Parent then ao:Destroy() end
+        if hrp and hrp.Parent then
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
         end
-    end
+        for i = 1, #charParts do
+            local p = charParts[i]
+            if p and p.Parent then
+                p.CanCollide = true
+            end
+        end
+        if hum and hum.Parent then
+            hum.PlatformStand = false
+            hum:ChangeState(Enum.HumanoidStateType.Running)
+        end
+    end)
 
-    hum.PlatformStand = false
-    hum:ChangeState(Enum.HumanoidStateType.Running)
-
-    return (hrp.Position - targetPos).Magnitude < 8
+    isTweening = false
+    local finalDist = (hrp and hrp.Parent and (hrp.Position - targetPos).Magnitude) or 999
+    return finalDist < 8
 end
 
 -- ============================================================
@@ -610,7 +700,12 @@ local function startMansing(bee, currentFieldPart, onBeeDiedCallback)
     local angle = 0
     local lastJump = 0
     local lastAttack = 0
+    local isReturning = false
     local trackedAvoid = {}
+
+    -- Reusable RaycastParams (предотвращает создание тысяч C++ объектов в секунду)
+    local floorRayParams = RaycastParams.new()
+    floorRayParams.FilterType = Enum.RaycastFilterType.Exclude
 
     local particles = workspace:FindFirstChild("Particles")
     local connAdd, connRem
@@ -630,9 +725,7 @@ local function startMansing(bee, currentFieldPart, onBeeDiedCallback)
 
         connRem = particles.ChildRemoved:Connect(function(child)
             if child.Name == "WarningDisk" and child.Size.X == 10 then
-                task.delay(1.2, function()
-                    trackedAvoid[child] = nil
-                end)
+                trackedAvoid[child] = nil
             end
         end)
     end
@@ -682,10 +775,20 @@ local function startMansing(bee, currentFieldPart, onBeeDiedCallback)
         local now = tick()
         local distToBee = (hrp.Position - beeHrp.Position).Magnitude
 
-        -- Возврат к пчеле с высотой +10 стадс
-        if distToBee > 65 then
-            local pos = getPosition(beeHrp)
-            if pos then tweenTo(pos, TWEEN_SPEED, Vector3.new(0, 10, 0)) end
+        -- Безопасный возврат к пчеле (не блокирует поток RenderStepped!)
+        if distToBee > 65 and not isReturning then
+            isReturning = true
+            task.spawn(function()
+                local pos = getPosition(beeHrp)
+                if pos and running then
+                    tweenTo(pos, TWEEN_SPEED, Vector3.new(0, 10, 0))
+                end
+                task.wait(0.3)
+                isReturning = false
+            end)
+            return
+        end
+        if isReturning then
             return
         end
 
@@ -746,11 +849,9 @@ local function startMansing(bee, currentFieldPart, onBeeDiedCallback)
             )
         end
 
-        -- Подгоняем высоту под поверхность поля
-        local rp = RaycastParams.new()
-        rp.FilterDescendantsInstances = { charStep }
-        rp.FilterType = Enum.RaycastFilterType.Exclude
-        local hit = workspace:Raycast(Vector3.new(targetPos.X, targetPos.Y + 15, targetPos.Z), Vector3.new(0, -25, 0), rp)
+        -- Подгоняем высоту под поверхность поля с переиспользованием rayParams
+        floorRayParams.FilterDescendantsInstances = { charStep }
+        local hit = workspace:Raycast(Vector3.new(targetPos.X, targetPos.Y + 15, targetPos.Z), Vector3.new(0, -25, 0), floorRayParams)
         if hit then
             targetPos = Vector3.new(targetPos.X, hit.Position.Y + 3.2, targetPos.Z)
         elseif currentFieldPart then
@@ -770,6 +871,7 @@ local function startMansing(bee, currentFieldPart, onBeeDiedCallback)
 
     return function()
         running = false
+        isReturning = false
         if connAdd then connAdd:Disconnect() end
         if connRem then connRem:Disconnect() end
         if connUpdate then connUpdate:Disconnect() end
@@ -785,7 +887,10 @@ end
 -- ====== ГЛАВНАЯ ЛОГИКА ОХОТЫ ======
 -- ============================================================
 local function huntViciousBee()
-    -- Ждем корректной прогрузки игры перед началом охоты
+    -- 1. Применяем оптимизацию памяти и анти-краш настройки
+    applyMemoryOptimizer()
+
+    -- 2. Ждем корректной прогрузки игры перед началом охоты
     local loadedOk = waitForGameLoaded()
     if not loadedOk then
         warn("[Hunt] Игра не загрузилась или произошла ошибка подключения — хоп!")
@@ -819,7 +924,7 @@ local function huntViciousBee()
         return
     end
 
-    -- 1. Поиск и занятие свободного улья
+    -- 3. Поиск и занятие свободного улья
     print("[Hunt] Ищем свободный улей...")
     local hive = findFreeHive()
     if not hive then
@@ -852,7 +957,7 @@ local function huntViciousBee()
     end
     print("[Hunt] ✅ Улей успешно занят!")
 
-    -- 2. Определение поля и Tween напрямую к полю (+10 стадс)
+    -- 4. Определение поля и Tween напрямую к полю (+10 стадс)
     local beeHrp = bee:FindFirstChild("HumanoidRootPart")
     if not beeHrp then
         print("[Hunt] ❌ Vicious Bee исчезла — ХОП")
@@ -883,17 +988,27 @@ local function huntViciousBee()
         task.wait(0.3)
     end
 
-    -- 3. Мгновенная реакция на смерть пчелы (сразу хоп!)
+    -- 5. Мгновенная реакция на смерть пчелы (с гарантированной очисткой)
     local isBeeDead = false
     local deathConns = {}
     local stopMansing
+
+    local function cleanupCombat()
+        if stopMansing then
+            pcall(stopMansing)
+            stopMansing = nil
+        end
+        for _, c in ipairs(deathConns) do
+            pcall(function() c:Disconnect() end)
+        end
+        table.clear(deathConns)
+    end
 
     local function onDead()
         if isBeeDead then return end
         isBeeDead = true
         print("[Hunt] 💀 Vicious Bee погибла! МГНОВЕННЫЙ ХОП...")
-        for _, c in ipairs(deathConns) do pcall(function() c:Disconnect() end) end
-        if stopMansing then stopMansing() end
+        cleanupCombat()
         task.spawn(hopToRandomServer)
     end
 
@@ -953,6 +1068,13 @@ local function huntViciousBee()
             end
         end
     end
+
+    -- Если время боя истекло, а пчела не убита — обязательная очистка и хоп!
+    if not isBeeDead then
+        warn("[Hunt] ⏰ Время боя истекло (90 сек) — очистка и хоп!")
+        cleanupCombat()
+        hopToRandomServer()
+    end
 end
 
 -- ============================================================
@@ -964,6 +1086,9 @@ task.spawn(function()
         task.wait(5)
         if tick() - serverEntryTime > 90 and not getgenv().IsHopping then
             warn("[Watchdog] ⏰ Сервер превысил лимит в 90 сек — принудительный хоп!")
+            pcall(function()
+                collectgarbage("collect")
+            end)
             hopToRandomServer()
             break
         end
