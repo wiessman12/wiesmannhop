@@ -34,6 +34,8 @@ local MUTE_GAME = true               -- Выключить звук (меньш�
 local SHOW_GUI = true                -- Окно со статистикой (чуть выше центра экрана, можно перетаскивать за заголовок)
 local STATS_FILE = "vicious_stats.json"
 
+local HIVE_MAX_ATTEMPTS = 6         -- Сколько раз пробовать занять улей, прежде чем хопнуть
+local RESET_ON_RELAUNCH = true      -- Сбрасывать цифры в меню при каждом новом запуске Roblox (хопы внутри одного запуска цифры не сбрасывают)
 local HOP_PENDING_TIMEOUT = 40          -- Сколько секунд ждать завершения телепорта, прежде чем пробовать снова
 
 getgenv().IsHopping = false
@@ -73,36 +75,78 @@ end
 -- ====== СТАТИСТИКА (СОХРАНЯЕТСЯ МЕЖДУ СЕРВЕРАМИ И ПЕРЕЗАПУСКАМИ) ======
 -- ============================================================
 local stats = { kills = 0, thorns = 0, lastThorns = -1, hops = 0, boot = os.time(), lastSeen = 0, killsAtBoot = 0 }
+local STATS_BAK = STATS_FILE .. ".bak"
+
+-- Токен текущего запуска Roblox: одинаков на всех серверах внутри одного запуска, новый — после перезапуска клиента
+local sessionToken
+do
+    local ok, id = pcall(function() return game:GetService("RbxAnalyticsService"):GetSessionId() end)
+    if ok and type(id) == "string" and id ~= "" then sessionToken = id end
+end
+
+local function readStatsFile(path)
+    if not (readfile and isfile) then return nil end
+    local okF, exists = pcall(isfile, path)
+    if not okF or not exists then return nil end
+    local ok, data = pcall(function() return HttpService:JSONDecode(readfile(path)) end)
+    if ok and type(data) == "table" then return data end
+    return nil
+end
 
 do
-    if readfile and isfile and isfile(STATS_FILE) then
-        local ok, data = pcall(function()
-            return HttpService:JSONDecode(readfile(STATS_FILE))
-        end)
-        if ok and type(data) == "table" then
+    -- Основной файл мог оборваться на середине записи при телепорте — тогда берём резервную копию
+    local data = readStatsFile(STATS_FILE) or readStatsFile(STATS_BAK)
+    local now = os.time()
+    local sameProcess = false
+
+    if data then
+        local lastSeen = tonumber(data.lastSeen) or 0
+        if getgenv().VB_ProcessAlive then
+            sameProcess = true                                   -- клиент тот же (executor помнит прошлый запуск)
+        elseif RESET_ON_RELAUNCH and sessionToken and data.sessionToken then
+            sameProcess = (data.sessionToken == sessionToken)    -- сравниваем токен запуска
+        else
+            sameProcess = (now - lastSeen <= 180)                -- запасной вариант: по времени
+        end
+
+        if sameProcess then
             stats.kills = tonumber(data.kills) or 0
             stats.thorns = tonumber(data.thorns) or 0
             stats.lastThorns = tonumber(data.lastThorns) or -1
             stats.hops = tonumber(data.hops) or 0
-            stats.boot = tonumber(data.boot) or os.time()
-            stats.lastSeen = tonumber(data.lastSeen) or 0
+            stats.boot = tonumber(data.boot) or now
             stats.killsAtBoot = tonumber(data.killsAtBoot) or stats.kills
+            stats.lastJobId = data.lastJobId
         end
     end
-    -- Если с последнего запуска прошло больше 3 минут — это новая сессия клиента
-    if os.time() - stats.lastSeen > 180 then
-        stats.boot = os.time()
-        stats.hops = 0
-        stats.killsAtBoot = stats.kills
+
+    if not sameProcess then
+        -- Новый запуск Roblox: все цифры с нуля
+        stats.kills, stats.thorns, stats.lastThorns = 0, 0, -1
+        stats.hops, stats.boot, stats.killsAtBoot = 0, now, 0
+        stats.lastJobId = nil
     end
-    stats.lastSeen = os.time()
+    getgenv().VB_ProcessAlive = true
+
+    -- Хоп считаем тогда, когда реально оказались на новом сервере (а не при каждой попытке телепорта)
+    local jobId = game.JobId
+    if jobId and jobId ~= "" then
+        if stats.lastJobId and stats.lastJobId ~= jobId then
+            stats.hops = stats.hops + 1
+        end
+        stats.lastJobId = jobId
+    end
+    stats.lastSeen = now
 end
 
 local function saveStats()
     stats.lastSeen = os.time()
+    stats.sessionToken = sessionToken
     if writefile then
         pcall(function()
-            writefile(STATS_FILE, HttpService:JSONEncode(stats))
+            local json = HttpService:JSONEncode(stats)
+            writefile(STATS_BAK, json)   -- сначала копия, потом основной файл: хотя бы один всегда целый
+            writefile(STATS_FILE, json)
         end)
     end
 end
@@ -364,19 +408,29 @@ ui.refresh = function(pulse)
         if ui.rateLabel then ui.rateLabel.Text = string.format("%.1f", killsPerHour()) end
         local target = (pulse == "kills" and ui.killsLabel) or (pulse == "thorns" and ui.thornsLabel) or nil
         if target then
-            TweenService:Create(target, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, 0, true), { TextSize = 34 }):Play()
+            -- Без твинов: они накладывались друг на друга, размер текста "уплывал" и цифры пропадали
+            ui.pulseTok = ui.pulseTok or {}
+            local tok = (ui.pulseTok[target] or 0) + 1
+            ui.pulseTok[target] = tok
+            target.TextSize = 34
+            task.delay(0.15, function()
+                if ui.pulseTok[target] == tok and target.Parent then target.TextSize = 28 end
+            end)
         end
     end)
 end
 
 -- Меню создаётся сразу после закрытия экрана загрузки игры (см. huntViciousBee)
 local function buildGui()
-    if not SHOW_GUI or ui.statusLabel then return end
+    if not SHOW_GUI then return end
+    local keepText = currentStatus ~= "" and currentStatus or "Сервер загружен"
+    local keepKind = ui.lastKind or "ok"
     local okGui, errGui = pcall(createGui)
     if not okGui then warn("[GUI] Не удалось создать интерфейс:", errGui) end
     ui.refresh()
     currentStatus = ""
-    setStatus("Сервер загружен", "ok")
+    ui.lastKind = nil
+    setStatus(keepText, keepKind)
 end
 
 -- ============================================================
@@ -457,12 +511,36 @@ local function readStingerCount()
     return nil
 end
 
+local thornLowerReads = 0
+local thornPendingBase = nil
+
 local function refreshThorns()
     local c = readStingerCount()
     if type(c) ~= "number" then return false end
+
+    -- Базовое значение принимаем только после двух одинаковых чтений подряд (защита от случайного 0 при загрузке данных)
+    if stats.lastThorns < 0 then
+        if thornPendingBase == c then
+            stats.lastThorns = c
+            thornPendingBase = nil
+            saveStats()
+            ui.refresh()
+        else
+            thornPendingBase = c
+        end
+        return true
+    end
+
+    -- Кратковременное падение числа шипов игнорируем, иначе потом вернувшееся значение посчитается "новыми" шипами
+    if c < stats.lastThorns then
+        thornLowerReads = thornLowerReads + 1
+        if thornLowerReads < 3 then return true end
+    end
+    thornLowerReads = 0
+
     local gained = false
     local changed = false
-    if stats.lastThorns >= 0 and c > stats.lastThorns then
+    if c > stats.lastThorns then
         stats.thorns = stats.thorns + (c - stats.lastThorns)
         gained = true
         changed = true
@@ -499,10 +577,14 @@ end)
 task.spawn(function()
     while alive() do
         pcall(function()
+            -- Если окно пропало (его удалили/сбросило) — пересоздаём
+            if SHOW_GUI and gameReady and not (ui.statusLabel and ui.statusLabel.Parent and ui.statusLabel:IsDescendantOf(game)) then
+                buildGui()
+            end
             if ui.uptimeLabel and ui.uptimeLabel.Parent then
                 ui.uptimeLabel.Text = fmtTime(os.time() - stats.boot)
                 ui.hopsLabel.Text = tostring(stats.hops)
-                if ui.rateLabel then ui.rateLabel.Text = string.format("%.1f", killsPerHour()) end
+                ui.refresh() -- каждую секунду пере-выставляем все цифры из реальных данных
             end
         end)
         task.wait(1)
@@ -893,7 +975,6 @@ local function hopToRandomServer()
 
     getgenv().IsHopping = true
     getgenv().HopStartTime = tick()
-    stats.hops = (stats.hops or 0) + 1
     pcall(refreshThorns) -- фиксируем шипы перед уходом с сервера
     saveStats()
     setStatus("Подбираю сервер для хопа…", "hop")
@@ -1190,12 +1271,24 @@ local function isOnMountainTop(bee)
     return field and field.Name == "Mountain Top Field"
 end
 
-local function findFreeHive()
+local function ownsHive()
+    local curLp = Players.LocalPlayer or lp
+    local hc = workspace:FindFirstChild("Honeycombs")
+    if not curLp or not hc then return false end
+    for _, hive in ipairs(hc:GetChildren()) do
+        local owner = hive:FindFirstChild("Owner")
+        if owner and owner.Value == curLp then return true, hive end
+    end
+    return false
+end
+
+-- skip: таблица {["Hive3"] = true} с ульями, которые уже не получилось занять
+local function findFreeHive(skip)
     local hc = workspace:FindFirstChild("Honeycombs")
     if not hc then return nil end
     for i = 6, 1, -1 do
         local hive = hc:FindFirstChild("Hive" .. i)
-        if hive then
+        if hive and not (skip and skip[hive.Name]) then
             local owner = hive:FindFirstChild("Owner")
             if owner and owner.Value == nil then
                 return hive
@@ -1205,29 +1298,96 @@ local function findFreeHive()
     return nil
 end
 
-local function occupyHive(hive)
-    local curLp = Players.LocalPlayer or lp
-    if not curLp then return false end
-    local char = curLp.Character
-    if not char then return false end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return false end
-
-    local targetPos = getPosition(hive)
-    if not targetPos then return false end
-
-    hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
-    task.wait(0.2)
-
+local function pressE()
     pcall(function()
         VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
         task.wait(0.1)
         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
     end)
+end
 
-    task.wait(0.5)
-    local owner = hive:FindFirstChild("Owner")
-    return owner and owner.Value == curLp
+local function waitOwnership(hive, seconds)
+    local t0 = tick()
+    while tick() - t0 < seconds do
+        if ownsHive() then return true end
+        local owner = hive:FindFirstChild("Owner")
+        local curLp = Players.LocalPlayer or lp
+        if owner and owner.Value ~= nil and owner.Value ~= curLp then
+            return false, true -- улей занял кто-то другой
+        end
+        task.wait(0.1)
+    end
+    return ownsHive()
+end
+
+-- Одна попытка занять конкретный улей. Возвращает ok, takenByOther
+local function tryClaimHive(hive)
+    local curLp = Players.LocalPlayer or lp
+    local char = curLp and curLp.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+
+    local pos = getPosition(hive)
+    if not pos then return false end
+
+    -- Подлетаем, если далеко
+    if (hrp.Position - pos).Magnitude > 15 then
+        tweenTo(pos, TWEEN_SPEED, Vector3.new(0, 3, 0))
+        char = curLp.Character
+        hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return false end
+    end
+
+    -- Спрыгиваем на платформу сверху — так точно срабатывает касание
+    hrp.CFrame = CFrame.new(pos + Vector3.new(0, 7, 0))
+    task.wait(0.15)
+    hrp.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
+    task.wait(0.3)
+
+    -- Способ 1: напрямую событием игры (как делает сама игра при нажатии на улей)
+    local idx = tonumber(tostring(hive.Name):match("%d+"))
+    local events = ReplicatedStorage:FindFirstChild("Events")
+    local claimEvent = events and events:FindFirstChild("ClaimHive")
+    if claimEvent and idx then
+        pcall(function() claimEvent:FireServer(idx) end)
+    end
+    local ok, other = waitOwnership(hive, 2)
+    if ok then return true end
+    if other then return false, true end
+
+    -- Способ 2: клавиша E
+    pressE()
+    ok, other = waitOwnership(hive, 1.5)
+    if ok then return true end
+    return false, other
+end
+
+-- Занимает улей с повторными попытками: перевыбирает улей, если его занял другой игрок
+local function claimHiveReliably()
+    if ownsHive() then return true end
+    pcall(function() workspace:WaitForChild("Honeycombs", 8) end)
+
+    local fails = {}
+    local skip = {}
+    for attempt = 1, HIVE_MAX_ATTEMPTS do
+        if not alive() then return false end
+        if ownsHive() then return true end
+
+        local hive = findFreeHive(skip)
+        if not hive then
+            setStatus("Свободных ульев нет, жду… (" .. attempt .. "/" .. HIVE_MAX_ATTEMPTS .. ")", "warn")
+            task.wait(1)
+        else
+            setStatus(string.format("Занимаю %s (попытка %d/%d)…", tostring(hive.Name), attempt, HIVE_MAX_ATTEMPTS), "info")
+            print(string.format("[Hive] Попытка %d: %s", attempt, hive.Name))
+            local ok = tryClaimHive(hive)
+            if ok then return true end
+            fails[hive.Name] = (fails[hive.Name] or 0) + 1
+            if fails[hive.Name] >= 2 then skip[hive.Name] = true end -- два провала подряд — пробуем другой улей
+            task.wait(0.3)
+        end
+    end
+    return ownsHive()
 end
 
 -- ============================================================
@@ -1426,42 +1586,17 @@ local function huntViciousBee()
         return
     end
 
-    -- 3. Поиск и занятие свободного улья
-    print("[Hunt] Ищем свободный улей...")
-    setStatus("Ищу свободный улей…", "info")
-    local hive = findFreeHive()
-    if not hive then
-        print("[Hunt] ❌ Свободных ульев нет — ХОП")
-        setStatus("Нет свободных ульев — меняю сервер", "warn")
-        hopToRandomServer()
-        return
-    end
-
-    print("[Hunt] 🚀 Tween к улью:", hive.Name)
-    setStatus("Лечу к улью " .. tostring(hive.Name) .. "…", "info")
-    local hivePos = getPosition(hive)
-    if not hivePos then
-        hopToRandomServer()
-        return
-    end
-
-    local reachedHive = tweenTo(hivePos, TWEEN_SPEED, Vector3.new(0, 3, 0))
-    if not reachedHive then
-        print("[Hunt] ❌ Не долетели до улья — ХОП")
-        hopToRandomServer()
-        return
-    end
-
-    task.wait(0.3)
+    -- 3. Занятие улья (с повторными попытками)
     print("[Hunt] Занимаем улей...")
     setStatus("Занимаю улей…", "info")
-    local occupied = occupyHive(hive)
-    if not occupied then
-        print("[Hunt] ❌ Улей не занят — ХОП")
+    if not claimHiveReliably() then
+        print("[Hunt] ❌ Улей занять не удалось — ХОП")
+        setStatus("Улей не занят — меняю сервер", "warn")
         hopToRandomServer()
         return
     end
     print("[Hunt] ✅ Улей успешно занят!")
+    setStatus("Улей занят", "ok")
 
     -- 4. Определение поля и Tween напрямую к полю (+10 стадс)
     local beeHrp = bee:FindFirstChild("HumanoidRootPart")
