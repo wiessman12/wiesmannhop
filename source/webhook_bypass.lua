@@ -1,5 +1,5 @@
 -- ============================================================
--- VICIOUS BEE SERVER HOPPER (ANTI-CRASH + HOVER + HUD EDITION)
+-- VICIOUS BEE SERVER HOPPER (LITE: без перезапуска клиента, лёгкий старт)
 -- ============================================================
 
 local Players = game:GetService("Players")
@@ -27,21 +27,14 @@ local QUEUE_MAX_AGE = 8 * 60         -- Список серверов обнов
 
 local TARGET_FPS = 60                -- Лимит FPS (60 защищает от перегрева и утечек VRAM/GPU)
 local DISABLE_3D_RENDERING = false   -- 3D-рендер остаётся ВКЛЮЧЁННЫМ. true = выключить (экономит память, но экран чёрный)
-local LIGHT_VISUALS = true           -- Лёгкая картинка при включённом 3D: частицы/лучи/следы/тени/волны гасятся, на фарм не влияет
+local LIGHT_VISUALS = false          -- Гашение частиц обходит весь workspace (тяжело для BSS). Включай только если нужно
 local MUTE_GAME = true               -- Выключить звук (меньше памяти и CPU)
 
 -- ====== ИНТЕРФЕЙС ======
 local SHOW_GUI = true                -- Окно со статистикой (чуть выше центра экрана, можно перетаскивать за заголовок)
 local STATS_FILE = "vicious_stats.json"
 
--- ====== ПЛАНОВЫЙ ПЕРЕЗАПУСК КЛИЕНТА ======
--- Память Roblox копится после каждого телепорта и не освобождается — только перезапуск сбрасывает её полностью.
--- Клиент закрывается СРАЗУ ПОСЛЕ боя (не посреди него). Нужен внешний авто-релаунч (Roblox Account Manager и т.п.),
--- если его нет — поставь false (тогда бот просто будет работать, пока клиент не упадёт сам).
-local AUTO_RESTART_CLIENT = true
-local RESTART_AFTER_MIN = 55            -- Закрыть клиент через N минут работы
-local MEMORY_LIMIT_MB = 0               -- Или при достижении N МБ (0 = не проверять), например 3000
-
+local GUI_DELAY_AFTER_LOAD = 3     -- Меню создаётся через N сек ПОСЛЕ полной загрузки игры (не мешает загрузке)
 local HOP_PENDING_TIMEOUT = 40          -- Сколько секунд ждать завершения телепорта, прежде чем пробовать снова
 
 getgenv().IsHopping = false
@@ -56,6 +49,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RUN_ID = (getgenv().VB_RunId or 0) + 1
 getgenv().VB_RunId = RUN_ID
 getgenv().VB_InCombat = false
+
+local gameReady = false  -- true только после полной загрузки игры; до этого скрипт ничего тяжёлого не делает
 
 local function alive()
     return _G.ViciousHunterRunning and getgenv().VB_RunId == RUN_ID
@@ -251,11 +246,6 @@ local function createGui()
         ColorSequenceKeypoint.new(1, Color3.fromRGB(176, 107, 255)),
     })
     strokeGrad.Parent = stroke
-    table.insert(myConns, RunService.Heartbeat:Connect(function(dt)
-        if strokeGrad.Parent then
-            strokeGrad.Rotation = (strokeGrad.Rotation + 45 * dt) % 360
-        end
-    end))
 
     -- Заголовок (за него окно можно перетаскивать)
     local header = Instance.new("Frame")
@@ -352,12 +342,14 @@ ui.refresh = function(pulse)
     end)
 end
 
-if SHOW_GUI then
+-- Меню создаётся позже (после загрузки игры) — см. huntViciousBee
+local function buildGuiLater()
+    if not SHOW_GUI then return end
     local okGui, errGui = pcall(createGui)
     if not okGui then warn("[GUI] Не удалось создать интерфейс:", errGui) end
     ui.refresh()
+    setStatus("Сервер загружен", "ok")
 end
-setStatus("Запуск скрипта…", "info")
 
 -- ============================================================
 -- ====== СЧЁТЧИК ШИПОВ (Stinger в инвентаре) ======
@@ -467,8 +459,8 @@ end
 -- Фоновые циклы: шипы, нижняя строка окна, отметка "жив" в файле статистики
 task.spawn(function()
     while alive() do
-        pcall(refreshThorns)
-        if stats.lastThorns < 0 and not thornWarned and (tick() - scriptStart) > 90 then
+        if gameReady then pcall(refreshThorns) end
+        if gameReady and stats.lastThorns < 0 and not thornWarned and (tick() - scriptStart) > 90 then
             thornWarned = true
             warn("[Stats] Не удалось прочитать Stinger из инвентаря — счётчик шипов может не обновляться")
         end
@@ -482,13 +474,7 @@ task.spawn(function()
             if ui.footer and ui.footer.Parent then
                 local up = os.time() - stats.boot
                 local line1 = string.format("Аптайм %s  •  Хопов %d  •  RAM %d МБ", fmtTime(up), stats.hops, math.floor(getMemoryMb()))
-                local line2
-                if AUTO_RESTART_CLIENT then
-                    line2 = "Перезапуск клиента через " .. fmtTime(RESTART_AFTER_MIN * 60 - up)
-                else
-                    line2 = "Авто-перезапуск клиента выключен"
-                end
-                ui.footer.Text = line1 .. "\n" .. line2
+                ui.footer.Text = line1
             end
         end)
         task.wait(1)
@@ -535,10 +521,6 @@ end
 local function applyMemoryOptimizer(stage)
     if stage == "early" then
         pcall(function()
-            settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
-        end)
-
-        pcall(function()
             if setfpscap and TARGET_FPS and TARGET_FPS > 0 then
                 setfpscap(TARGET_FPS)
             end
@@ -584,26 +566,6 @@ local function applyMemoryOptimizer(stage)
 
     if LIGHT_VISUALS then
         task.spawn(lightenWorld)
-    end
-
-    -- Тяжёлый обход десятков тысяч цветов нужен только если 3D включён
-    if not DISABLE_3D_RENDERING then
-        pcall(function()
-            local flowers = workspace:FindFirstChild("Flowers")
-            if flowers then
-                local n = 0
-                for _, zone in ipairs(flowers:GetChildren()) do
-                    for _, part in ipairs(zone:GetChildren()) do
-                        if part:IsA("BasePart") then
-                            part.CastShadow = false
-                            part.Material = Enum.Material.SmoothPlastic
-                        end
-                        n = n + 1
-                        if n % 1500 == 0 then task.wait() end -- не вешаем клиент одним долгим циклом
-                    end
-                end
-            end
-        end)
     end
 
     pcall(function()
@@ -1032,7 +994,7 @@ end))
 -- 3. Фоновый опрос каждые 0.3 сек (проверяет только реально видимые ошибки на экране)
 task.spawn(function()
     while alive() do
-        task.wait(0.5)
+        task.wait(1)
         local err = checkRealConnectionError()
         if err then
             handleConnectionError(err)
@@ -1403,8 +1365,11 @@ local function huntViciousBee()
     end
 
     print("[Init] ✅ Игра и экран загрузки полностью завершены!")
+    gameReady = true
+    task.wait(GUI_DELAY_AFTER_LOAD)
+    buildGuiLater()
+    pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
     task.spawn(applyMemoryOptimizer, "late")
-    setStatus("Сервер загружен", "ok")
     print("[Hunt] Ищем Vicious Bee...")
     setStatus("Ищу Vicious Bee…", "info")
 
@@ -1654,31 +1619,6 @@ task.spawn(function()
             pcall(function() collectgarbage("collect") end)
             -- Внутри hopToRandomServer уже есть защита от наложения телепортов
             pcall(hopToRandomServer)
-        end
-    end
-end)
-
--- ============================================================
--- ====== ПЛАНОВЫЙ ПЕРЕЗАПУСК КЛИЕНТА (до того, как он упадёт сам) ======
--- ============================================================
-task.spawn(function()
-    while alive() do
-        task.wait(20)
-        -- Не прерываем бой: ждём, пока пчела будет убита или бой закончится
-        if AUTO_RESTART_CLIENT and not getgenv().VB_InCombat then
-            local upMin = (os.time() - stats.boot) / 60
-            local memMb = getMemoryMb()
-            if upMin >= RESTART_AFTER_MIN or (MEMORY_LIMIT_MB > 0 and memMb >= MEMORY_LIMIT_MB) then
-                warn(string.format("[Restart] Аптайм %d мин, память %d МБ — закрываю клиент до того, как он упадёт сам", math.floor(upMin), math.floor(memMb)))
-                setStatus("Плановый перезапуск клиента (защита от краша)…", "warn")
-                -- Обнуляем отсчёт заранее, чтобы после релаунча не уйти в бесконечный цикл перезапусков
-                stats.boot = os.time()
-                stats.hops = 0
-                saveStats()
-                task.wait(1.5)
-                pcall(function() game:Shutdown() end)
-                break
-            end
         end
     end
 end)
