@@ -1,5 +1,5 @@
 -- ============================================================
--- VICIOUS BEE SERVER HOPPER (LITE: без перезапуска клиента, лёгкий старт)
+-- VICIOUS BEE SERVER HOPPER (LITE: без перезапуска клиента)
 -- ============================================================
 
 local Players = game:GetService("Players")
@@ -34,7 +34,6 @@ local MUTE_GAME = true               -- Выключить звук (меньш�
 local SHOW_GUI = true                -- Окно со статистикой (чуть выше центра экрана, можно перетаскивать за заголовок)
 local STATS_FILE = "vicious_stats.json"
 
-local GUI_DELAY_AFTER_LOAD = 3     -- Меню создаётся через N сек ПОСЛЕ полной загрузки игры (не мешает загрузке)
 local HOP_PENDING_TIMEOUT = 40          -- Сколько секунд ждать завершения телепорта, прежде чем пробовать снова
 
 getgenv().IsHopping = false
@@ -114,11 +113,11 @@ local ui = {}
 local currentStatus = ""
 
 local STATUS_COLORS = {
-    info = Color3.fromRGB(80, 200, 255),
-    fight = Color3.fromRGB(255, 80, 120),
-    hop = Color3.fromRGB(180, 120, 255),
-    ok = Color3.fromRGB(90, 235, 150),
-    warn = Color3.fromRGB(255, 190, 70),
+    info = Color3.fromRGB(235, 235, 235),
+    fight = Color3.fromRGB(235, 20, 40),
+    hop = Color3.fromRGB(160, 160, 160),
+    ok = Color3.fromRGB(255, 255, 255),
+    warn = Color3.fromRGB(255, 95, 95),
 }
 
 local function fmtTime(sec)
@@ -166,7 +165,7 @@ local function makeCard(parent, x, caption, accentA, accentB)
     local card = Instance.new("Frame")
     card.Position = UDim2.fromOffset(x, 106)
     card.Size = UDim2.fromOffset(149, 72)
-    card.BackgroundColor3 = Color3.fromRGB(10, 8, 26)
+    card.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
     card.BackgroundTransparency = 0.3
     card.BorderSizePixel = 0
     card.Parent = parent
@@ -226,9 +225,9 @@ local function createGui()
     local bg = Instance.new("UIGradient")
     bg.Rotation = 135
     bg.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(52, 16, 98)),
-        ColorSequenceKeypoint.new(0.55, Color3.fromRGB(20, 18, 62)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(8, 44, 70)),
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(70, 6, 12)),
+        ColorSequenceKeypoint.new(0.55, Color3.fromRGB(18, 18, 18)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 0, 0)),
     })
     bg.Parent = main
 
@@ -240,10 +239,9 @@ local function createGui()
     stroke.Parent = main
     local strokeGrad = Instance.new("UIGradient")
     strokeGrad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 77, 166)),
-        ColorSequenceKeypoint.new(0.35, Color3.fromRGB(255, 179, 71)),
-        ColorSequenceKeypoint.new(0.7, Color3.fromRGB(77, 225, 255)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(176, 107, 255)),
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(235, 20, 40)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(235, 20, 40)),
     })
     strokeGrad.Parent = stroke
 
@@ -260,14 +258,13 @@ local function createGui()
     })
     local tg = Instance.new("UIGradient")
     tg.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 120, 190)),
-        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 205, 110)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(110, 235, 255)),
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(235, 30, 50)),
     })
     tg.Parent = title
 
     mkLabel(header, {
-        Text = "ANTI-CRASH", TextSize = 11, TextColor3 = Color3.fromRGB(150, 165, 215),
+        Text = "ANTI-CRASH", TextSize = 11, TextColor3 = Color3.fromRGB(170, 170, 170),
         TextXAlignment = Enum.TextXAlignment.Right,
         Position = UDim2.new(1, -100, 0, 12), Size = UDim2.fromOffset(84, 16),
     })
@@ -298,12 +295,12 @@ local function createGui()
     })
 
     -- Карточки статистики
-    ui.killsLabel = makeCard(main, 16, "УБИТО VICIOUS", Color3.fromRGB(255, 77, 140), Color3.fromRGB(255, 150, 190))
-    ui.thornsLabel = makeCard(main, 175, "ШИПОВ ПОЛУЧЕНО", Color3.fromRGB(255, 179, 71), Color3.fromRGB(255, 220, 140))
+    ui.killsLabel = makeCard(main, 16, "УБИТО VICIOUS", Color3.fromRGB(235, 20, 40), Color3.fromRGB(255, 120, 130))
+    ui.thornsLabel = makeCard(main, 175, "ШИПОВ ПОЛУЧЕНО", Color3.fromRGB(255, 255, 255), Color3.fromRGB(200, 200, 200))
 
     -- Нижняя строка
     ui.footer = mkLabel(main, {
-        Text = "", Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = Color3.fromRGB(165, 175, 215),
+        Text = "", Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = Color3.fromRGB(190, 190, 190),
         TextXAlignment = Enum.TextXAlignment.Center,
         Position = UDim2.fromOffset(16, 184), Size = UDim2.new(1, -32, 0, 34),
     })
@@ -342,14 +339,12 @@ ui.refresh = function(pulse)
     end)
 end
 
--- Меню создаётся позже (после загрузки игры) — см. huntViciousBee
-local function buildGuiLater()
-    if not SHOW_GUI then return end
+if SHOW_GUI then
     local okGui, errGui = pcall(createGui)
     if not okGui then warn("[GUI] Не удалось создать интерфейс:", errGui) end
     ui.refresh()
-    setStatus("Сервер загружен", "ok")
 end
+setStatus("Запуск скрипта…", "info")
 
 -- ============================================================
 -- ====== СЧЁТЧИК ШИПОВ (Stinger в инвентаре) ======
@@ -1366,8 +1361,7 @@ local function huntViciousBee()
 
     print("[Init] ✅ Игра и экран загрузки полностью завершены!")
     gameReady = true
-    task.wait(GUI_DELAY_AFTER_LOAD)
-    buildGuiLater()
+    setStatus("Сервер загружен", "ok")
     pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
     task.spawn(applyMemoryOptimizer, "late")
     print("[Hunt] Ищем Vicious Bee...")
