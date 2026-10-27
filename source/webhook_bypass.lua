@@ -72,7 +72,7 @@ end
 -- ============================================================
 -- ====== СТАТИСТИКА (СОХРАНЯЕТСЯ МЕЖДУ СЕРВЕРАМИ И ПЕРЕЗАПУСКАМИ) ======
 -- ============================================================
-local stats = { kills = 0, thorns = 0, lastThorns = -1, hops = 0, boot = os.time(), lastSeen = 0 }
+local stats = { kills = 0, thorns = 0, lastThorns = -1, hops = 0, boot = os.time(), lastSeen = 0, killsAtBoot = 0 }
 
 do
     if readfile and isfile and isfile(STATS_FILE) then
@@ -86,12 +86,14 @@ do
             stats.hops = tonumber(data.hops) or 0
             stats.boot = tonumber(data.boot) or os.time()
             stats.lastSeen = tonumber(data.lastSeen) or 0
+            stats.killsAtBoot = tonumber(data.killsAtBoot) or stats.kills
         end
     end
     -- Если с последнего запуска прошло больше 3 минут — это новая сессия клиента
     if os.time() - stats.lastSeen > 180 then
         stats.boot = os.time()
         stats.hops = 0
+        stats.killsAtBoot = stats.kills
     end
     stats.lastSeen = os.time()
 end
@@ -163,8 +165,8 @@ end
 
 local function makeCard(parent, x, caption, accentA, accentB)
     local card = Instance.new("Frame")
-    card.Position = UDim2.fromOffset(x, 106)
-    card.Size = UDim2.fromOffset(149, 72)
+    card.Position = UDim2.fromOffset(x, 112)
+    card.Size = UDim2.fromOffset(124, 72)
     card.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
     card.BackgroundTransparency = 0.3
     card.BorderSizePixel = 0
@@ -187,7 +189,7 @@ local function makeCard(parent, x, caption, accentA, accentB)
         Position = UDim2.fromOffset(12, 10), Size = UDim2.new(1, -24, 0, 14),
     })
     return mkLabel(card, {
-        Text = "0", Font = Enum.Font.GothamBlack, TextSize = 32,
+        Text = "0", Font = Enum.Font.GothamBlack, TextSize = 28,
         Position = UDim2.fromOffset(12, 28), Size = UDim2.new(1, -24, 0, 38),
     })
 end
@@ -216,7 +218,7 @@ local function createGui()
     main.Name = "Main"
     main.AnchorPoint = Vector2.new(0.5, 0.5)
     main.Position = UDim2.fromScale(0.5, 0.40)
-    main.Size = UDim2.fromOffset(340, 226)
+    main.Size = UDim2.fromOffset(420, 246)
     main.BackgroundColor3 = Color3.new(1, 1, 1)
     main.BorderSizePixel = 0
     main.Parent = sg
@@ -263,47 +265,68 @@ local function createGui()
     })
     tg.Parent = title
 
-    mkLabel(header, {
-        Text = "ANTI-CRASH", TextSize = 11, TextColor3 = Color3.fromRGB(170, 170, 170),
-        TextXAlignment = Enum.TextXAlignment.Right,
-        Position = UDim2.new(1, -100, 0, 12), Size = UDim2.fromOffset(84, 16),
-    })
-
     -- Что сейчас делает скрипт
     local statusBox = Instance.new("Frame")
     statusBox.Position = UDim2.fromOffset(16, 44)
-    statusBox.Size = UDim2.fromOffset(308, 52)
+    statusBox.Size = UDim2.fromOffset(388, 60)
     statusBox.BackgroundColor3 = Color3.new(0, 0, 0)
-    statusBox.BackgroundTransparency = 0.5
+    statusBox.BackgroundTransparency = 0.45
     statusBox.BorderSizePixel = 0
     statusBox.Parent = main
     corner(statusBox, 10)
 
     local dot = Instance.new("Frame")
-    dot.Position = UDim2.fromOffset(12, 21)
+    dot.Position = UDim2.fromOffset(14, 25)
     dot.Size = UDim2.fromOffset(10, 10)
     dot.BackgroundColor3 = STATUS_COLORS.info
     dot.BorderSizePixel = 0
     dot.Parent = statusBox
     corner(dot, 5)
-
     ui.dot = dot
+
+    mkLabel(statusBox, {
+        Text = "ДЕЙСТВИЕ", TextSize = 10, TextColor3 = Color3.fromRGB(235, 20, 40),
+        Position = UDim2.fromOffset(34, 7), Size = UDim2.new(1, -46, 0, 12),
+    })
     ui.statusLabel = mkLabel(statusBox, {
-        Text = "Запуск…", Font = Enum.Font.Gotham, TextSize = 14, TextWrapped = true,
-        TextYAlignment = Enum.TextYAlignment.Center,
-        Position = UDim2.fromOffset(32, 4), Size = UDim2.new(1, -44, 1, -8),
+        Text = "Запуск…", Font = Enum.Font.GothamBold, TextSize = 16, TextWrapped = true,
+        TextYAlignment = Enum.TextYAlignment.Top,
+        Position = UDim2.fromOffset(34, 22), Size = UDim2.new(1, -46, 0, 34),
     })
 
     -- Карточки статистики
     ui.killsLabel = makeCard(main, 16, "УБИТО VICIOUS", Color3.fromRGB(235, 20, 40), Color3.fromRGB(255, 120, 130))
-    ui.thornsLabel = makeCard(main, 175, "ШИПОВ ПОЛУЧЕНО", Color3.fromRGB(255, 255, 255), Color3.fromRGB(200, 200, 200))
+    ui.rateLabel = makeCard(main, 148, "VICIOUS / ЧАС", Color3.fromRGB(255, 255, 255), Color3.fromRGB(215, 215, 215))
+    ui.thornsLabel = makeCard(main, 280, "ШИПОВ ПОЛУЧЕНО", Color3.fromRGB(235, 20, 40), Color3.fromRGB(255, 120, 130))
+    ui.rateLabel.Text = "0.0"
 
-    -- Нижняя строка
-    ui.footer = mkLabel(main, {
-        Text = "", Font = Enum.Font.Gotham, TextSize = 12, TextColor3 = Color3.fromRGB(190, 190, 190),
-        TextXAlignment = Enum.TextXAlignment.Center,
-        Position = UDim2.fromOffset(16, 184), Size = UDim2.new(1, -32, 0, 34),
+    -- Нижняя панель: аптайм и хопы
+    local footerBox = Instance.new("Frame")
+    footerBox.Position = UDim2.fromOffset(16, 194)
+    footerBox.Size = UDim2.fromOffset(388, 42)
+    footerBox.BackgroundColor3 = Color3.new(0, 0, 0)
+    footerBox.BackgroundTransparency = 0.45
+    footerBox.BorderSizePixel = 0
+    footerBox.Parent = main
+    corner(footerBox, 10)
+
+    mkLabel(footerBox, {
+        Text = "АПТАЙМ", TextSize = 10, TextColor3 = Color3.fromRGB(170, 170, 170),
+        Position = UDim2.fromOffset(16, 5), Size = UDim2.fromOffset(170, 12),
     })
+    ui.uptimeLabel = mkLabel(footerBox, {
+        Text = "00:00:00", Font = Enum.Font.GothamBlack, TextSize = 18,
+        Position = UDim2.fromOffset(16, 18), Size = UDim2.fromOffset(170, 20),
+    })
+    mkLabel(footerBox, {
+        Text = "ХОПОВ", TextSize = 10, TextColor3 = Color3.fromRGB(170, 170, 170),
+        Position = UDim2.fromOffset(210, 5), Size = UDim2.fromOffset(170, 12),
+    })
+    ui.hopsLabel = mkLabel(footerBox, {
+        Text = "0", Font = Enum.Font.GothamBlack, TextSize = 18, TextColor3 = Color3.fromRGB(255, 95, 95),
+        Position = UDim2.fromOffset(210, 18), Size = UDim2.fromOffset(170, 20),
+    })
+    ui.footer = footerBox
 
     -- Перетаскивание
     local dragging, dragStart, startPos = false, nil, nil
@@ -327,24 +350,34 @@ local function createGui()
     end))
 end
 
+local function killsPerHour()
+    local up = math.max(os.time() - stats.boot, 300) -- минимум 5 мин, чтобы цифра не прыгала в начале
+    local session = math.max(stats.kills - (stats.killsAtBoot or stats.kills), 0)
+    return session / (up / 3600)
+end
+
 ui.refresh = function(pulse)
     pcall(function()
         if not ui.killsLabel or not ui.killsLabel.Parent then return end
         ui.killsLabel.Text = tostring(stats.kills)
         ui.thornsLabel.Text = tostring(stats.thorns)
+        if ui.rateLabel then ui.rateLabel.Text = string.format("%.1f", killsPerHour()) end
         local target = (pulse == "kills" and ui.killsLabel) or (pulse == "thorns" and ui.thornsLabel) or nil
         if target then
-            TweenService:Create(target, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, 0, true), { TextSize = 40 }):Play()
+            TweenService:Create(target, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, 0, true), { TextSize = 34 }):Play()
         end
     end)
 end
 
-if SHOW_GUI then
+-- Меню создаётся сразу после закрытия экрана загрузки игры (см. huntViciousBee)
+local function buildGui()
+    if not SHOW_GUI or ui.statusLabel then return end
     local okGui, errGui = pcall(createGui)
     if not okGui then warn("[GUI] Не удалось создать интерфейс:", errGui) end
     ui.refresh()
+    currentStatus = ""
+    setStatus("Сервер загружен", "ok")
 end
-setStatus("Запуск скрипта…", "info")
 
 -- ============================================================
 -- ====== СЧЁТЧИК ШИПОВ (Stinger в инвентаре) ======
@@ -466,10 +499,10 @@ end)
 task.spawn(function()
     while alive() do
         pcall(function()
-            if ui.footer and ui.footer.Parent then
-                local up = os.time() - stats.boot
-                local line1 = string.format("Аптайм %s  •  Хопов %d  •  RAM %d МБ", fmtTime(up), stats.hops, math.floor(getMemoryMb()))
-                ui.footer.Text = line1
+            if ui.uptimeLabel and ui.uptimeLabel.Parent then
+                ui.uptimeLabel.Text = fmtTime(os.time() - stats.boot)
+                ui.hopsLabel.Text = tostring(stats.hops)
+                if ui.rateLabel then ui.rateLabel.Text = string.format("%.1f", killsPerHour()) end
             end
         end)
         task.wait(1)
@@ -1361,7 +1394,7 @@ local function huntViciousBee()
 
     print("[Init] ✅ Игра и экран загрузки полностью завершены!")
     gameReady = true
-    setStatus("Сервер загружен", "ok")
+    buildGui()
     pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
     task.spawn(applyMemoryOptimizer, "late")
     print("[Hunt] Ищем Vicious Bee...")
