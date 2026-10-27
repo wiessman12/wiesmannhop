@@ -38,6 +38,8 @@ local LOAD_TIMEOUT = 45              -- Если игра не прогрузи�
 local HIVE_MAX_ATTEMPTS = 6         -- Сколько раз пробовать занять улей, прежде чем хопнуть
 local RESET_ON_RELAUNCH = true      -- Сбрасывать цифры в меню при каждом новом запуске Roblox (хопы внутри одного запуска цифры не сбрасывают)
 local HOP_PENDING_TIMEOUT = 40          -- Сколько секунд ждать завершения телепорта, прежде чем пробовать снова
+local RECOVERY_STEP_TIMEOUT = 12        -- После дисконнекта (267/277/769...): сколько секунд ждать результата попытки, прежде чем пробовать другой способ
+local RELAUNCH_MIN_GAP = 90             -- Перезапуском Roblox считается только пауза не меньше стольки секунд между последним сохранением и стартом (обычный хоп короче)
 
 getgenv().IsHopping = false
 
@@ -77,12 +79,20 @@ end
 -- ============================================================
 local stats = { kills = 0, thorns = 0, lastThorns = -1, hops = 0, boot = os.time(), lastSeen = 0, thornsAtBoot = 0 }
 local STATS_BAK = STATS_FILE .. ".bak"
+local STATS_PREV = STATS_FILE .. ".prev"   -- сюда уходит старая статистика перед любым сбросом (чтобы цифры можно было вернуть)
 
--- Токен текущего запуска Roblox: одинаков на всех серверах внутри одного запуска, новый — после перезапуска клиента
+-- Токен текущего запуска Roblox (может меняться при входе на новый сервер — поэтому одним им не пользуемся)
 local sessionToken
 do
     local ok, id = pcall(function() return game:GetService("RbxAnalyticsService"):GetSessionId() end)
     if ok and type(id) == "string" and id ~= "" then sessionToken = id end
+end
+
+-- Сколько секунд работает само приложение Roblox (если executor это поддерживает)
+local function getProcUptime()
+    local ok, v = pcall(function() return elapsedTime() end)
+    if ok and type(v) == "number" then return v end
+    return nil
 end
 
 local function readStatsFile(path)
@@ -94,39 +104,85 @@ local function readStatsFile(path)
     return nil
 end
 
+-- Файл может быть занят/недописан сразу после телепорта — пробуем несколько раз, а не сразу считаем его пустым
+local function readStatsRetry(path)
+    if not (readfile and isfile) then return nil end
+    for _ = 1, 5 do
+        local d = readStatsFile(path)
+        if d then return d end
+        local okF, exists = pcall(isfile, path)
+        if not (okF and exists) then return nil end
+        task.wait(0.4)
+    end
+    return nil
+end
+
+local function fileExists(path)
+    if not isfile then return false end
+    local ok, ex = pcall(isfile, path)
+    return ok and ex or false
+end
+
 do
-    -- Основной файл мог оборваться на середине записи при телепорте — тогда берём резервную копию
-    local data = readStatsFile(STATS_FILE) or readStatsFile(STATS_BAK)
     local now = os.time()
+    local curUp = getProcUptime()
+    local data = readStatsRetry(STATS_FILE) or readStatsRetry(STATS_BAK)
     local sameProcess = false
+    local reason = "файла статистики нет — старт с нуля"
 
     if data then
-        local lastSeen = tonumber(data.lastSeen) or 0
+        local gap = now - (tonumber(data.lastSeen) or 0)
         if getgenv().VB_ProcessAlive then
-            sameProcess = true                                   -- клиент тот же (executor помнит прошлый запуск)
-        elseif RESET_ON_RELAUNCH and sessionToken and data.sessionToken then
-            sameProcess = (data.sessionToken == sessionToken)    -- сравниваем токен запуска
+            sameProcess, reason = true, "тот же запуск Roblox (executor помнит прошлый запуск)"
+        elseif not RESET_ON_RELAUNCH then
+            sameProcess, reason = true, "RESET_ON_RELAUNCH выключен"
+        elseif gap < RELAUNCH_MIN_GAP then
+            sameProcess, reason = true, string.format("пауза всего %d с — обычный хоп", gap)
         else
-            sameProcess = (now - lastSeen <= 180)                -- запасной вариант: по времени
+            -- Сбрасываем только если ВСЕ доступные признаки говорят о новом запуске
+            local votes, total = 0, 0
+            if curUp and tonumber(data.procUp) then
+                total = total + 1
+                if curUp + 15 < tonumber(data.procUp) then votes = votes + 1 end
+            end
+            if sessionToken and data.sessionToken then
+                total = total + 1
+                if sessionToken ~= data.sessionToken then votes = votes + 1 end
+            end
+            if total >= 2 then
+                sameProcess = votes < total
+                reason = string.format("признаков перезапуска %d из %d, пауза %d с", votes, total, gap)
+            else
+                sameProcess = gap <= 240
+                reason = string.format("мало признаков (%d), решает пауза %d с", total, gap)
+            end
         end
-
-        if sameProcess then
-            stats.kills = tonumber(data.kills) or 0
-            stats.thorns = tonumber(data.thorns) or 0
-            stats.lastThorns = tonumber(data.lastThorns) or -1
-            stats.hops = tonumber(data.hops) or 0
-            stats.boot = tonumber(data.boot) or now
-            stats.thornsAtBoot = tonumber(data.thornsAtBoot) or 0
-            stats.lastJobId = data.lastJobId
-        end
+    elseif fileExists(STATS_FILE) or fileExists(STATS_BAK) then
+        -- Файлы есть, но прочитать не удалось: не затираем их нулями молча
+        reason = "файл статистики есть, но не читается — старт с нуля, копия сохранена в .lost"
+        pcall(function()
+            local src = fileExists(STATS_FILE) and STATS_FILE or STATS_BAK
+            writefile(STATS_FILE .. ".lost", readfile(src))
+        end)
     end
 
-    if not sameProcess then
-        -- Новый запуск Roblox: все цифры с нуля
+    if sameProcess then
+        stats.kills = tonumber(data.kills) or 0
+        stats.thorns = tonumber(data.thorns) or 0
+        stats.lastThorns = tonumber(data.lastThorns) or -1
+        stats.hops = tonumber(data.hops) or 0
+        stats.boot = tonumber(data.boot) or now
+        stats.thornsAtBoot = tonumber(data.thornsAtBoot) or 0
+        stats.lastJobId = data.lastJobId
+    else
+        if data and writefile then
+            pcall(function() writefile(STATS_PREV, HttpService:JSONEncode(data)) end) -- архив перед сбросом
+        end
         stats.kills, stats.thorns, stats.lastThorns = 0, 0, -1
         stats.hops, stats.boot, stats.thornsAtBoot = 0, now, 0
         stats.lastJobId = nil
     end
+    print(string.format("[Stats] %s: %s", sameProcess and "цифры сохранены" or "цифры сброшены", reason))
     getgenv().VB_ProcessAlive = true
 
     -- Хоп считаем тогда, когда реально оказались на новом сервере (а не при каждой попытке телепорта)
@@ -143,6 +199,7 @@ end
 local function saveStats()
     stats.lastSeen = os.time()
     stats.sessionToken = sessionToken
+    stats.procUp = getProcUptime()
     if writefile then
         pcall(function()
             local json = HttpService:JSONEncode(stats)
@@ -513,7 +570,11 @@ local function readStingerCount()
 end
 
 local thornLowerReads = 0
+local thornLowerValue = nil
 local thornPendingBase = nil
+local thornRestoreLevel = nil     -- уровень шипов до сбоя чтения: возврат к нему не считается новыми шипами
+local thornRestoreUntil = 0
+local THORN_DROP_CONFIRM = 8      -- столько чтений подряд (~12 с) с одним и тем же меньшим значением, чтобы поверить в падение
 
 local function refreshThorns()
     local c = readStingerCount()
@@ -532,18 +593,33 @@ local function refreshThorns()
         return true
     end
 
-    -- Кратковременное падение числа шипов игнорируем, иначе потом вернувшееся значение посчитается "новыми" шипами
+    -- Падение числа шипов: верим ему только если одно и то же меньшее значение держится долго.
+    -- Иначе кратковременный 0 при загрузке данных занижает базу, а возврат нормального значения потом считается "новыми" шипами
     if c < stats.lastThorns then
-        thornLowerReads = thornLowerReads + 1
-        if thornLowerReads < 3 then return true end
+        if thornLowerValue == c then
+            thornLowerReads = thornLowerReads + 1
+        else
+            thornLowerValue, thornLowerReads = c, 1
+        end
+        if thornLowerReads < THORN_DROP_CONFIRM then return true end
+        thornRestoreLevel = stats.lastThorns
+        thornRestoreUntil = tick() + 120
     end
-    thornLowerReads = 0
+    thornLowerReads, thornLowerValue = 0, nil
 
     local gained = false
     local changed = false
     if c > stats.lastThorns then
-        stats.thorns = stats.thorns + (c - stats.lastThorns)
-        gained = true
+        local gain = c - stats.lastThorns
+        if thornRestoreLevel and tick() < thornRestoreUntil then
+            -- Значение вернулось к прежнему уровню после сбоя чтения — считаем только то, что выше него
+            gain = math.max(c - math.max(thornRestoreLevel, stats.lastThorns), 0)
+        end
+        if thornRestoreLevel and c >= thornRestoreLevel then thornRestoreLevel = nil end
+        if gain > 0 then
+            stats.thorns = stats.thorns + gain
+            gained = true
+        end
         changed = true
     end
     if stats.lastThorns ~= c then
@@ -1039,6 +1115,7 @@ local function hopToRandomServer()
     local ok, err = pcall(function()
         TeleportService:TeleportToPlaceInstance(game.PlaceId, targetJobId, currentLp)
     end)
+    if ok then print("[Hop] TeleportToPlaceInstance вызван без ошибки (ждём результат)") end
 
     if not ok then
         warn("[Hop] Ошибка вызова TeleportToPlaceInstance:", err, "— резервный вход")
@@ -1053,27 +1130,117 @@ end
 -- ====== ПЕРЕХВАТ ОШИБОК 769, 279 И ДИСКОННЕКТОВ ======
 -- ============================================================
 local isHandlingError = false
+local clearedByUs = false
 
-local function handleConnectionError(sourceMsg)
-    if not alive() then return end
-    if not isRealErrorString(sourceMsg) then
-        return
+-- Нажимает кнопку в окне ошибки по подстроке в её тексте/имени (например "reconnect")
+local function clickPromptButton(keywords)
+    local pressed = false
+    pcall(function()
+        local pg = CoreGui:FindFirstChild("RobloxPromptGui")
+        if not pg then return end
+        local inset = pg.IgnoreGuiInset and 0 or GuiService:GetGuiInset().Y
+        for _, d in ipairs(pg:GetDescendants()) do
+            if d:IsA("GuiButton") and d.Visible then
+                local label = d.Name
+                if d:IsA("TextButton") then label = label .. " " .. d.Text end
+                local tl = d:FindFirstChildWhichIsA("TextLabel", true)
+                if tl then label = label .. " " .. tl.Text end
+                label = label:lower()
+                for _, k in ipairs(keywords) do
+                    if label:find(k, 1, true) then
+                        if firesignal then
+                            pcall(firesignal, d.MouseButton1Click)
+                            pcall(firesignal, d.Activated)
+                        end
+                        local x = d.AbsolutePosition.X + d.AbsoluteSize.X / 2
+                        local y = d.AbsolutePosition.Y + d.AbsoluteSize.Y / 2 + inset
+                        pcall(function()
+                            VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 0)
+                            task.wait(0.05)
+                            VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 0)
+                        end)
+                        pressed = true
+                        return
+                    end
+                end
+            end
+        end
+    end)
+    return pressed
+end
+
+-- Одна попытка выбраться с сервера. Способы чередуются: если один не сработал за RECOVERY_STEP_TIMEOUT, берём следующий
+local function recoveryAttempt(step)
+    local m = ((step - 1) % 4) + 1
+    local plr = Players.LocalPlayer or lp
+    getgenv().IsHopping = false
+
+    if m == 1 then
+        print(string.format("[Recovery] #%d: TeleportToPlaceInstance (окно ошибки не трогаем)", step))
+        setStatus("Восстановление: хоп на новый сервер…", "warn")
+        hopToRandomServer()
+    elseif m == 2 then
+        print(string.format("[Recovery] #%d: Teleport(PlaceId) — любой сервер", step))
+        setStatus("Восстановление: обычный телепорт…", "warn")
+        getgenv().IsHopping = true
+        getgenv().HopStartTime = tick()
+        pcall(function() TeleportService:Teleport(game.PlaceId, plr) end)
+    elseif m == 3 then
+        print(string.format("[Recovery] #%d: ClearError + TeleportToPlaceInstance", step))
+        setStatus("Восстановление: сброс ошибки и хоп…", "warn")
+        clearedByUs = true
+        pcall(function() GuiService:ClearError() end)
+        task.wait(0.5)
+        hopToRandomServer()
+    else
+        print(string.format("[Recovery] #%d: кнопка Reconnect в окне ошибки", step))
+        setStatus("Восстановление: кнопка Reconnect…", "warn")
+        if not clickPromptButton({ "reconnect", "rejoin" }) then
+            print("[Recovery] кнопки нет — Teleport(PlaceId) без указания игрока")
+            getgenv().IsHopping = true
+            getgenv().HopStartTime = tick()
+            pcall(function() TeleportService:Teleport(game.PlaceId) end)
+        end
     end
+end
 
+-- hard = true: ошибка видна на экране / в GuiService (дисконнект, кик 267 и т.п.) — повторяем, пока не уйдём с сервера.
+-- hard = false: сорвался сам вызов телепорта при живом соединении — одной новой попытки достаточно, дальше работают сторожа.
+local function handleConnectionError(sourceMsg, hard)
+    if not alive() then return end
+    if not isRealErrorString(sourceMsg) then return end
     if isHandlingError then return end
     isHandlingError = true
+    clearedByUs = false
 
-    warn(string.format("[Auto-Reconnect] ⚡ Перехвачена ошибка (%s)! Экстренный хоп на следующий сервер...", tostring(sourceMsg)))
+    warn(string.format("[Auto-Reconnect] ⚡ Перехвачена ошибка (%s)! Запускаю восстановление...", tostring(sourceMsg)))
     setStatus("Ошибка: " .. tostring(sourceMsg):sub(1, 50) .. " — хоп", "warn")
 
-    getgenv().IsHopping = false
-    pcall(function() GuiService:ClearError() end)
+    task.spawn(function()
+        task.wait(1.0)
+        local step = 0
+        local healthy = 0
+        while alive() do
+            step = step + 1
+            local ok, err = pcall(recoveryAttempt, step)
+            if not ok then warn("[Recovery] ошибка шага:", err) end
 
-    task.wait(1.0)
-    task.spawn(hopToRandomServer)
+            -- Если телепорт удался, этот скрипт умирает вместе с сервером и цикл просто обрывается
+            local t0 = tick()
+            while alive() and tick() - t0 < RECOVERY_STEP_TIMEOUT do task.wait(0.5) end
+            if not alive() then break end
+            if not hard then break end
 
-    -- Пауза между экстренными хопами: не спамим телепортами, пока висит окно ошибки
-    task.delay(8, function()
+            if not clearedByUs and not checkRealConnectionError() then
+                healthy = healthy + 1
+                if healthy >= 2 then
+                    print("[Recovery] Окно ошибки пропало само — соединение живо, отбой")
+                    break
+                end
+            else
+                healthy = 0
+            end
+        end
         isHandlingError = false
     end)
 end
@@ -1081,34 +1248,35 @@ end
 -- 1. Системное событие GuiService
 table.insert(myConns, GuiService.ErrorMessageChanged:Connect(function(msg)
     if alive() and isRealErrorString(msg) then
-        handleConnectionError(msg)
+        handleConnectionError(msg, true)
     end
 end))
 
--- 2. Безопасное событие TeleportInitFailed (ловит любые сбои телепорта, включая Error 769)
+-- 2. Событие TeleportInitFailed (любые сбои вызова телепорта)
 table.insert(myConns, TeleportService.TeleportInitFailed:Connect(function(player, result, errorMessage, placeId, teleportOptions)
     if not alive() then return end
     local resStr = tostring(result or "")
     local errStr = tostring(errorMessage or "")
-    local fullMsg = resStr .. " " .. errStr
-    local lower = fullMsg:lower()
+    local lower = (resStr .. " " .. errStr):lower()
 
     -- Игнорируем только намеренную отмену клиентом
     if lower:find("disconnectclientinitiated") or lower:find("clientinitiated") then
         return
     end
 
-    local finalError = (errStr ~= "" and errStr) or ("TeleportInitFailed (" .. resStr .. ")")
-    handleConnectionError(finalError)
+    -- Всегда содержит "teleport"/"fail", иначе короткие тексты вроде "game is full" отфильтровались бы
+    handleConnectionError("TeleportInitFailed (" .. resStr .. ") " .. errStr, false)
 end))
 
--- 3. Фоновый опрос каждые 0.3 сек (проверяет только реально видимые ошибки на экране)
+-- 3. Фоновый опрос раз в секунду (только реально видимые ошибки)
 task.spawn(function()
     while alive() do
         task.wait(1)
-        local err = checkRealConnectionError()
-        if err then
-            handleConnectionError(err)
+        if not isHandlingError then
+            local err = checkRealConnectionError()
+            if err then
+                handleConnectionError(err, true)
+            end
         end
     end
 end)
