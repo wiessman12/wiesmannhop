@@ -1,1 +1,1200 @@
-local _fc=(function(v0,v1,v2,v3)local v4={}return function(v5)local v6=v4[v5]if v6==nil then local v7=v3[v5]local v8={}for v9=1,#v7[1] do v8[v9]=v1((v0(v7[1],v9)-v7[2]-v9*v7[3])%256)end v6=v2(v8)v4[v5]=v6 end return v6 end end)(string.byte,string.char,table.concat,{{"\023\006\206\185\120\088\044",244,211},{"\131\015\111\203\014\128\237\081\164\254\096",219,96},{"\232\097\208\049\164\011\118\224\039\161\022\130\221\063\169",44,104},{"\019\225\165\098\030\197\139\035\003\192\128\058\206\157\101\019\212\141\085",2,187},{"\170\052\148\224\089\205\056\146\243\092",241,103},{"\023\206\075\190\089\239\124\248\123\006",71,137},{"\146\119\051\223\122\097\014",150,185},{"\121\111\095\061\049\029\031\251\183\226\218\197\179",34,239},{"\118\036\179\069\226\104\254\136",153,145},{"\239\218\170\119\031\013\214\150\100\062\010\168\149\097\044\246\211",211,204},{"\221\225\196\155\072\067\029\246\206\185",193,218},{"\213\016\034\031\071\120\139\118\176\201\225\248\034",105,25},{"\187\175\124\070\014\176\155\101\046\246\209",175,202},{"\165\092\228\114\000\092\019\161\044\170\051\207\079\224\106\204\120\003\141\022\178",215,139},{"\066\015\198\118\022\169\108\248\199\111\034\198\083\032\204\119\033\222",82,172},{"\018\223\137\056\205\129\041",37,167},{"\197\191\172\121\063\043\023\244",168,219},{"\006\126\242\089\175\030\138",75,103},{"\117\092\052\015\227\188\168",55,219},{"\240\195\155\089\051\000\206\147\095\062\251\210\157\103\062\018\213\168\113\074\013\211\180\115\064",190,206},{"\087\231\107\238\126\011\135\019\149\039\163\034\188\052\186",109,135},{"\057\111\152\190\234",171,41},{"\231\058\145",92,84},{"\047\058\066",247,6},{"\213\246\018",135,28},{"\155\128\099",136,225},{"\015\248\222",248,229},{"\176\210\237",87,34},{"\216\183\144",194,223},{"\228\189\145",212,217},{"\052\233\154",72,181},{"\078\052\031",48,233},{"\184\035\152",21,110},{"\219\051\143",72,93},{"\211\158\127\082\055\016\237\201",133,218},{"\019\091\176\000",96,77},{"\042\197\083\226\104\245\149\025\174\060",56,143},{"\126\010\151\033\086\034\183\063\200\072\207\105\231\118\254",137,137},{"\189\033\129\239\079\180",236,102},{"\171\206\199\215\224\239\205\245\248\252\005\015\232\028\022",83,6},{"\230\041\103\166\234\047\075\179\227\049\108\162\251",53,65},{"\103\168\188\205\228\214\012\029\047\070\094",14,20},{"\130\009\146\004\082\221\084\205\074",184,118},{"\158\170\143\151\115\112\053\083\055",94,240},{"\161\171\132\110\090\070\038\249\240\230\192\167\151\087\108\071",110,231},{"\148\034\127\237\093\205\049\130\005\126\233\066\179\028",221,107},{"\086\090\077\083\067\059\241",11,245},{"\160\236\097\153\238\047",20,73},{"\160\151\110\065\000\223\166\122",133,210},{"\003\172\119\035\212\157\085\010\202",219,184},{"\121\219\048\101",244,67},{"\236\194\113\062\234\173\106\031",226,186},{"\139\243\080\160\243\089\144\240\080\174\243",231,85},{"\012\156\255\110\227",81,110},{"\077\148\184\225\240\030\039\093\125\149\196",230,33},{"\001\073\162",112,74},{"\030\025\040\064\071",156,14},{"\036\102\153\201\007\079",123,59},{"\099\072\103\096\069\000\200\111\084\080\216\128\063\112\072\096\071\081\248\064\038\049\217\112\025\193\008\226\248\213\232\198\216\181\200\169\008\176\151\160\120\145\063\128\098\112\080\176\089\001\072\037\057\224\040\002\024\245\009\176\248\222\232\194\040\208\182\193\106\000\025\032\017\238\230\222",16,248},{"\121\033\189\085\244\087\232\132\088\238\150\042\212\043\011\164\051\217\120\029\111\064\232\130\224\195\026\180\136\030\198\090\004\092\238\216\048\016\158\071\231\114\027\184\016\205\142\023\189\086\236\100\052\204\107\009\128\063\205\106\019\122\026\232\116\211\181\078\238\134\045\146\034\189\089",117,156},{"\194\094\052\228\128\242\099\202\127\125\245\123\187\026\151\121\223\214\109\052\196\146\043\240\127\158\253\154\092\188\185\074\023\171\118\214\211\098\129\081\015\183\075\236\075\194\170\009\007\165\101\002\195\093\034\140\127\021\222\063\059\207\153\052\071\167\005\004\152\098\248\192\084\031\125\124\013\218\118\057\162\150\046\068\163\052\002\101\095\252\189\080\121",184,175},{"\104\157\012\085\138\149\159\161\210\181\173\196\061\115\205\000\094\088\238\236\125\170\013\066\157\211\125\202\081\085\078\070\221\010\110\101\253\039\141\186\030\021\173\227\061\103\029\109\093\118\238\231\125\165\013\054\157\205\045\096\190\193\077\130\222\224\110\106\103\149\226\105\118\182",197,72},{"\195\203\013\041\049\015\218\195\017\226\070\070\125\071\178\178\232\231\031\245\164\111\121\166\115\220\167\018\222\071\066\219\232\179\158\233\233\031\033\085\085\140\086\193\190\247\255\046\003\099\103\233\181\132\234\243\032\042\166\114\067\167\167\222\168\019\019\073\075\207\154\161\208\203\007\211\061\014\114\121\168\168\222\226\020\025\074\077\128\136\182\180\074\101\128",77,27},{"\043\130\019\126\213\002\060\085\186\010\020\046\103\002\081\215\240\170\249\127\157\082\170\038\116\074\100\187\056\130\092\119\145\074\153\031\056\242\062\198\021\155\180\216\040\151\079\102\216\234\034\191\217\147\174\102\176\058\143\014\102\227\253\183\220\244\068\179\092\139",102,106},{"\229\067\219\077\171\223\000\063\227\011\196\029\166\248\136\227\106\187\156\189\016\160\203\129\217\099\194\069\152\039\120\089\254\128\248\098\222\078\194\053\134\018\100\241\087\202\061\146\040\158\016\110\236\082\197\011",25,113},{"\248\027\180\197\251\047\004\110\014\122\024\130\035\087\044\147\054\168\065\128\074\184\164\217\064\228\029\237\096\247\096",145,133},{"\109\014\253\183\109\230\198\148\077\020\206\137\059\244\192\100\226\095\210\148\206\057\195\175\079\038\144\155\059\018\129\135\036\253\152\116\229\233\137\095\007\213\112\155\006\175\125\239\242\149\104\004\222\131\084\239\026\221\149\158\015\194\124\231\127\093\002\212\063\074\182\192\042\053\213\171\083\033\201\152\013\013\177\211\063\174\180\093\042\212\240\091\003\209\108\151\003\110\120\030\238\142\100\003\219\072\081\201\199\058\060\223\178\086\120\228\079\089\249\208\058\069\226\187\091\050\156\005\192\123",87,187},{"\042",49,217},{"\169\099\019\181\105\017\189\104\230\180\088\012\135\075\252\168\074\242\087\008",172,169},{"\213",115,57},{"\230\102\177\248\088\172\249\071\136\248\075\163\210\054\154\239",75,83},{"\055\010\168\066\245\156\060\221",73,166},{"\102\118\088\059\039\238\242\219\182\166\128\107\079",64,229},{"\034\082\084\087\099\073\113\109\110\124\135\121\145\139\150\154",220,5},{"\200\153\077\006\135\110\034\195\121\050\235\151\084\014",194,180},{"\097\005\134\013\144\003\146\021",146,130},{"\235\057\110\175\240\049\106",90,59},{"\061\195\036\150\235\078\110\008\127\221\071\177\027\125",146,100},{"\092\170\248\055\105\160\230\028\103",207,61},{"\193\251\087",45,61},{"\094\087\078\072\044\032\008\228\231\221\207\186",24,239},{"\039\145\223\032\110\163\243\064\058\182\025\098\090\200\051\119\198\006",146,72},{"\031\040\009\226\216\164\146\114\073\060",245,226},{"\055\017\215\127",54,185},{"\062\202\037\128\241",139,100},{"\138\117\103\068\032\006\224\158\164\143\104",82,225},{"\035\222\126\027",47,160},{"\199\021\163\253\100\174\210\227\012\165\233\104\120\041\106\059\076\154\014\084\032\049\121\243\052\181\249\120\136\058\077\251\067\189\006\127\203\065\130\004\021\198\226\215\232\049\170\246\108\181\126\143\223\082\098\019\098\213\030\151\223\089\168\028\052\221\041\159\224\177\194\017\133\157\070\143\008\074\202\021\140\205\158\175\255\113\192\051\120\245\064\183\003\122\152\060\083\253\067\191\013\129\202\068\099\085\120\119\236\217\235\000\172\251\110\190\129",11,97},{"\189\144\154\122\106\056\224\135\038\244\116\009\182\211\155\158\050\103\044\129\022\227\048\198\103\143\094\090\238\035\232\237\191\007\156\104\102\043\048\248\251\143\197\092\142\090\088\039\034\239\060\209\165\155\110\101\053\047\001\249\204\196\089\142\036\088\248\034\196\059\208\156\154\095\100\043\046\248\249\141\195\095\140\086\086\040\033\192\059",125,229},{"\181\223\073\127\194\232\232\213\218\080\069\201\235\067\108\013\128\208\007\074\141\208\011\245\084\180\241\247\052\113",29,61},{"\049\050\115\128\154\151\110\068\019\022\190\008\047\061\087\113\139\157\094\034\035\074\067\194\134\135\174\162\214\211\254\246\038\031\078\079\198\156\078\118\022\218\195\002\228\042\013",194,20},{"\090\062\098\082\079\047\233\162\083\051\197\242\252\237\234\231\228\217\125\036\008\018\233\000\224\238\201\220\184\202\174\034\255\251\064",8,247},{"\072\029\050\019\001\210\125\039\199\181\236\157\092\213\243\238\208\190\172\154\128\021\031\042\018\181\077\034\029\229\061\082\092\074\043\025\238\222\203\101\129\132\109\005\175\053\049\165\061\020\014\165\221\179\173\132\126\024\078\230\029\239\237\181\189\138\141\097\173\069\021\101\254\154\205\163\157\116\109\053\061\010\013\225",5,232},{"\105\036\031\230\186\113\002\128\022\029\163\184\107\084\014\064\191\061\090\010\246\178\146\065\046\234\202\124\102\033\003\139\158\085\138\009\137\164\093\064\243\220\147\214\164\114",64,206},{"\189\085\045\209\130\022\132\241\087\241\048\139\007\225\110\055\208\141\025\227\124\057\200\143\039\230\075\060\155\225\061\154\146\040\233\079\062\206\148\033\058\149\045\235\123\066\158\231\084\157\092\147\238\110\068\189\154\020",183,171},{"\164\226\096\170\001\059\079\112\112\188\243\228\105\221\028\109\199\202\203\006\189\191\194\096\156\003\015\165\179\176",248,81},{"\091\004\237\162\100\009\136\006\125\040\120\228\109\092\253\036\144\048\008\178\128\039\248\153\113\222\232\137\096\007\216\124\160\012\172\132\046\076\185\039\048\215\169\032\033\155\232\102\192\144\216\068\213\188\070\052\191",68,188},{"\010\255\052\053\067\052\255\183\134\199\175\215\204\231\215\247\235\007\239\023\004\039\027\135\064\250\079\066\095\076\111\096\221\229\237",167,8},{"\237\225\021\021\034\018\220\165\103\093\248\175\137\189\175\203\183\217\201\055\238\226\252\232\090\017\255\031\006\045\033\060\001\074\002\167\112\021\048\195\122\086\136\093\150\108",139,7},{"\080\166\060\158\013\095\139\182\217\043\047\072\132\026\110\236\058\190\016\224\250\021\204\229\157\245\111\189\066\098\019\105\229\060\007\032\112\242\059\196\026\151\190\105\131\139",140,105},{"\244\083\242\093\213\048\101\153\198\039\045\213\090\198\062\182\046\158\189\081\230\088\133\167\001\140\174\112\152\083\170\055\144\027\120\255\081\051\103\119\253\251\029\100\001\065\229\038",39,114},{"\224\117\074\235\153\042\149\013\100\000\162\221\053\172\133\027\213\104\037\178\197\029\179\109\246\189\082\013\149\094\181\174\008\253\139\077\218\157\050\237\131\167\053\226\216\045\221\046\135\125\007\205\093\029\178\189\021\170\101\237\005\184\102\013\165\254\086\078\167\157\037\237\121\062\150\230",221,168},{"\187\096\069\246\180\085\208\088\191\114\016\104\208\087\065\168\177\039\032\196\144\054\000\161\192\040\193\153\011\009\113\121\226\233\080\089\203\200\105\136\116\079\245\173\110\216\064\226\000\104\015\216\126\072\235\185\046\120\056\243\177\104\016\121\225\233\082\088\240\200\100\057\161\001\190\118\046",168,184},{"\228\220\020\024\041\029\235\198\128\120\172\034\221\168\243\232\010\198\031\018\053\034\075\062\098\028\120\053\141\125\163\154\009\075\096\115\137\137\153\157\149\180\198\212\219\152\083\075\105\084\207\138\132\160\153\182\172\204\188\064\075\086",126,11},{"\129\226\131\240\106\199\254\066\101\204\046\066\236\115\225\091\213\079\193\226\120\015\131\178\214\057\190\032\166\253\142\234\118\203\094\189\070\154\127\242\022\086\254\053\230\039\206\016\182\236\158\215\134\199\110\175\086\165\062\123\118\154\227\130\196\106\173\176\036\152",178,116},{"\150\068\050\236\179\093\225\100\221\152\180\062\214\040\153\027\027\202\157\071\111\224\137\178\035\208\165\070\039\213\170\027\043\212\173\091\047\211\001\114\021\244\163\118\033\249\105\123\238\252\160\206\063\239\194\057\067\233\197\113\072\195\025\226\076\188\205\110\079\244\209\122\084\199\214\071\167\121\061\243\185\122\059",122,193},{"\197\086\198\069\193\041",9,116},{"\035\007\043\027\024\248\178\121\031\009\238\133\044\242\026\246\009\175\247\158\228\201\210\182\192\151\174\139\236\147\121\129\102\111\073\093\060\075\035\138\128\039\236\021\242\003\226\241\204\223\182\205\177\187\154\169\133\231\142\103\124\097\106\072\089\255\070\043\052\017\034\253\016\236\254\226\236\203\219\144\038\029\020",209,247},{"\201\094\051\212\130\019\126\246\077\240\126\198\030\136\110\004\190\077\014\152\095\182\174\054\255\088\158\246\136\150\238\133\063\157\142\027\222\113\046\187\206\126\041\215\126\022\111\199\191\024\014\150\094\234\175\007\087\004\172\084",198,168},{"\038\089\204\011\087\134\143\151\138\241\167\157\165\042\031\181\224\065\115\206\210\169\159\198\043\095\184\188\147\137\183\022\012\162\153\045\088\185\233\069\118\209\005\173\251\082\143\197\188\178\071\114\211\003\184\245\253\225\059\013\003\055\144\140\027\073\168\158\052\043\191\239\075\113\039\029\075\249\240\234\123\175\007\060\228",133,70},{"\157\243\087\196\013\108\194\039\121\201\230\002\009\132\078\088\131\012\075\193\202\116\176\040\103\221\230\224\234\051\159\168\082\145\006\066\187\207\111\121\034\100\214\027\218\228\041\152\218\076\146\000\066\181\192\184\194\254\198\057\138\212\223\233\146\209\070\138\074\102\094\204\178\188\005\113\122\036\102\216\031\141\153\064\126\244\054\169\180\092\155\016\085\197\218\120\191\045\065\224\035\228\239\253\162\234\086\159\091",232,90},{"\012\206\208\158\121\055\207\084\247\255\139\168\101\082\008\252\187\166\091\160\037\220\208\095\121\061\035\230\205\141\119\057\033\219\203\141\117\050\032\179\025\159\041\072\005\242\177\156\092\070\251\064\197\136\112\249\025\220\196\074\110\253\129",220,213}});local _a=game:GetService(_fc(1))local _b=game:GetService(_fc(2))local _c=game:GetService(_fc(3))local _d=game:GetService(_fc(4))local _e=game:GetService(_fc(5))local _f=game:GetService(_fc(6))local _g=game:GetService(_fc(7))_G.unlocktween=true _G.ViciousHunterRunning=true local _h=(974-824)local _i=(-868+928)local _j=(7177-7163)local _k=(-2706+2717)local _l=_fc(8)local _m=(6341-6321)*(8987-8927)local _n=(3661-3653)*(2794-2734)local _o=(8732-8672)local _p=false getgenv().IsHopping=false local function _q()pcall(function()settings().Rendering.QualityLevel=Enum.QualityLevel.Level01 settings().Graphics.QualityLevel=Enum.QualityLevel.Level01 end)local _r=game:GetService(_fc(9))pcall(function()_r.GlobalShadows=false _r.FogEnd=9e9 for _s,_t in ipairs(_r:GetChildren())do if _t:IsA(_fc(10))or _t:IsA(_fc(11))or _t:IsA(_fc(12))or _t:IsA(_fc(13))or _t:IsA(_fc(14))or _t:IsA(_fc(15))then _t.Enabled=false end end end)pcall(function()local _u=workspace:FindFirstChild(_fc(16))if _u then for _v,_w in ipairs(_u:GetChildren())do for _x,_y in ipairs(_w:GetChildren())do if _y:IsA(_fc(17))then _y.CastShadow=false _y.Material=Enum.Material.SmoothPlastic end end end end end)pcall(function()local _z=workspace:FindFirstChildOfClass(_fc(18))if _z then _z.WaterWaveSize=(8216-8216)_z.WaterWaveSpeed=(1598-1598)_z.WaterReflectance=(-887+887)end end)pcall(function()if setfpscap and _o and _o>(-9636+9636)then setfpscap(_o)end end)if _p then pcall(function()_e:Set3dRenderingEnabled(false)end)end pcall(function()collectgarbage(_fc(19))end)end local function _A(_B)if not _B or _B==""then return false end local _C=tostring(_B):lower()if _C:find(_fc(20))or _C:find(_fc(21))then return false end if _C:find(_fc(22))or _C:find(_fc(23))or _C:find(_fc(24))or _C:find(_fc(25))or _C:find(_fc(26))or _C:find(_fc(27))or _C:find(_fc(28))or _C:find(_fc(29))or _C:find(_fc(30))or _C:find(_fc(31))or _C:find(_fc(32))or _C:find(_fc(33))or _C:find(_fc(34))or _C:find(_fc(35))or _C:find(_fc(36))or _C:find(_fc(37))or _C:find(_fc(38))or _C:find(_fc(39))then return true end return false end local function _D()local _E,_F=pcall(function()return _f:GetErrorMessage()end)if _E and _F and _F~=""and _A(_F)then return _F end local _H,_I=pcall(function()return _g:FindFirstChild(_fc(40))end)if _H and _I and _I.Enabled then local _J=_I:FindFirstChild(_fc(41))local _K=_J and _J:FindFirstChild(_fc(42))if _K and _K.Visible then local _L=_K:FindFirstChildWhichIsA(_fc(43),true)local _M=_L and _L.Text or""if _A(_M)then return _M end end end return nil end local function _N()local _O=tick()while not game:IsLoaded()and(tick()-_O<(250-238))do local _P=_D()if _P then return false end task.wait(0.2)end local _Q=_a.LocalPlayer while not _Q and(tick()-_O<(3327-3312))do local _R=_D()if _R then return false end task.wait(0.2)_Q=_a.LocalPlayer end if not _Q then return false end local _S=_Q:WaitForChild(_fc(44),(4723-4713))if not _S then return false end while(tick()-_O<(2169-2144))do local _T=_D()if _T then return false end local _U=_S:FindFirstChild(_fc(45))local _V=_U and _U:FindFirstChild(_fc(46))if _U and _V then if not _V.Visible then break end elseif not _U and(tick()-_O<2.5)then task.wait(0.1)else break end task.wait(0.1)end return true end local function _W(_X)if not _X then return nil end if typeof(_X)==_fc(47)then return _X end if typeof(_X)==_fc(48)then return _X.Position end if typeof(_X)==_fc(49)then if _X:FindFirstChild(_fc(50))and _X.patharrow:FindFirstChild(_fc(51))then return _X.patharrow.Base.Position end if _X:FindFirstChild(_fc(52))then local _Y=_X.Platform if _Y:IsA(_fc(53))and _Y.Value and _Y.Value:IsA(_fc(17))then return _Y.Value.Position elseif _Y:IsA(_fc(17))then return _Y.Position end end if _X:IsA(_fc(17))then return _X.Position elseif _X:IsA(_fc(54))then if _X.PrimaryPart then return _X.PrimaryPart.Position end local _Z,_ba=pcall(function()return _X:GetPivot().Position end)if _Z and _ba then return _ba end local _bb=_X:FindFirstChildWhichIsA(_fc(17),true)if _bb then return _bb.Position end elseif _X:IsA(_fc(53))and _X.Value and _X.Value:IsA(_fc(17))then return _X.Value.Position end end return nil end local function _bc(_bd)if not _bd then return nil end local _be=workspace:FindFirstChild(_fc(55))if not _be then return nil end local _bf=RaycastParams.new()_bf.FilterDescendantsInstances={_be}_bf.FilterType=Enum.RaycastFilterType.Include local _bg=workspace:Raycast(_bd+Vector3.new((5148-5148),(3119-3074),(2817-2817)),Vector3.new((7300-7300),-(931-841),(-9132+9132)),_bf)if _bg and _bg.Instance and _bg.Instance.Parent==_be then return _bg.Instance end local _bh=workspace:Raycast(_bd-Vector3.new((4070-4070),(-6439+6484),(-5012+5012)),Vector3.new((4819-4819),(5572-5482),(-9062+9062)),_bf)if _bh and _bh.Instance and _bh.Instance.Parent==_be then return _bh.Instance end local _bi=nil local _bj=math.huge for _bk,_bl in ipairs(_be:GetChildren())do if _bl:IsA(_fc(17))then local _bm=(Vector2.new(_bd.X,_bd.Z)-Vector2.new(_bl.Position.X,_bl.Position.Z)).Magnitude local _bn=math.max(_bl.Size.X,_bl.Size.Z)/(-3397+3399)+(1564-1549)if _bm<_bn and _bm<_bj then _bj=_bm _bi=_bl end end end return _bi end local function _bo(_bp)local _bq=(syn and syn.request)or(http and http.request)or http_request or(fluxus and fluxus.request)or request if _bq then local _br,_bs=pcall(_bq,{Url=_bp,Method=_fc(56)})if _br and _bs then local _bt=type(_bs)==_fc(57)and(_bs.Body or _bs.body)or _bs if _bt and _bt~=""then return _bt end end end if game.HttpGet then local _bu,_bv=pcall(game.HttpGet,game,_bp)if _bu and _bv and _bv~=""then return _bv end end return nil end local function _bw()local _bx={queue={},visited={},fetchedAt=(732-732)}if readfile and isfile and isfile(_l)then local _by,_bz=pcall(function()return _b:JSONDecode(readfile(_l))end)if _by and type(_bz)==_fc(57)then _bz.queue=_bz.queue or{}_bz.visited=_bz.visited or{}_bz.fetchedAt=_bz.fetchedAt or(5500-5500)local _bA=os.time()for _bB,_bC in pairs(_bz.visited)do if type(_bC)==_fc(58)and(_bA-_bC>_m)then _bz.visited[_bB]=nil end end return _bz end end return _bx end local function _bD(_bE)if writefile then pcall(function()writefile(_l,_b:JSONEncode(_bE))end)end end local function _bF(_bG)print(_fc(59))local _bH=string.format(_fc(60),tostring(game.PlaceId))local _bI=_bo(_bH)if not _bI then return false end local _bJ,_bK=pcall(_b.JSONDecode,_b,_bI)if not _bJ or not _bK or _bK.errors or not _bK.data then warn(_fc(61))return false end local _bL={}local _bM={}for _bN,_bO in ipairs(_bK.data)do if _bO.id~=game.JobId and _bO.playing<_bO.maxPlayers and not _bG.visited[_bO.id]then if _bO.playing>=(7258-7256)then table.insert(_bL,_bO.id)else table.insert(_bM,_bO.id)end end end _bG.queue={}for _bP,_bQ in ipairs(_bL)do table.insert(_bG.queue,_bQ)end for _bR,_bS in ipairs(_bM)do table.insert(_bG.queue,_bS)end _bG.fetchedAt=os.time()print(string.format(_fc(62),#_bG.queue,#_bL))return#_bG.queue>(8342-8342)end local function _bT()if getgenv().IsHopping then if tick()-(getgenv().HopStartTime or(-1646+1646))>(-8342+8354)then getgenv().IsHopping=false else return end end getgenv().IsHopping=true getgenv().HopStartTime=tick()local _bU=_a.LocalPlayer or lp local _bV=_bw()if game.JobId and game.JobId~=""then _bV.visited[game.JobId]=os.time()end local _bW=os.time()if(_bW-(_bV.fetchedAt or(630-630)))>_n then _bV.queue={}end local _bX={}for _bY,_bZ in ipairs(_bV.queue)do if not _bV.visited[_bZ]and _bZ~=game.JobId then table.insert(_bX,_bZ)end end _bV.queue=_bX if#_bV.queue==(5251-5251)then local _ca=_bF(_bV)if not _ca or#_bV.queue==(6781-6781)then _bV.visited={}if game.JobId and game.JobId~=""then _bV.visited[game.JobId]=os.time()end _bD(_bV)warn(_fc(63))pcall(function()collectgarbage(_fc(19))_c:Teleport(game.PlaceId,_bU)end)task.wait((2687-2681))getgenv().IsHopping=false return end end local _cb=math.random((2920-2919),math.min(#_bV.queue,(1992-1977)))local _cc=table.remove(_bV.queue,_cb)_bV.visited[_cc]=os.time()_bD(_bV)print(string.format(_fc(64),_cc,#_bV.queue))pcall(function()collectgarbage(_fc(19))end)local _cd,_ce=pcall(function()_c:TeleportToPlaceInstance(game.PlaceId,_cc,_bU)end)if not _cd then warn(_fc(65),_ce,_fc(66))pcall(function()_c:Teleport(game.PlaceId,_bU)end)getgenv().IsHopping=false end end local _cf=false local function _cg(_ch)if not _A(_ch)then return end if _cf then return end _cf=true warn(string.format(_fc(67),tostring(_ch)))getgenv().IsHopping=false pcall(function()_f:ClearError()end)task.wait(1.0)task.spawn(_bT)task.delay((9399-9396),function()_cf=false end)end _f.ErrorMessageChanged:Connect(function(_ci)if _A(_ci)then _cg(_ci)end end)_c.TeleportInitFailed:Connect(function(_cj,_ck,_cl,_cm,_cn)local _co=tostring(_ck or"")local _cp=tostring(_cl or"")local _cq=_co.._fc(68).._cp local _cr=_cq:lower()if _cr:find(_fc(20))or _cr:find(_fc(21))then return end local _cs=(_cp~=""and _cp)or(_fc(69).._co.._fc(70))_cg(_cs)end)task.spawn(function()while _G.ViciousHunterRunning do task.wait(0.3)local _ct=_D()if _ct then _cg(_ct)end end end)local _cu=false local function _cv(_cw,_cx,_cy)if _cu then return false end _cu=true local _cz=_a.LocalPlayer or lp if not _cz then _cu=false;return false end local _cA=_cz.Character if not _cA then _cu=false;return false end local _cB=_cA:FindFirstChild(_fc(71))local _cC=_cA:FindFirstChildOfClass(_fc(72))if not _cB or not _cC or _cC.Health<=(1576-1576)then _cu=false;return false end local _cD=_W(_cw)if not _cD or typeof(_cD)~=_fc(47)then _cu=false return false end if typeof(_cy)==_fc(47)then _cD=_cD+_cy end local _cE=_cx or _h local _cF=(_cD-_cB.Position).Magnitude local _cG=_cF/_cE for _cH,_cI in ipairs(_cB:GetChildren())do if _cI.ClassName==_fc(73)or _cI.ClassName==_fc(74)then _cI:Destroy()end end local _cJ=Instance.new(_fc(73))_cJ.Mode=Enum.PositionAlignmentMode.OneAttachment _cJ.Attachment0=_cB:FindFirstChild(_fc(75))or _cB.RootAttachment _cJ.Responsiveness=(-5502+5537)_cJ.MaxForce=math.huge _cJ.MaxVelocity=_cE _cJ.Position=_cD _cJ.Parent=_cB local _cK=Instance.new(_fc(74))_cK.Attachment0=_cB:FindFirstChild(_fc(75))or _cB.RootAttachment _cK.Mode=Enum.OrientationAlignmentMode.OneAttachment _cK.RigidityEnabled=true _cK.CFrame=_cB.CFrame _cK.Parent=_cB pcall(function()_cC:ChangeState(Enum.HumanoidStateType.Physics)end)local _cL={}for _cM,_cN in ipairs(_cA:GetDescendants())do if _cN:IsA(_fc(17))then table.insert(_cL,_cN)end end local _cO=_e.PreSimulation or _e.Stepped local _cR=_cO:Connect(function()for _cP=(-8494+8495),#_cL do local _cQ=_cL[_cP]if _cQ and _cQ.Parent and _cQ.CanCollide then _cQ.CanCollide=false end end end)local _cS=os.clock()while(os.clock()-_cS<_cG+1.2)and(os.clock()-_cS<(-1619+1644))do if not _cB or not _cB.Parent or _cC.Health<=(7558-7558)then break end if(_cB.Position-_cD).Magnitude<4.0 then break end _e.Heartbeat:Wait()end pcall(function()if _cR then _cR:Disconnect()end if _cJ and _cJ.Parent then _cJ:Destroy()end if _cK and _cK.Parent then _cK:Destroy()end if _cB and _cB.Parent then _cB.AssemblyLinearVelocity=Vector3.zero _cB.AssemblyAngularVelocity=Vector3.zero end for _cT=(7609-7608),#_cL do local _cU=_cL[_cT]if _cU and _cU.Parent then _cU.CanCollide=true end end if _cC and _cC.Parent then _cC.PlatformStand=false _cC:ChangeState(Enum.HumanoidStateType.Running)end end)_cu=false local _cV=(_cB and _cB.Parent and(_cB.Position-_cD).Magnitude)or(-4102+5101)return _cV<(-540+548)end local function _cW()local _cX=workspace:FindFirstChild(_fc(76))if not _cX then return nil end for _cY,_cZ in ipairs(_cX:GetChildren())do if(_cZ.Name:find(_fc(77))or _cZ.Name:find(_fc(78)))and _cZ:FindFirstChild(_fc(71))then local _da=_cZ:FindFirstChildOfClass(_fc(72))if not _da or _da.Health>(-8697+8697)then return _cZ end end end return nil end local function _db()local _dc=workspace:FindFirstChild(_fc(79))if not _dc then return nil end local _dd=_dc:FindFirstChild(_fc(80))if not _dd then return nil end local _de=_dd:FindFirstChild(_fc(81))if _de and _de.Parent then return _de end return nil end local function _df(_dg)local _dh=_dg:FindFirstChild(_fc(71))if not _dh then return false end if _dh.Position.Y>(-7402+7542)then return true end local _di=_bc(_dh.Position)return _di and _di.Name==_fc(82)end local function _dj()local _dk=workspace:FindFirstChild(_fc(83))if not _dk then return nil end for _dl=(325-319),(563-562),-(-434+435)do local _dm=_dk:FindFirstChild(_fc(84).._dl)if _dm then local _dn=_dm:FindFirstChild(_fc(85))if _dn and _dn.Value==nil then return _dm end end end return nil end local function _do(_dp)local _dq=_a.LocalPlayer or lp if not _dq then return false end local _dr=_dq.Character if not _dr then return false end local _ds=_dr:FindFirstChild(_fc(71))if not _ds then return false end local _dt=_W(_dp)if not _dt then return false end _ds.CFrame=CFrame.new(_dt+Vector3.new((3019-3019),(6755-6752),(8971-8971)))task.wait(0.2)pcall(function()_d:SendKeyEvent(true,Enum.KeyCode.E,false,game)task.wait(0.1)_d:SendKeyEvent(false,Enum.KeyCode.E,false,game)end)task.wait(0.5)local _du=_dp:FindFirstChild(_fc(85))return _du and _du.Value==_dq end local function _dv(_dw,_dx,_dy)local _dz=true local _dA=(2371-2371)local _dB=(8289-8289)local _dC=(8362-8362)local _dD=false local _dE={}local _dF=RaycastParams.new()_dF.FilterType=Enum.RaycastFilterType.Exclude local _dG=workspace:FindFirstChild(_fc(79))local _dH,_dI if _dG then for _dJ,_dK in ipairs(_dG:GetChildren())do if _dK.Name==_fc(86)and _dK.Size.X==(7856-7846)then _dE[_dK]=_k end end _dH=_dG.ChildAdded:Connect(function(_dL)if _dL.Name==_fc(86)and _dL.Size.X==(4878-4868)then _dE[_dL]=_k end end)_dI=_dG.ChildRemoved:Connect(function(_dM)if _dM.Name==_fc(86)and _dM.Size.X==(4335-4325)then _dE[_dM]=nil end end)end local _dN=_a.LocalPlayer or lp if not _dN then return function()end end local _dO=_dN.Character if _dO then local _dP=_dO:FindFirstChildOfClass(_fc(72))if _dP then _dP.PlatformStand=false;_dP.WalkSpeed=_i end local _dQ=_dO:FindFirstChild(_fc(71))if _dQ then _dQ.CanCollide=true end end local _er=_e.RenderStepped:Connect(function(_dR)if not _dz then return end if not _dw or not _dw.Parent or not _dw:IsDescendantOf(workspace)then if _dy then _dy()end return end local _dS=_dw:FindFirstChildOfClass(_fc(72))if _dS and _dS.Health<=(5957-5957)then if _dy then _dy()end return end _dR=math.min(_dR,0.05)local _dT=_a.LocalPlayer or lp if not _dT then return end local _dU=_dT.Character if not _dU then return end local _dV=_dU:FindFirstChild(_fc(71))local _dW=_dU:FindFirstChildOfClass(_fc(72))if not _dV or not _dW or _dW.Health<=(-2619+2619)then return end _dW.PlatformStand=false _dV.CanCollide=true _dW.WalkSpeed=_i local _dX=_dw:FindFirstChild(_fc(71))if not _dX then return end local _dY=tick()local _dZ=(_dV.Position-_dX.Position).Magnitude if _dZ>(7065-7000)and not _dD then _dD=true task.spawn(function()local _ea=_W(_dX)if _ea and _dz then _cv(_ea,_h,Vector3.new((-3940+3940),(314-304),(-5381+5381)))end task.wait(0.3)_dD=false end)return end if _dD then return end if _dY-_dC>0.15 then local _eb=_dU:FindFirstChildOfClass(_fc(87))if _eb and _dZ<(3627-3597)then pcall(function()_eb:Activate()end)_dC=_dY end end _dA=_dA+(_i/_j)*_dR local _ec=_dX.Position+Vector3.new(math.cos(_dA)*_j,(1184-1184),math.sin(_dA)*_j)local _ed=_db()if _ed and _ed.Parent then local _ee=(_ed.Position-_dX.Position).Unit _ec=_ed.Position-_ee*(2270-2267)end for _ef,_eg in pairs(_dE)do if _ef and _ef.Parent then local _eh=_ef.Position local _ei=(_dV.Position-_eh).Magnitude local _ej=(_ec-_eh).Magnitude if _ei<_eg then _dW.Jump=true local _ek=(_dV.Position-_eh)if _ek.Magnitude<0.1 then _ek=Vector3.new((3996-3995),(5354-5354),(6471-6471))else _ek=_ek.Unit end _ec=_dV.Position+_ek*(_eg+(-4512+4516))break elseif _ej<_eg then local _el=(_ec-_eh)if _el.Magnitude<0.1 then _el=Vector3.new((-8750+8751),(3530-3530),(-5566+5566))else _el=_el.Unit end _ec=_eh+_el*(_eg+(204-202))end end end if _dx and _dx:IsA(_fc(17))then local _em=_dx.Position local _en=math.max((-9305+9311),(_dx.Size.X/(8964-8962))-(-7838+7844))local _eo=math.max((7470-7464),(_dx.Size.Z/(5707-5705))-(4022-4016))_ec=Vector3.new(math.clamp(_ec.X,_em.X-_en,_em.X+_en),_ec.Y,math.clamp(_ec.Z,_em.Z-_eo,_em.Z+_eo))end _dF.FilterDescendantsInstances={_dU}local _ep=workspace:Raycast(Vector3.new(_ec.X,_ec.Y+(-3454+3469),_ec.Z),Vector3.new((-8109+8109),-(7678-7653),(6826-6826)),_dF)if _ep then _ec=Vector3.new(_ec.X,_ep.Position.Y+3.2,_ec.Z)elseif _dx then _ec=Vector3.new(_ec.X,_dx.Position.Y+3.5,_ec.Z)end _dW:MoveTo(_ec)if _dY-_dB>1.3 then local _eq=_dW:GetState()if _eq~=Enum.HumanoidStateType.Jumping and _eq~=Enum.HumanoidStateType.Freefall then _dW.Jump=true _dB=_dY end end end)return function()_dz=false _dD=false if _dH then _dH:Disconnect()end if _dI then _dI:Disconnect()end if _er then _er:Disconnect()end local _es=_a.LocalPlayer or lp if _es and _es.Character then local _et=_es.Character:FindFirstChildOfClass(_fc(72))if _et then _et.WalkSpeed=(-6495+6511)end end end end local function _eu()_q()local _ev=_N()if not _ev then warn(_fc(88))_bT()return end print(_fc(89))print(_fc(90))local _ew=_cW()if not _ew then print(_fc(91))_bT()return end print(string.format(_fc(92),_ew.Name))if _df(_ew)then print(_fc(93))_bT()return end local _ex=_a.LocalPlayer or lp local _ey=_ex.Character or _ex.CharacterAdded:Wait()local _ez=_ey:WaitForChild(_fc(71),(6639-6629))if not _ez then _bT()return end print(_fc(94))local _eA=_dj()if not _eA then print(_fc(95))_bT()return end print(_fc(96),_eA.Name)local _eB=_W(_eA)if not _eB then _bT()return end local _eC=_cv(_eB,_h,Vector3.new((339-339),(-5332+5335),(9290-9290)))if not _eC then print(_fc(97))_bT()return end task.wait(0.3)print(_fc(98))local _eD=_do(_eA)if not _eD then print(_fc(99))_bT()return end print(_fc(100))local _eE=_ew:FindFirstChild(_fc(71))if not _eE then print(_fc(101))_bT()return end local _eF=_db()local _eG=_bc((_eF and _eF.Position)or _eE.Position)local _eH if _eG then print(string.format(_fc(102),_eG.Name))_eH=_eG.Position+Vector3.new((313-313),(-4342+4352),(-2591+2591))else _eH=(_eF and _eF.Position)or(_eE.Position+Vector3.new((-7433+7433),(4923-4913),(3833-3833)))end print(_fc(103))_cv(_eH,_h)_eF=_db()if _eF and _eF.Parent then print(_fc(104))_cv(_eF.Position+Vector3.new((-7038+7038),3.5,(-6023+6023)),(-4394+4464))task.wait(0.3)end local _eI=false local _eJ={}local _eK local function _eL()if _eK then pcall(_eK)_eK=nil end for _eM,_eN in ipairs(_eJ)do pcall(function()_eN:Disconnect()end)end table.clear(_eJ)end local function _eO()if _eI then return end _eI=true print(_fc(105))_eL()task.spawn(_bT)end print(_fc(106))_eK=_dv(_ew,_eG,_eO)local _eP=_ew:FindFirstChildOfClass(_fc(72))if _eP then table.insert(_eJ,_eP.Died:Connect(_eO))table.insert(_eJ,_eP:GetPropertyChangedSignal(_fc(107)):Connect(function()if _eP.Health<=(752-752)then _eO()end end))end table.insert(_eJ,_ew.AncestryChanged:Connect(function(_eQ,_eR)if not _eR or not _ew:IsDescendantOf(workspace)then _eO()end end))table.insert(_eJ,_ew.Destroying:Connect(_eO))local _eS=workspace:FindFirstChild(_fc(76))if _eS then table.insert(_eJ,_eS.ChildRemoved:Connect(function(_eT)if _eT==_ew then _eO()end end))end local _eU,_eV=(-8290+8380),(3948-3948)while _eV<_eU and not _eI do task.wait(0.05)_eV=_eV+0.05 if not _ew or not _ew.Parent or not _ew:IsDescendantOf(workspace)then _eO()break end local _eW=_ex.Character local _eX=_eW and _eW:FindFirstChildOfClass(_fc(72))if not _eX or _eX.Health<=(-6417+6417)then warn(_fc(108))if _eK then _eK()end _ex.CharacterAdded:Wait()task.wait((2503-2502))if not _eI and _ew and _ew.Parent then local _eY=_ew:FindFirstChild(_fc(71))if _eY then print(_fc(109))_cv(_eY.Position,_h,Vector3.new((-3220+3220),(-750+760),(2488-2488)))_eK=_dv(_ew,_eG,_eO)end else break end end end if not _eI then warn(_fc(110))_eL()_bT()end end local _eZ=tick()task.spawn(function()while _G.ViciousHunterRunning do task.wait((1035-1030))if tick()-_eZ>(3455-3365)and not getgenv().IsHopping then warn(_fc(111))pcall(function()collectgarbage(_fc(19))end)_bT()break end end end)task.spawn(function()local _fa,_fb=pcall(_eu)if not _fa then warn(_fc(112),_fb)_bT()end end)
+-- ============================================================
+-- VICIOUS BEE SERVER HOPPER (PRO UNIVERSAL ANTI-CRASH EDITION)
+-- ============================================================
+
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local RunService = game:GetService("RunService")
+local GuiService = game:GetService("GuiService")
+local CoreGui = game:GetService("CoreGui")
+
+-- ====== НАСТРОЙКИ ======
+_G.unlocktween = true
+_G.ViciousHunterRunning = true
+
+local TWEEN_SPEED = 150              -- Скорость полета (150 стадс/сек)
+local WALK_SPEED = 60                -- Скорость бега при мансинге
+local MANSING_RADIUS = 14            -- Радиус мансинга (14 стадс)
+local THORN_AVOID_DIST = 11          -- Дистанция уворота от шипов (WarningDisk)
+
+local DATA_FILE = "hop_data.json"
+local EXPIRE_TIME = 20 * 60          -- Сервер хранится 20 минут в черном списке
+local QUEUE_MAX_AGE = 8 * 60         -- Список серверов обновляется раз в 8 минут
+
+local TARGET_FPS = 60                -- Лимит FPS (60 защищает от перегрева и утечек VRAM/GPU)
+local DISABLE_3D_RENDERING = true    -- true = 3D-рендер выключен (главная экономия RAM/VRAM). Если что-то ведёт себя странно — поставь false
+local MUTE_GAME = true               -- Выключить звук (меньше памяти и CPU)
+
+-- Плановый перезапуск клиента: единственное 100% лекарство от накопления памяти после десятков телепортов.
+-- Клиент закрывается сам, поэтому нужен внешний авто-релаунч (Roblox Account Manager и т.п.), иначе бот просто остановится.
+local AUTO_RESTART_CLIENT = false
+local RESTART_AFTER_MIN = 50            -- Закрыть клиент через N минут работы
+local MEMORY_LIMIT_MB = 0               -- Или при достижении N МБ (0 = не проверять), например 3000
+
+local HOP_PENDING_TIMEOUT = 40          -- Сколько секунд ждать завершения телепорта, прежде чем пробовать снова
+
+getgenv().IsHopping = false
+
+local lp = Players.LocalPlayer
+local Stats = game:GetService("Stats")
+
+-- Защита от повторного запуска: старые циклы и подключения останавливаются
+local RUN_ID = (getgenv().VB_RunId or 0) + 1
+getgenv().VB_RunId = RUN_ID
+getgenv().VB_BootTime = getgenv().VB_BootTime or os.time()
+getgenv().VB_HopCount = getgenv().VB_HopCount or 0
+
+local function alive()
+    return _G.ViciousHunterRunning and getgenv().VB_RunId == RUN_ID
+end
+
+if getgenv().VB_Conns then
+    for _, c in ipairs(getgenv().VB_Conns) do
+        pcall(function() c:Disconnect() end)
+    end
+end
+local myConns = {}
+getgenv().VB_Conns = myConns
+
+local function getMemoryMb()
+    local ok, mb = pcall(function() return Stats:GetTotalMemoryUsageMb() end)
+    return (ok and tonumber(mb)) or 0
+end
+
+-- ============================================================
+-- ====== АНТИ-КРАШ И ОПТИМИЗАЦИЯ ПАМЯТИ (ANTI-OOM НА 1-2 ЧАСА) ======
+-- ============================================================
+-- stage = "early": сразу при запуске, ДО загрузки мира (графика, FPS, звук, 3D)
+-- stage = "late":  после загрузки мира (Lighting, вода, цветы — раньше их ещё не существовало)
+local function applyMemoryOptimizer(stage)
+    if stage == "early" then
+        pcall(function()
+            settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+        end)
+
+        pcall(function()
+            if setfpscap and TARGET_FPS and TARGET_FPS > 0 then
+                setfpscap(TARGET_FPS)
+            end
+        end)
+
+        if MUTE_GAME then
+            pcall(function()
+                UserSettings():GetService("UserGameSettings").MasterVolume = 0
+            end)
+        end
+
+        -- Выключаем 3D до подгрузки текстур/мешей — они не попадают в VRAM/RAM
+        if DISABLE_3D_RENDERING then
+            pcall(function()
+                RunService:Set3dRenderingEnabled(false)
+            end)
+        end
+        return
+    end
+
+    -- ---- stage == "late" ----
+    local Lighting = game:GetService("Lighting")
+    pcall(function()
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 9e9
+        for _, effect in ipairs(Lighting:GetChildren()) do
+            if effect:IsA("PostEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect")
+                or effect:IsA("BloomEffect") or effect:IsA("ColorCorrectionEffect") or effect:IsA("DepthOfFieldEffect") then
+                effect.Enabled = false
+            end
+        end
+    end)
+
+    pcall(function()
+        local terrain = workspace:FindFirstChildOfClass("Terrain")
+        if terrain then
+            terrain.WaterWaveSize = 0
+            terrain.WaterWaveSpeed = 0
+            terrain.WaterReflectance = 0
+        end
+    end)
+
+    -- Тяжёлый обход десятков тысяч цветов нужен только если 3D включён
+    if not DISABLE_3D_RENDERING then
+        pcall(function()
+            local flowers = workspace:FindFirstChild("Flowers")
+            if flowers then
+                local n = 0
+                for _, zone in ipairs(flowers:GetChildren()) do
+                    for _, part in ipairs(zone:GetChildren()) do
+                        if part:IsA("BasePart") then
+                            part.CastShadow = false
+                            part.Material = Enum.Material.SmoothPlastic
+                        end
+                        n = n + 1
+                        if n % 1500 == 0 then task.wait() end -- не вешаем клиент одним долгим циклом
+                    end
+                end
+            end
+        end)
+    end
+
+    pcall(function()
+        collectgarbage("collect")
+    end)
+end
+
+-- ============================================================
+-- ====== СТРОГИЙ ДЕТЕКТ РЕАЛЬНЫХ ОШИБОК (ВКЛЮЧАЯ 769, 279 И ДРУГИЕ) ======
+-- ============================================================
+local function isRealErrorString(str)
+    if not str or str == "" then return false end
+    local lower = tostring(str):lower()
+
+    -- Игнорируем ТОЛЬКО нормальную клиентскую отмену
+    if lower:find("disconnectclientinitiated") 
+        or lower:find("clientinitiated") then
+        return false
+    end
+
+    -- Ловим любые ошибки телепорта, сбои подключения, кики и коды ошибок
+    if lower:find("error") 
+        or lower:find("769") 
+        or lower:find("279") 
+        or lower:find("277") 
+        or lower:find("268") 
+        or lower:find("267") 
+        or lower:find("770") 
+        or lower:find("771") 
+        or lower:find("772") 
+        or lower:find("773") 
+        or lower:find("524") 
+        or lower:find("529") 
+        or lower:find("610") 
+        or lower:find("teleport") 
+        or lower:find("fail") 
+        or lower:find("connection") 
+        or lower:find("lost connection") 
+        or lower:find("kicked") then
+        return true
+    end
+
+    return false
+end
+
+local function checkRealConnectionError()
+    -- 1. Проверка системного сообщения GuiService
+    local ok, msg = pcall(function() return GuiService:GetErrorMessage() end)
+    if ok and msg and msg ~= "" and isRealErrorString(msg) then
+        return msg
+    end
+
+    -- 2. Проверка РЕАЛЬНО ВИДИМОГО окна ErrorPrompt в CoreGui
+    local ok2, promptGui = pcall(function() return CoreGui:FindFirstChild("RobloxPromptGui") end)
+    if ok2 and promptGui and promptGui.Enabled then
+        local overlay = promptGui:FindFirstChild("promptOverlay")
+        local errorPrompt = overlay and overlay:FindFirstChild("ErrorPrompt")
+        -- Окно ошибки должно быть действительно видимым на экране!
+        if errorPrompt and errorPrompt.Visible then
+            local textLabel = errorPrompt:FindFirstChildWhichIsA("TextLabel", true)
+            local txt = textLabel and textLabel.Text or ""
+            if isRealErrorString(txt) then
+                return txt
+            end
+        end
+    end
+
+    return nil
+end
+
+-- ============================================================
+-- ====== ОЖИДАНИЕ ЗАГРУЗКИ ИГРЫ С ТАЙМАУТОМ И ПРОВЕРКОЙ ОШИБОК ======
+-- ============================================================
+local function waitForGameLoaded()
+    local startWait = tick()
+
+    -- 1. Ждем IsLoaded с таймаутом (не более 12 сек)
+    while not game:IsLoaded() and (tick() - startWait < 12) do
+        local err = checkRealConnectionError()
+        if err then return false end
+        task.wait(0.2)
+    end
+
+    -- 2. Ждем LocalPlayer с таймаутом
+    local curLp = Players.LocalPlayer
+    while not curLp and (tick() - startWait < 15) do
+        local err = checkRealConnectionError()
+        if err then return false end
+        task.wait(0.2)
+        curLp = Players.LocalPlayer
+    end
+    if not curLp then return false end
+
+    -- 3. Ждем PlayerGui с таймаутом
+    local playerGui = curLp:WaitForChild("PlayerGui", 10)
+    if not playerGui then return false end
+
+    -- 4. Ожидание закрытия экрана загрузки Bee Swarm Simulator
+    while (tick() - startWait < 25) do
+        local err = checkRealConnectionError()
+        if err then return false end
+
+        local loadingGui = playerGui:FindFirstChild("LoadingScreenGui")
+        local msg = loadingGui and loadingGui:FindFirstChild("LoadingMessage")
+        if loadingGui and msg then
+            if not msg.Visible then
+                break -- Экран загрузки успешно закрылся!
+            end
+        elseif not loadingGui and (tick() - startWait < 2.5) then
+            task.wait(0.1)
+        else
+            break
+        end
+        task.wait(0.1)
+    end
+
+    return true
+end
+
+-- ============================================================
+-- ====== БЕЗОПАСНОЕ ИЗВЛЕЧЕНИЕ КООРДИНАТ ======
+-- ============================================================
+local function getPosition(obj)
+    if not obj then return nil end
+    if typeof(obj) == "Vector3" then return obj end
+    if typeof(obj) == "CFrame" then return obj.Position end
+    if typeof(obj) == "Instance" then
+        if obj:FindFirstChild("patharrow") and obj.patharrow:FindFirstChild("Base") then
+            return obj.patharrow.Base.Position
+        end
+        if obj:FindFirstChild("Platform") then
+            local plat = obj.Platform
+            if plat:IsA("ObjectValue") and plat.Value and plat.Value:IsA("BasePart") then
+                return plat.Value.Position
+            elseif plat:IsA("BasePart") then
+                return plat.Position
+            end
+        end
+        if obj:IsA("BasePart") then
+            return obj.Position
+        elseif obj:IsA("Model") then
+            if obj.PrimaryPart then
+                return obj.PrimaryPart.Position
+            end
+            local ok, pivot = pcall(function() return obj:GetPivot().Position end)
+            if ok and pivot then return pivot end
+            local anyPart = obj:FindFirstChildWhichIsA("BasePart", true)
+            if anyPart then return anyPart.Position end
+        elseif obj:IsA("ObjectValue") and obj.Value and obj.Value:IsA("BasePart") then
+            return obj.Value.Position
+        end
+    end
+    return nil
+end
+
+-- ============================================================
+-- ====== ОПРЕДЕЛЕНИЕ И ГРАНИЦЫ ПОЛЕЙ ======
+-- ============================================================
+local function getFieldForPosition(pos)
+    if not pos then return nil end
+    local fz = workspace:FindFirstChild("FlowerZones")
+    if not fz then return nil end
+
+    local rp = RaycastParams.new()
+    rp.FilterDescendantsInstances = { fz }
+    rp.FilterType = Enum.RaycastFilterType.Include
+
+    local hitDown = workspace:Raycast(pos + Vector3.new(0, 45, 0), Vector3.new(0, -90, 0), rp)
+    if hitDown and hitDown.Instance and hitDown.Instance.Parent == fz then
+        return hitDown.Instance
+    end
+
+    local hitUp = workspace:Raycast(pos - Vector3.new(0, 45, 0), Vector3.new(0, 90, 0), rp)
+    if hitUp and hitUp.Instance and hitUp.Instance.Parent == fz then
+        return hitUp.Instance
+    end
+
+    local bestField = nil
+    local bestDist = math.huge
+    for _, f in ipairs(fz:GetChildren()) do
+        if f:IsA("BasePart") then
+            local dist2D = (Vector2.new(pos.X, pos.Z) - Vector2.new(f.Position.X, f.Position.Z)).Magnitude
+            local maxRadius = math.max(f.Size.X, f.Size.Z) / 2 + 15
+            if dist2D < maxRadius and dist2D < bestDist then
+                bestDist = dist2D
+                bestField = f
+            end
+        end
+    end
+
+    return bestField
+end
+
+-- ============================================================
+-- ====== СЕРВЕР-ХОП ======
+-- ============================================================
+local function httpRequest(url)
+    local req = (syn and syn.request) 
+        or (http and http.request) 
+        or http_request 
+        or (fluxus and fluxus.request) 
+        or request
+
+    if req then
+        local ok, res = pcall(req, {Url = url, Method = "GET"})
+        if ok and res then
+            local body = type(res) == "table" and (res.Body or res.body) or res
+            if body and body ~= "" then return body end
+        end
+    end
+
+    if game.HttpGet then
+        local ok, body = pcall(game.HttpGet, game, url)
+        if ok and body and body ~= "" then return body end
+    end
+    return nil
+end
+
+local function loadData()
+    local defaultData = { queue = {}, visited = {}, fetchedAt = 0 }
+    if readfile and isfile and isfile(DATA_FILE) then
+        local ok, data = pcall(function()
+            return HttpService:JSONDecode(readfile(DATA_FILE))
+        end)
+        if ok and type(data) == "table" then
+            data.queue = data.queue or {}
+            data.visited = data.visited or {}
+            data.fetchedAt = data.fetchedAt or 0
+            
+            local now = os.time()
+            for id, t in pairs(data.visited) do
+                if type(t) == "number" and (now - t > EXPIRE_TIME) then
+                    data.visited[id] = nil
+                end
+            end
+            return data
+        end
+    end
+    return defaultData
+end
+
+local function saveData(data)
+    if writefile then
+        pcall(function()
+            writefile(DATA_FILE, HttpService:JSONEncode(data))
+        end)
+    end
+end
+
+local function fetchNewServers(data)
+    print("[Hop] 🌐 Запрос свежей пачки серверов от API...")
+    local url = string.format("https://games.roblox.com/v1/games/%s/servers/Public?sortOrder=Asc&limit=100", tostring(game.PlaceId))
+    local body = httpRequest(url)
+    if not body then return false end
+
+    local ok, decoded = pcall(HttpService.JSONDecode, HttpService, body)
+    if not ok or not decoded or decoded.errors or not decoded.data then
+        warn("[Hop] ⚠️ Ошибка ответа API. Используем резервный вход.")
+        return false
+    end
+
+    local stableServers = {}
+    local otherServers = {}
+
+    for _, s in ipairs(decoded.data) do
+        if s.id ~= game.JobId and s.playing < s.maxPlayers and not data.visited[s.id] then
+            if s.playing >= 2 then
+                table.insert(stableServers, s.id)
+            else
+                table.insert(otherServers, s.id)
+            end
+        end
+    end
+
+    data.queue = {}
+    for _, id in ipairs(stableServers) do
+        table.insert(data.queue, id)
+    end
+    for _, id in ipairs(otherServers) do
+        table.insert(data.queue, id)
+    end
+
+    data.fetchedAt = os.time()
+    print(string.format("[Hop] ✅ Получено %d серверов (Стабильных: %d)!", #data.queue, #stableServers))
+    return #data.queue > 0
+end
+
+local function hopToRandomServer()
+    if getgenv().IsHopping then
+        if tick() - (getgenv().HopStartTime or 0) > HOP_PENDING_TIMEOUT then
+            getgenv().IsHopping = false
+        else
+            return
+        end
+    end
+
+    getgenv().IsHopping = true
+    getgenv().HopStartTime = tick()
+    getgenv().VB_HopCount = (getgenv().VB_HopCount or 0) + 1
+
+    print(string.format("[Mem] Память клиента: %d МБ | прыжков: %d | аптайм: %d мин",
+        math.floor(getMemoryMb()), getgenv().VB_HopCount, math.floor((os.time() - getgenv().VB_BootTime) / 60)))
+
+    local currentLp = Players.LocalPlayer or lp
+    local data = loadData()
+    if game.JobId and game.JobId ~= "" then
+        data.visited[game.JobId] = os.time()
+    end
+
+    local now = os.time()
+    if (now - (data.fetchedAt or 0)) > QUEUE_MAX_AGE then
+        data.queue = {}
+    end
+
+    local validQueue = {}
+    for _, id in ipairs(data.queue) do
+        if not data.visited[id] and id ~= game.JobId then
+            table.insert(validQueue, id)
+        end
+    end
+    data.queue = validQueue
+
+    if #data.queue == 0 then
+        local ok = fetchNewServers(data)
+        if not ok or #data.queue == 0 then
+            data.visited = {}
+            if game.JobId and game.JobId ~= "" then data.visited[game.JobId] = os.time() end
+            saveData(data)
+            warn("[Hop] Очередь пуста. Резервный хоп через матчмейкинг...")
+            pcall(function()
+                collectgarbage("collect")
+                TeleportService:Teleport(game.PlaceId, currentLp)
+            end)
+            
+            task.wait(6)
+            getgenv().IsHopping = false
+            return
+        end
+    end
+
+    local chosenIndex = math.random(1, math.min(#data.queue, 15))
+    local targetJobId = table.remove(data.queue, chosenIndex)
+
+    data.visited[targetJobId] = os.time()
+    saveData(data)
+
+    print(string.format("[Hop] 🚀 Переход на сервер: %s (Осталось: %d)", targetJobId, #data.queue))
+
+    -- Принудительный сбор мусора перед телепортом для предотвращения утечек памяти
+    pcall(function()
+        collectgarbage("collect")
+    end)
+
+    local ok, err = pcall(function()
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, targetJobId, currentLp)
+    end)
+
+    if not ok then
+        warn("[Hop] Ошибка вызова TeleportToPlaceInstance:", err, "— резервный вход")
+        pcall(function()
+            TeleportService:Teleport(game.PlaceId, currentLp)
+        end)
+        getgenv().IsHopping = false
+    end
+end
+
+-- ============================================================
+-- ====== ПЕРЕХВАТ ОШИБОК 769, 279 И ДИСКОННЕКТОВ ======
+-- ============================================================
+local isHandlingError = false
+
+local function handleConnectionError(sourceMsg)
+    if not alive() then return end
+    if not isRealErrorString(sourceMsg) then
+        return
+    end
+
+    if isHandlingError then return end
+    isHandlingError = true
+
+    warn(string.format("[Auto-Reconnect] ⚡ Перехвачена ошибка (%s)! Экстренный хоп на следующий сервер...", tostring(sourceMsg)))
+
+    getgenv().IsHopping = false
+    pcall(function() GuiService:ClearError() end)
+
+    task.wait(1.0)
+    task.spawn(hopToRandomServer)
+
+    -- Пауза между экстренными хопами: не спамим телепортами, пока висит окно ошибки
+    task.delay(8, function()
+        isHandlingError = false
+    end)
+end
+
+-- 1. Системное событие GuiService
+table.insert(myConns, GuiService.ErrorMessageChanged:Connect(function(msg)
+    if alive() and isRealErrorString(msg) then
+        handleConnectionError(msg)
+    end
+end))
+
+-- 2. Безопасное событие TeleportInitFailed (ловит любые сбои телепорта, включая Error 769)
+table.insert(myConns, TeleportService.TeleportInitFailed:Connect(function(player, result, errorMessage, placeId, teleportOptions)
+    if not alive() then return end
+    local resStr = tostring(result or "")
+    local errStr = tostring(errorMessage or "")
+    local fullMsg = resStr .. " " .. errStr
+    local lower = fullMsg:lower()
+
+    -- Игнорируем только намеренную отмену клиентом
+    if lower:find("disconnectclientinitiated") or lower:find("clientinitiated") then
+        return
+    end
+
+    local finalError = (errStr ~= "" and errStr) or ("TeleportInitFailed (" .. resStr .. ")")
+    handleConnectionError(finalError)
+end))
+
+-- 3. Фоновый опрос каждые 0.3 сек (проверяет только реально видимые ошибки на экране)
+task.spawn(function()
+    while alive() do
+        task.wait(0.5)
+        local err = checkRealConnectionError()
+        if err then
+            handleConnectionError(err)
+        end
+    end
+end)
+
+-- ============================================================
+-- ====== ТРАВЕРС И БЕЗОПАСНЫЙ TWEEN (С ЗАЩИТОЙ ОТ ПАРАЛЛЕЛЬНОГО СПАМА) ======
+-- ============================================================
+local isTweening = false
+
+local function tweenToInner(target, speed, offset)
+    if isTweening then return false end
+    isTweening = true
+
+    local curLp = Players.LocalPlayer or lp
+    if not curLp then isTweening = false; return false end
+    local char = curLp.Character
+    if not char then isTweening = false; return false end
+
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum or hum.Health <= 0 then isTweening = false; return false end
+
+    local targetPos = getPosition(target)
+    if not targetPos or typeof(targetPos) ~= "Vector3" then
+        isTweening = false
+        return false
+    end
+
+    if typeof(offset) == "Vector3" then
+        targetPos = targetPos + offset
+    end
+
+    local maxVelocity = speed or TWEEN_SPEED
+    local distance = (targetPos - hrp.Position).Magnitude
+    local travelTime = distance / maxVelocity
+
+    for _, c in ipairs(hrp:GetChildren()) do
+        if c.ClassName == "AlignPosition" or c.ClassName == "AlignOrientation" then
+            c:Destroy()
+        end
+    end
+
+    local ap = Instance.new("AlignPosition")
+    ap.Mode = Enum.PositionAlignmentMode.OneAttachment
+    ap.Attachment0 = hrp:FindFirstChild("RootAttachment") or hrp.RootAttachment
+    ap.Responsiveness = 35
+    ap.MaxForce = math.huge
+    ap.MaxVelocity = maxVelocity
+    ap.Position = targetPos
+    ap.Parent = hrp
+
+    local ao = Instance.new("AlignOrientation")
+    ao.Attachment0 = hrp:FindFirstChild("RootAttachment") or hrp.RootAttachment
+    ao.Mode = Enum.OrientationAlignmentMode.OneAttachment
+    ao.RigidityEnabled = true
+    ao.CFrame = hrp.CFrame
+    ao.Parent = hrp
+
+    pcall(function() hum:ChangeState(Enum.HumanoidStateType.Physics) end)
+
+    local charParts = {}
+    for _, p in ipairs(char:GetDescendants()) do
+        if p:IsA("BasePart") then
+            table.insert(charParts, p)
+        end
+    end
+
+    local stepSignal = RunService.PreSimulation or RunService.Stepped
+    local noclipConn = stepSignal:Connect(function()
+        for i = 1, #charParts do
+            local p = charParts[i]
+            if p and p.Parent and p.CanCollide then
+                p.CanCollide = false
+            end
+        end
+    end)
+
+    local startClock = os.clock()
+    while (os.clock() - startClock < travelTime + 1.2) and (os.clock() - startClock < 25) do
+        if not hrp or not hrp.Parent or hum.Health <= 0 then break end
+        if (hrp.Position - targetPos).Magnitude < 4.0 then break end
+        RunService.Heartbeat:Wait()
+    end
+
+    -- Гарантированное безопасное завершение твина без исключений
+    pcall(function()
+        if noclipConn then noclipConn:Disconnect() end
+        if ap and ap.Parent then ap:Destroy() end
+        if ao and ao.Parent then ao:Destroy() end
+        if hrp and hrp.Parent then
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+        end
+        for i = 1, #charParts do
+            local p = charParts[i]
+            if p and p.Parent then
+                p.CanCollide = true
+            end
+        end
+        if hum and hum.Parent then
+            hum.PlatformStand = false
+            hum:ChangeState(Enum.HumanoidStateType.Running)
+        end
+    end)
+
+    isTweening = false
+    local finalDist = (hrp and hrp.Parent and (hrp.Position - targetPos).Magnitude) or 999
+    return finalDist < 8
+end
+
+local function tweenTo(target, speed, offset)
+    local ok, res = pcall(tweenToInner, target, speed, offset)
+    if not ok then
+        isTweening = false
+        warn("[Tween] Ошибка твина:", res)
+        pcall(function()
+            local c = Players.LocalPlayer and Players.LocalPlayer.Character
+            local h = c and c:FindFirstChild("HumanoidRootPart")
+            if h then
+                for _, x in ipairs(h:GetChildren()) do
+                    if x:IsA("AlignPosition") or x:IsA("AlignOrientation") then x:Destroy() end
+                end
+            end
+        end)
+        return false
+    end
+    return res
+end
+
+-- ============================================================
+-- ====== ПОИСК ОБЪЕКТОВ ======
+-- ============================================================
+local function findViciousBee()
+    local m = workspace:FindFirstChild("Monsters")
+    if not m then return nil end
+    for _, o in ipairs(m:GetChildren()) do
+        if (o.Name:find("Vicious") or o.Name:find("Gifted Vicious")) and o:FindFirstChild("HumanoidRootPart") then
+            local h = o:FindFirstChildOfClass("Humanoid")
+            if not h or h.Health > 0 then
+                return o
+            end
+        end
+    end
+    return nil
+end
+
+local function getWaitingThorn()
+    local p = workspace:FindFirstChild("Particles")
+    if not p then return nil end
+    local w = p:FindFirstChild("WTs")
+    if not w then return nil end
+    local t = w:FindFirstChild("WaitingThorn")
+    if t and t.Parent then return t end
+    return nil
+end
+
+local function isOnMountainTop(bee)
+    local hrp = bee:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    if hrp.Position.Y > 140 then return true end
+    local field = getFieldForPosition(hrp.Position)
+    return field and field.Name == "Mountain Top Field"
+end
+
+local function findFreeHive()
+    local hc = workspace:FindFirstChild("Honeycombs")
+    if not hc then return nil end
+    for i = 6, 1, -1 do
+        local hive = hc:FindFirstChild("Hive" .. i)
+        if hive then
+            local owner = hive:FindFirstChild("Owner")
+            if owner and owner.Value == nil then
+                return hive
+            end
+        end
+    end
+    return nil
+end
+
+local function occupyHive(hive)
+    local curLp = Players.LocalPlayer or lp
+    if not curLp then return false end
+    local char = curLp.Character
+    if not char then return false end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+
+    local targetPos = getPosition(hive)
+    if not targetPos then return false end
+
+    hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
+    task.wait(0.2)
+
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+        task.wait(0.1)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+    end)
+
+    task.wait(0.5)
+    local owner = hive:FindFirstChild("Owner")
+    return owner and owner.Value == curLp
+end
+
+-- ============================================================
+-- ====== БОЙ И МАНСИНГ С ОГРАНИЧЕНИЕМ ПОЛЕМ ======
+-- ============================================================
+local function startMansing(bee, currentFieldPart, onBeeDiedCallback)
+    local running = true
+    local angle = 0
+    local lastJump = 0
+    local lastAttack = 0
+    local isReturning = false
+    local trackedAvoid = {}
+
+    -- Reusable RaycastParams (предотвращает создание тысяч C++ объектов в секунду)
+    local floorRayParams = RaycastParams.new()
+    floorRayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+    local particles = workspace:FindFirstChild("Particles")
+    local connAdd, connRem
+
+    if particles then
+        for _, child in ipairs(particles:GetChildren()) do
+            if child.Name == "WarningDisk" and child.Size.X == 10 then
+                trackedAvoid[child] = THORN_AVOID_DIST
+            end
+        end
+
+        connAdd = particles.ChildAdded:Connect(function(child)
+            if child.Name == "WarningDisk" and child.Size.X == 10 then
+                trackedAvoid[child] = THORN_AVOID_DIST
+            end
+        end)
+
+        connRem = particles.ChildRemoved:Connect(function(child)
+            if child.Name == "WarningDisk" and child.Size.X == 10 then
+                trackedAvoid[child] = nil
+            end
+        end)
+    end
+
+    local curLp = Players.LocalPlayer or lp
+    if not curLp then return function() end end
+    local char = curLp.Character
+    if char then
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then hum.PlatformStand = false; hum.WalkSpeed = WALK_SPEED end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hrp then hrp.CanCollide = true end
+    end
+
+    local connUpdate = RunService.Heartbeat:Connect(function(dt)
+        if not running then return end
+
+        -- Мгновенный детект смерти в каждом кадре
+        if not bee or not bee.Parent or not bee:IsDescendantOf(workspace) then
+            if onBeeDiedCallback then onBeeDiedCallback() end
+            return
+        end
+        local bHum = bee:FindFirstChildOfClass("Humanoid")
+        if bHum and bHum.Health <= 0 then
+            if onBeeDiedCallback then onBeeDiedCallback() end
+            return
+        end
+
+        dt = math.min(dt, 0.05)
+
+        local lpStep = Players.LocalPlayer or lp
+        if not lpStep then return end
+        local charStep = lpStep.Character
+        if not charStep then return end
+
+        local hrp = charStep:FindFirstChild("HumanoidRootPart")
+        local hum = charStep:FindFirstChildOfClass("Humanoid")
+        if not hrp or not hum or hum.Health <= 0 then return end
+
+        hum.PlatformStand = false
+        hrp.CanCollide = true
+        hum.WalkSpeed = WALK_SPEED
+
+        local beeHrp = bee:FindFirstChild("HumanoidRootPart")
+        if not beeHrp then return end
+
+        local now = tick()
+        local distToBee = (hrp.Position - beeHrp.Position).Magnitude
+
+        -- Безопасный возврат к пчеле (не блокирует поток RenderStepped!)
+        if distToBee > 65 and not isReturning then
+            isReturning = true
+            task.spawn(function()
+                local pos = getPosition(beeHrp)
+                if pos and running then
+                    tweenTo(pos, TWEEN_SPEED, Vector3.new(0, 10, 0))
+                end
+                task.wait(0.3)
+                isReturning = false
+            end)
+            return
+        end
+        if isReturning then
+            return
+        end
+
+        -- Авто-атака инструментом
+        if now - lastAttack > 0.15 then
+            local tool = charStep:FindFirstChildOfClass("Tool")
+            if tool and distToBee < 30 then
+                pcall(function() tool:Activate() end)
+                lastAttack = now
+            end
+        end
+
+        -- Мансинг по радиусу 14
+        angle = angle + (WALK_SPEED / MANSING_RADIUS) * dt
+        local targetPos = beeHrp.Position + Vector3.new(
+            math.cos(angle) * MANSING_RADIUS, 
+            0, 
+            math.sin(angle) * MANSING_RADIUS
+        )
+
+        -- Если активен шип пробуждения
+        local waitingThorn = getWaitingThorn()
+        if waitingThorn and waitingThorn.Parent then
+            local toThorn = (waitingThorn.Position - beeHrp.Position).Unit
+            targetPos = waitingThorn.Position - toThorn * 3
+        end
+
+        -- Уворот от шипов (WarningDisk)
+        for threat, dangerDist in pairs(trackedAvoid) do
+            if threat and threat.Parent then
+                local threatPos = threat.Position
+                local distPlayerToThreat = (hrp.Position - threatPos).Magnitude
+                local distTargetToThreat = (targetPos - threatPos).Magnitude
+
+                if distPlayerToThreat < dangerDist then
+                    hum.Jump = true
+                    local evadeDir = (hrp.Position - threatPos)
+                    if evadeDir.Magnitude < 0.1 then evadeDir = Vector3.new(1, 0, 0) else evadeDir = evadeDir.Unit end
+                    targetPos = hrp.Position + evadeDir * (dangerDist + 4)
+                    break
+                elseif distTargetToThreat < dangerDist then
+                    local evadeDir = (targetPos - threatPos)
+                    if evadeDir.Magnitude < 0.1 then evadeDir = Vector3.new(1, 0, 0) else evadeDir = evadeDir.Unit end
+                    targetPos = threatPos + evadeDir * (dangerDist + 2)
+                end
+            end
+        end
+
+        -- Защита от вылета с поля (Spider / Clover)
+        if currentFieldPart and currentFieldPart:IsA("BasePart") then
+            local c = currentFieldPart.Position
+            local hx = math.max(6, (currentFieldPart.Size.X / 2) - 6)
+            local hz = math.max(6, (currentFieldPart.Size.Z / 2) - 6)
+            targetPos = Vector3.new(
+                math.clamp(targetPos.X, c.X - hx, c.X + hx),
+                targetPos.Y,
+                math.clamp(targetPos.Z, c.Z - hz, c.Z + hz)
+            )
+        end
+
+        -- Подгоняем высоту под поверхность поля с переиспользованием rayParams
+        floorRayParams.FilterDescendantsInstances = { charStep }
+        local hit = workspace:Raycast(Vector3.new(targetPos.X, targetPos.Y + 15, targetPos.Z), Vector3.new(0, -25, 0), floorRayParams)
+        if hit then
+            targetPos = Vector3.new(targetPos.X, hit.Position.Y + 3.2, targetPos.Z)
+        elseif currentFieldPart then
+            targetPos = Vector3.new(targetPos.X, currentFieldPart.Position.Y + 3.5, targetPos.Z)
+        end
+
+        hum:MoveTo(targetPos)
+
+        if now - lastJump > 1.3 then
+            local st = hum:GetState()
+            if st ~= Enum.HumanoidStateType.Jumping and st ~= Enum.HumanoidStateType.Freefall then
+                hum.Jump = true
+                lastJump = now
+            end
+        end
+    end)
+
+    return function()
+        running = false
+        isReturning = false
+        if connAdd then connAdd:Disconnect() end
+        if connRem then connRem:Disconnect() end
+        if connUpdate then connUpdate:Disconnect() end
+        local pLp = Players.LocalPlayer or lp
+        if pLp and pLp.Character then
+            local h = pLp.Character:FindFirstChildOfClass("Humanoid")
+            if h then h.WalkSpeed = 16 end
+        end
+    end
+end
+
+-- ============================================================
+-- ====== ГЛАВНАЯ ЛОГИКА ОХОТЫ ======
+-- ============================================================
+local function huntViciousBee()
+    -- 1. Ранняя оптимизация (до загрузки мира)
+    applyMemoryOptimizer("early")
+
+    -- 2. Ждем корректной прогрузки игры перед началом охоты
+    local loadedOk = waitForGameLoaded()
+    if not loadedOk then
+        warn("[Hunt] Игра не загрузилась или произошла ошибка подключения — хоп!")
+        hopToRandomServer()
+        return
+    end
+
+    print("[Init] ✅ Игра и экран загрузки полностью завершены!")
+    task.spawn(applyMemoryOptimizer, "late")
+    print("[Hunt] Ищем Vicious Bee...")
+
+    local bee = findViciousBee()
+    if not bee then
+        print("[Hunt] ❌ Vicious не найден — ХОП")
+        hopToRandomServer()
+        return
+    end
+
+    print(string.format("[Hunt] ✅ Vicious найден: %s", bee.Name))
+
+    if isOnMountainTop(bee) then
+        print("[Hunt] ⚠️ Vicious Bee на Mountain Top — пропускаем и хопаем")
+        hopToRandomServer()
+        return
+    end
+
+    local curLp = Players.LocalPlayer or lp
+    local char = curLp.Character or curLp.CharacterAdded:Wait()
+    local hrp = char:WaitForChild("HumanoidRootPart", 10)
+    if not hrp then
+        hopToRandomServer()
+        return
+    end
+
+    -- 3. Поиск и занятие свободного улья
+    print("[Hunt] Ищем свободный улей...")
+    local hive = findFreeHive()
+    if not hive then
+        print("[Hunt] ❌ Свободных ульев нет — ХОП")
+        hopToRandomServer()
+        return
+    end
+
+    print("[Hunt] 🚀 Tween к улью:", hive.Name)
+    local hivePos = getPosition(hive)
+    if not hivePos then
+        hopToRandomServer()
+        return
+    end
+
+    local reachedHive = tweenTo(hivePos, TWEEN_SPEED, Vector3.new(0, 3, 0))
+    if not reachedHive then
+        print("[Hunt] ❌ Не долетели до улья — ХОП")
+        hopToRandomServer()
+        return
+    end
+
+    task.wait(0.3)
+    print("[Hunt] Занимаем улей...")
+    local occupied = occupyHive(hive)
+    if not occupied then
+        print("[Hunt] ❌ Улей не занят — ХОП")
+        hopToRandomServer()
+        return
+    end
+    print("[Hunt] ✅ Улей успешно занят!")
+
+    -- 4. Определение поля и Tween напрямую к полю (+10 стадс)
+    local beeHrp = bee:FindFirstChild("HumanoidRootPart")
+    if not beeHrp then
+        print("[Hunt] ❌ Vicious Bee исчезла — ХОП")
+        hopToRandomServer()
+        return
+    end
+
+    local waitingThorn = getWaitingThorn()
+    local fieldPart = getFieldForPosition((waitingThorn and waitingThorn.Position) or beeHrp.Position)
+    local targetLandingPos
+
+    if fieldPart then
+        print(string.format("[Hunt] 📍 Поле обнаружено: %s (твин на +10 стадс)", fieldPart.Name))
+        targetLandingPos = fieldPart.Position + Vector3.new(0, 10, 0)
+    else
+        targetLandingPos = (waitingThorn and waitingThorn.Position) or (beeHrp.Position + Vector3.new(0, 10, 0))
+    end
+
+    -- Прямой быстрый Tween к полю на +10 стадс
+    print("[Hunt] 🚀 Прямой быстрый Tween к полю (+10 стадс)...")
+    tweenTo(targetLandingPos, TWEEN_SPEED)
+
+    -- Если есть WaitingThorn, мягко подходим к шипу, чтобы разбудить пчелу
+    waitingThorn = getWaitingThorn()
+    if waitingThorn and waitingThorn.Parent then
+        print("[Hunt] 🌵 Активируем WaitingThorn на поле...")
+        tweenTo(waitingThorn.Position + Vector3.new(0, 3.5, 0), 70)
+        task.wait(0.3)
+    end
+
+    -- 5. Мгновенная реакция на смерть пчелы (с гарантированной очисткой)
+    local isBeeDead = false
+    local deathConns = {}
+    local stopMansing
+
+    local function cleanupCombat()
+        if stopMansing then
+            pcall(stopMansing)
+            stopMansing = nil
+        end
+        for _, c in ipairs(deathConns) do
+            pcall(function() c:Disconnect() end)
+        end
+        table.clear(deathConns)
+    end
+
+    local function onDead()
+        if isBeeDead then return end
+        isBeeDead = true
+        print("[Hunt] 💀 Vicious Bee погибла! МГНОВЕННЫЙ ХОП...")
+        cleanupCombat()
+        task.spawn(hopToRandomServer)
+    end
+
+    -- Запуск боя и мансинга (с передачей коллбэка мгновенной смерти)
+    print("[Hunt] ⚔️ Бой и мансинг вокруг пчелы (радиус 14)...")
+    stopMansing = startMansing(bee, fieldPart, onDead)
+
+    -- Мгновенные слушатели смерти
+    local beeHum = bee:FindFirstChildOfClass("Humanoid")
+    if beeHum then
+        table.insert(deathConns, beeHum.Died:Connect(onDead))
+        table.insert(deathConns, beeHum:GetPropertyChangedSignal("Health"):Connect(function()
+            if beeHum.Health <= 0 then onDead() end
+        end))
+    end
+    table.insert(deathConns, bee.AncestryChanged:Connect(function(_, parent)
+        if not parent or not bee:IsDescendantOf(workspace) then onDead() end
+    end))
+    table.insert(deathConns, bee.Destroying:Connect(onDead))
+
+    local monstersFolder = workspace:FindFirstChild("Monsters")
+    if monstersFolder then
+        table.insert(deathConns, monstersFolder.ChildRemoved:Connect(function(child)
+            if child == bee then onDead() end
+        end))
+    end
+
+    local maxWait, waited = 90, 0
+    while waited < maxWait and not isBeeDead do
+        task.wait(0.05)
+        waited = waited + 0.05
+
+        if not bee or not bee.Parent or not bee:IsDescendantOf(workspace) then
+            onDead()
+            break
+        end
+
+        -- Проверка на смерть персонажа игрока
+        local myChar = curLp.Character
+        local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
+        if not myHum or myHum.Health <= 0 then
+            warn("[Hunt] 💀 Персонаж погиб! Ожидание возрождения...")
+            if stopMansing then stopMansing() end
+            
+            curLp.CharacterAdded:Wait()
+            task.wait(1)
+            
+            if not isBeeDead and bee and bee.Parent then
+                local bHrp = bee:FindFirstChild("HumanoidRootPart")
+                if bHrp then
+                    print("[Hunt] 🚀 Возврат к пчеле (+10 стадс)...")
+                    tweenTo(bHrp.Position, TWEEN_SPEED, Vector3.new(0, 10, 0))
+                    stopMansing = startMansing(bee, fieldPart, onDead)
+                end
+            else
+                break
+            end
+        end
+    end
+
+    -- Если время боя истекло, а пчела не убита — обязательная очистка и хоп!
+    if not isBeeDead then
+        warn("[Hunt] ⏰ Время боя истекло (90 сек) — очистка и хоп!")
+        cleanupCombat()
+        hopToRandomServer()
+    end
+end
+
+-- ============================================================
+-- ====== СТОРОЖЕВОЙ ТАЙМЕР (WATCHDOG) ======
+-- ============================================================
+local WATCHDOG_LIMIT = 90   -- Секунд на сервере до принудительного хопа
+local WATCHDOG_RETRY = 45   -- Если хоп не удался (остались на сервере) — повтор через столько секунд
+local serverEntryTime = tick()
+
+task.spawn(function()
+    while alive() do
+        task.wait(5)
+        if tick() - serverEntryTime > WATCHDOG_LIMIT then
+            warn("[Watchdog] ⏰ Сервер превысил лимит — принудительный хоп!")
+            -- Следующая попытка через WATCHDOG_RETRY сек, если хоп не сработает (раньше сторож просто умирал)
+            serverEntryTime = tick() - (WATCHDOG_LIMIT - WATCHDOG_RETRY)
+            pcall(function() collectgarbage("collect") end)
+            -- Внутри hopToRandomServer уже есть защита от наложения телепортов
+            pcall(hopToRandomServer)
+        end
+    end
+end)
+
+-- ============================================================
+-- ====== ПЛАНОВЫЙ ПЕРЕЗАПУСК КЛИЕНТА (ОПЦИОНАЛЬНО) ======
+-- ============================================================
+task.spawn(function()
+    while alive() do
+        task.wait(30)
+        if AUTO_RESTART_CLIENT then
+            local upMin = (os.time() - getgenv().VB_BootTime) / 60
+            local memMb = getMemoryMb()
+            if upMin >= RESTART_AFTER_MIN or (MEMORY_LIMIT_MB > 0 and memMb >= MEMORY_LIMIT_MB) then
+                warn(string.format("[Restart] Аптайм %d мин, память %d МБ — закрываю клиент до того, как он упадёт сам", math.floor(upMin), math.floor(memMb)))
+                task.wait(1)
+                pcall(function() game:Shutdown() end)
+                break
+            end
+        end
+    end
+end)
+
+-- ЗАПУСК ОХОТЫ
+task.spawn(function()
+    local ok, err = pcall(huntViciousBee)
+    if not ok then
+        warn("[Hunt] Ошибка выполнения цикла охоты:", err)
+        hopToRandomServer()
+    end
+end)
