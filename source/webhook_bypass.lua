@@ -1046,6 +1046,7 @@ local function hopToRandomServer()
 
     getgenv().IsHopping = true
     getgenv().HopStartTime = tick()
+    getgenv().VB_HopAttempts = (getgenv().VB_HopAttempts or 0) + 1
     pcall(refreshThorns) -- фиксируем шипы перед уходом с сервера
     saveStats()
     setStatus("Подбираю сервер для хопа…", "hop")
@@ -1132,6 +1133,51 @@ end
 local isHandlingError = false
 local clearedByUs = false
 
+-- ====== ЖУРНАЛ КИКОВ: пишет в vb_kick_log.txt точную причину и контекст, чтобы найти, что вызывает 267 ======
+local KICK_LOG = "vb_kick_log.txt"
+local KICK_MARK = "vb_kick_mark.txt"
+local joinedAt = tick()
+-- сколько раз пытались телепортироваться с прошлого сервера (до сброса счётчика на этом)
+getgenv().VB_PrevAttempts = getgenv().VB_HopAttempts or 0
+getgenv().VB_HopAttempts = 0
+
+local function appendLog(line)
+    if not writefile then return end
+    pcall(function()
+        if appendfile then
+            appendfile(KICK_LOG, line .. "\n")
+        else
+            local old = (isfile and isfile(KICK_LOG) and readfile(KICK_LOG)) or ""
+            writefile(KICK_LOG, old .. line .. "\n")
+        end
+    end)
+end
+
+local function logKick(msg)
+    local status = ""
+    pcall(function() status = tostring(currentStatus or "") end)
+    local sinceHop = getgenv().HopStartTime and tostring(math.floor(tick() - getgenv().HopStartTime)) or "-"
+    appendLog(string.format(
+        "[%s] ОШИБКА: %s | на сервере %d с | с последней попытки хопа %s с | попыток телепорта: с прошлого сервера %d, с этого %d | хопов за запуск %d | статус: %s | job %s",
+        os.date("%Y-%m-%d %H:%M:%S"), tostring(msg), math.floor(tick() - joinedAt), sinceHop,
+        getgenv().VB_PrevAttempts or 0, getgenv().VB_HopAttempts or 0, stats.hops, status, tostring(game.JobId)))
+    -- метка времени первого срабатывания: по ней при следующем запуске посчитаем, сколько простояли
+    pcall(function()
+        if not (isfile and isfile(KICK_MARK)) then writefile(KICK_MARK, tostring(os.time())) end
+    end)
+end
+
+-- Если после кика мы снова запустились — записываем, сколько это заняло
+pcall(function()
+    if isfile and isfile(KICK_MARK) then
+        local t = tonumber(readfile(KICK_MARK))
+        if t then
+            appendLog(string.format("[%s] ✅ Вернулись в игру через %d с после ошибки", os.date("%Y-%m-%d %H:%M:%S"), os.time() - t))
+        end
+        if delfile then delfile(KICK_MARK) else writefile(KICK_MARK, "") end
+    end
+end)
+
 -- Нажимает кнопку в окне ошибки по подстроке в её тексте/имени (например "reconnect")
 local function clickPromptButton(keywords)
     local pressed = false
@@ -1170,8 +1216,10 @@ local function clickPromptButton(keywords)
 end
 
 -- Одна попытка выбраться с сервера. Способы чередуются: если один не сработал за RECOVERY_STEP_TIMEOUT, берём следующий
-local function recoveryAttempt(step)
-    local m = ((step - 1) % 4) + 1
+local function recoveryAttempt(step, isKick)
+    -- При кике (267) сначала обычный Teleport(PlaceId): он не тратит серверы из очереди и работает из экрана ошибки
+    local order = isKick and { 2, 1, 2, 4 } or { 1, 2, 3, 4 }
+    local m = order[((step - 1) % 4) + 1]
     local plr = Players.LocalPlayer or lp
     getgenv().IsHopping = false
 
@@ -1206,12 +1254,18 @@ end
 
 -- hard = true: ошибка видна на экране / в GuiService (дисконнект, кик 267 и т.п.) — повторяем, пока не уйдём с сервера.
 -- hard = false: сорвался сам вызов телепорта при живом соединении — одной новой попытки достаточно, дальше работают сторожа.
+local KICK_STEP_WAITS = { 12, 20, 30, 45 }
+
 local function handleConnectionError(sourceMsg, hard)
     if not alive() then return end
     if not isRealErrorString(sourceMsg) then return end
     if isHandlingError then return end
     isHandlingError = true
     clearedByUs = false
+
+    local lowMsg = tostring(sourceMsg):lower()
+    local isKick = (lowMsg:find("267", 1, true) ~= nil) or (lowMsg:find("kicked", 1, true) ~= nil)
+    pcall(logKick, sourceMsg)
 
     warn(string.format("[Auto-Reconnect] ⚡ Перехвачена ошибка (%s)! Запускаю восстановление...", tostring(sourceMsg)))
     setStatus("Ошибка: " .. tostring(sourceMsg):sub(1, 50) .. " — хоп", "warn")
@@ -1222,12 +1276,14 @@ local function handleConnectionError(sourceMsg, hard)
         local healthy = 0
         while alive() do
             step = step + 1
-            local ok, err = pcall(recoveryAttempt, step)
+            local ok, err = pcall(recoveryAttempt, step, isKick)
             if not ok then warn("[Recovery] ошибка шага:", err) end
 
             -- Если телепорт удался, этот скрипт умирает вместе с сервером и цикл просто обрывается
+            -- При кике паузы растут (12 → 20 → 30 → 45 с), чтобы не долбить входом каждые 12 секунд
+            local stepWait = isKick and KICK_STEP_WAITS[math.min(step, #KICK_STEP_WAITS)] or RECOVERY_STEP_TIMEOUT
             local t0 = tick()
-            while alive() and tick() - t0 < RECOVERY_STEP_TIMEOUT do task.wait(0.5) end
+            while alive() and tick() - t0 < stepWait do task.wait(0.5) end
             if not alive() then break end
             if not hard then break end
 
