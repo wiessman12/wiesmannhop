@@ -34,6 +34,7 @@ local MUTE_GAME = true               -- Выключить звук (меньш�
 local SHOW_GUI = true                -- Окно со статистикой (чуть выше центра экрана, можно перетаскивать за заголовок)
 local STATS_FILE = "vicious_stats.json"
 
+local LOAD_TIMEOUT = 45              -- Если игра не прогрузилась за N секунд — скрипт хопает на другой сервер
 local HIVE_MAX_ATTEMPTS = 6         -- Сколько раз пробовать занять улей, прежде чем хопнуть
 local RESET_ON_RELAUNCH = true      -- Сбрасывать цифры в меню при каждом новом запуске Roblox (хопы внутри одного запуска цифры не сбрасывают)
 local HOP_PENDING_TIMEOUT = 40          -- Сколько секунд ждать завершения телепорта, прежде чем пробовать снова
@@ -74,7 +75,7 @@ end
 -- ============================================================
 -- ====== СТАТИСТИКА (СОХРАНЯЕТСЯ МЕЖДУ СЕРВЕРАМИ И ПЕРЕЗАПУСКАМИ) ======
 -- ============================================================
-local stats = { kills = 0, thorns = 0, lastThorns = -1, hops = 0, boot = os.time(), lastSeen = 0, killsAtBoot = 0 }
+local stats = { kills = 0, thorns = 0, lastThorns = -1, hops = 0, boot = os.time(), lastSeen = 0, thornsAtBoot = 0 }
 local STATS_BAK = STATS_FILE .. ".bak"
 
 -- Токен текущего запуска Roblox: одинаков на всех серверах внутри одного запуска, новый — после перезапуска клиента
@@ -115,7 +116,7 @@ do
             stats.lastThorns = tonumber(data.lastThorns) or -1
             stats.hops = tonumber(data.hops) or 0
             stats.boot = tonumber(data.boot) or now
-            stats.killsAtBoot = tonumber(data.killsAtBoot) or stats.kills
+            stats.thornsAtBoot = tonumber(data.thornsAtBoot) or 0
             stats.lastJobId = data.lastJobId
         end
     end
@@ -123,7 +124,7 @@ do
     if not sameProcess then
         -- Новый запуск Roblox: все цифры с нуля
         stats.kills, stats.thorns, stats.lastThorns = 0, 0, -1
-        stats.hops, stats.boot, stats.killsAtBoot = 0, now, 0
+        stats.hops, stats.boot, stats.thornsAtBoot = 0, now, 0
         stats.lastJobId = nil
     end
     getgenv().VB_ProcessAlive = true
@@ -340,7 +341,7 @@ local function createGui()
 
     -- Карточки статистики
     ui.killsLabel = makeCard(main, 16, "УБИТО VICIOUS", Color3.fromRGB(235, 20, 40), Color3.fromRGB(255, 120, 130))
-    ui.rateLabel = makeCard(main, 148, "VICIOUS / ЧАС", Color3.fromRGB(255, 255, 255), Color3.fromRGB(215, 215, 215))
+    ui.rateLabel = makeCard(main, 148, "ШИПОВ / ЧАС", Color3.fromRGB(255, 255, 255), Color3.fromRGB(215, 215, 215))
     ui.thornsLabel = makeCard(main, 280, "ШИПОВ ПОЛУЧЕНО", Color3.fromRGB(235, 20, 40), Color3.fromRGB(255, 120, 130))
     ui.rateLabel.Text = "0.0"
 
@@ -394,9 +395,9 @@ local function createGui()
     end))
 end
 
-local function killsPerHour()
+local function thornsPerHour()
     local up = math.max(os.time() - stats.boot, 300) -- минимум 5 мин, чтобы цифра не прыгала в начале
-    local session = math.max(stats.kills - (stats.killsAtBoot or stats.kills), 0)
+    local session = math.max(stats.thorns - (stats.thornsAtBoot or 0), 0)
     return session / (up / 3600)
 end
 
@@ -405,7 +406,7 @@ ui.refresh = function(pulse)
         if not ui.killsLabel or not ui.killsLabel.Parent then return end
         ui.killsLabel.Text = tostring(stats.kills)
         ui.thornsLabel.Text = tostring(stats.thorns)
-        if ui.rateLabel then ui.rateLabel.Text = string.format("%.1f", killsPerHour()) end
+        if ui.rateLabel then ui.rateLabel.Text = string.format("%.1f", thornsPerHour()) end
         local target = (pulse == "kills" and ui.killsLabel) or (pulse == "thorns" and ui.thornsLabel) or nil
         if target then
             -- Без твинов: они накладывались друг на друга, размер текста "уплывал" и цифры пропадали
@@ -751,48 +752,42 @@ end
 -- ============================================================
 local function waitForGameLoaded()
     local startWait = tick()
+    local stable = 0
 
-    -- 1. Ждем IsLoaded с таймаутом (не более 12 сек)
-    while not game:IsLoaded() and (tick() - startWait < 12) do
-        local err = checkRealConnectionError()
-        if err then return false end
-        task.wait(0.2)
-    end
-
-    -- 2. Ждем LocalPlayer с таймаутом
-    local curLp = Players.LocalPlayer
-    while not curLp and (tick() - startWait < 15) do
-        local err = checkRealConnectionError()
-        if err then return false end
-        task.wait(0.2)
-        curLp = Players.LocalPlayer
-    end
-    if not curLp then return false end
-
-    -- 3. Ждем PlayerGui с таймаутом
-    local playerGui = curLp:WaitForChild("PlayerGui", 10)
-    if not playerGui then return false end
-
-    -- 4. Ожидание закрытия экрана загрузки Bee Swarm Simulator
-    while (tick() - startWait < 25) do
+    while tick() - startWait < LOAD_TIMEOUT do
         local err = checkRealConnectionError()
         if err then return false end
 
-        local loadingGui = playerGui:FindFirstChild("LoadingScreenGui")
-        local msg = loadingGui and loadingGui:FindFirstChild("LoadingMessage")
-        if loadingGui and msg then
-            if not msg.Visible then
-                break -- Экран загрузки успешно закрылся!
+        local ready = false
+        local curLp = Players.LocalPlayer
+        if game:IsLoaded() and curLp then
+            local playerGui = curLp:FindFirstChild("PlayerGui")
+            if playerGui then
+                -- Экран загрузки Bee Swarm Simulator должен быть закрыт
+                local loadingGui = playerGui:FindFirstChild("LoadingScreenGui")
+                local msg = loadingGui and loadingGui:FindFirstChild("LoadingMessage")
+                local loadingVisible = (loadingGui and loadingGui.Enabled and msg and msg.Visible) or false
+
+                -- Мир и персонаж должны реально существовать
+                local char = curLp.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                local worldReady = workspace:FindFirstChild("Honeycombs") ~= nil
+
+                ready = (not loadingVisible) and hrp ~= nil and worldReady
             end
-        elseif not loadingGui and (tick() - startWait < 2.5) then
-            task.wait(0.1)
+        end
+
+        -- Готовность должна продержаться ~1 сек подряд, а не мелькнуть на кадр
+        if ready then
+            stable = stable + 1
+            if stable >= 10 then return true end
         else
-            break
+            stable = 0
         end
         task.wait(0.1)
     end
 
-    return true
+    return false -- не прогрузилось за LOAD_TIMEOUT секунд
 end
 
 -- ============================================================
@@ -983,6 +978,13 @@ local function hopToRandomServer()
         math.floor(getMemoryMb()), stats.hops, math.floor((os.time() - stats.boot) / 60)))
 
     local currentLp = Players.LocalPlayer or lp
+    do
+        local tw = tick()
+        while not currentLp and (tick() - tw) < 8 do
+            task.wait(0.2)
+            currentLp = Players.LocalPlayer
+        end
+    end
     local data = loadData()
     if game.JobId and game.JobId ~= "" then
         data.visited[game.JobId] = os.time()
@@ -1579,9 +1581,15 @@ local function huntViciousBee()
     end
 
     local curLp = Players.LocalPlayer or lp
-    local char = curLp.Character or curLp.CharacterAdded:Wait()
-    local hrp = char:WaitForChild("HumanoidRootPart", 10)
+    local char = curLp.Character
+    local tc = tick()
+    while not char and (tick() - tc) < 10 do
+        task.wait(0.2)
+        char = curLp.Character
+    end
+    local hrp = char and char:WaitForChild("HumanoidRootPart", 10)
     if not hrp then
+        setStatus("Персонаж не загрузился — меняю сервер", "warn")
         hopToRandomServer()
         return
     end
@@ -1780,6 +1788,20 @@ task.spawn(function()
             serverEntryTime = tick() - (WATCHDOG_LIMIT - WATCHDOG_RETRY)
             pcall(function() collectgarbage("collect") end)
             -- Внутри hopToRandomServer уже есть защита от наложения телепортов
+            pcall(hopToRandomServer)
+        end
+    end
+end)
+
+-- Сторож загрузки: если игра так и не прогрузилась — хопаем (повтор каждые 20 сек, пока не уйдём)
+task.spawn(function()
+    local t0 = tick()
+    while alive() and not gameReady do
+        task.wait(1)
+        if not gameReady and tick() - t0 > LOAD_TIMEOUT + 5 then
+            warn("[LoadWatchdog] Игра не прогрузилась — принудительный хоп")
+            setStatus("Игра не прогрузилась — меняю сервер", "warn")
+            t0 = tick() - (LOAD_TIMEOUT + 5 - 20)
             pcall(hopToRandomServer)
         end
     end
