@@ -36,11 +36,11 @@ local ANTILAG_ENABLED = true            -- Главный выключатель
 local ANTILAG = {
     main = true,                -- Качество графики на минимум, вода/тени/туман (и не даём игре вернуть тени/туман)
     pollenPopups = true,        -- Выключает всплывающие цифры пыльцы (меняет настройку PollenPopUps в аккаунте игры, как в Atlas)
-    hideTokens = false,          -- Токены (хук на модуль игры, нужен hookfunction). ВЫКЛЮЧЕНО: executor может держать замены функций между серверами
-    hideParticles = false,       -- Эффекты (хук на модуль игры, нужен hookfunction). ВЫКЛЮЧЕНО: executor может держать замены функций между серверами
-    hidePrecise = false,         -- Мишени Precise (хук на модуль игры, нужен hookfunction). ВЫКЛЮЧЕНО: executor может держать замены функций между серверами
-    hideDuped = false,           -- Дубли токенов (хук на модуль игры, нужен hookfunction). ВЫКЛЮЧЕНО: executor может держать замены функций между серверами
-    hideMarks = false,           -- Метки станций (хук на модуль игры, нужен hookfunction). ВЫКЛЮЧЕНО: executor может держать замены функций между серверами
+    hideTokens = true,          -- Токены (хук CollectiblesAnimator)             — нужен hookfunction
+    hideParticles = true,       -- Шумные эффекты LocalFX по списку из Atlas      — нужен hookfunction
+    hidePrecise = true,         -- Мишени Precise                                 — нужен hookfunction
+    hideDuped = true,           -- Дублированные токены                           — нужен hookfunction
+    hideMarks = true,           -- Метки станций                                  — нужен hookfunction
     hideBees = true,            -- Модели своих пчёл (только картинка, урон не меняется)
     hideFlowers = true,         -- Цветы (хоппер пыльцу не собирает; поле определяется по FlowerZones)
     hideBalloons = true,        -- Шарики на полях
@@ -1120,11 +1120,6 @@ local function memTopTags()
     return table.concat(parts, ", ")
 end
 
-local function memInstanceCount()
-    local ok, v = pcall(function() return game:GetService("Stats").InstanceCount end)
-    return (ok and tonumber(v)) or -1
-end
-
 local function logMem(tag)
     local mb = math.floor(getMemoryMb())
     if not getgenv().VB_MemBase and mb > 0 then getgenv().VB_MemBase = mb end
@@ -1144,11 +1139,8 @@ local function logMem(tag)
 
     if writefile then
         pcall(function()
-            local line = string.format("%s | %s | %d МБ | прирост %d МБ | хопов %d | аптайм %d мин | инстансов %d | попыток телепорта %d | топ: %s%s\n",
-                os.date("%H:%M:%S"), tag, mb, growth, stats.hops, math.floor((os.time() - stats.boot) / 60),
-                memInstanceCount(),
-                (tag == "сервер загружен") and (getgenv().VB_PrevAttempts or 0) or (getgenv().VB_HopAttempts or 0),
-                memTopTags(), leakNote)
+            local line = string.format("%s | %s | %d МБ | прирост %d МБ | хопов %d | аптайм %d мин | топ: %s%s\n",
+                os.date("%H:%M:%S"), tag, mb, growth, stats.hops, math.floor((os.time() - stats.boot) / 60), memTopTags(), leakNote)
             if appendfile then
                 appendfile(MEM_LOG, line)
             else
@@ -1969,7 +1961,6 @@ end
 
 local function antiLagMain()
     pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
-    pcall(function() settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level04 end)
     pcall(function()
         local t = workspace:FindFirstChildOfClass("Terrain")
         if t then
@@ -2117,8 +2108,6 @@ local function antiLagPlayers()
     table.insert(myConns, Players.PlayerAdded:Connect(watch))
 end
 
-local antiLagPlayersDone = false
-
 local ANTILAG_PART_CLASSES = {
     BasePart = true, Part = true, WedgePart = true, TrussPart = true, UnionOperation = true, SpawnLocation = true,
 }
@@ -2179,10 +2168,7 @@ local function applyAntiLag()
     step("hooks", true, antiLagHooks)
     step("world", true, antiLagWorld)
     step("decorations", ANTILAG.destroyDecorations, antiLagDecorations)
-    step("players", ANTILAG.hidePlayers and not antiLagPlayersDone, function()
-        antiLagPlayersDone = true
-        antiLagPlayers()
-    end)
+    step("players", ANTILAG.hidePlayers, antiLagPlayers)
     step("ui", ANTILAG.hideBssUi, function()
         local pg = (Players.LocalPlayer or lp):FindFirstChild("PlayerGui")
         local g = pg and pg:FindFirstChild("ScreenGui")
@@ -2199,12 +2185,6 @@ end
 local function huntViciousBee()
     -- 1. Ранняя оптимизация (до загрузки мира)
     applyMemoryOptimizer("early")
-    pcall(logMem, "старт скрипта") -- память в начале нового сервера: растёт от хопа к хопу => часть прошлого сервера не освободилась
-    -- Чужих персонажей убираем сразу, пока их шапки/меши ещё не подгрузились (раньше это делалось только после загрузки)
-    if ANTILAG_ENABLED and ANTILAG.hidePlayers and not antiLagPlayersDone then
-        antiLagPlayersDone = true
-        pcall(antiLagPlayers)
-    end
     setStatus("Загрузка сервера…", "info")
 
     -- 2. Ждем корректной прогрузки игры перед началом охоты
