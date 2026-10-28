@@ -720,7 +720,7 @@ local function applyMemoryOptimizer(stage)
         end
 
         -- Выключаем 3D до подгрузки текстур/мешей — они не попадают в VRAM/RAM
-        if DISABLE_3D_RENDERING then
+        if DISABLE_3D_RENDERING or getgenv().VB_EmergencyMem then
             pcall(function()
                 RunService:Set3dRenderingEnabled(false)
             end)
@@ -1035,6 +1035,35 @@ local function fetchNewServers(data)
     return #data.queue > 0
 end
 
+-- ====== КОНТРОЛЬ ПАМЯТИ: лог роста + аварийный режим, если клиент раздулся ======
+local MEM_LOG = "vb_mem_log.txt"
+local MEM_GROWTH_LIMIT_MB = 1200   -- Прирост памяти (МБ) от первого замера за запуск Roblox, после которого включается аварийный режим (3D-рендер выкл.). 0 = выключено
+
+local function logMem(tag)
+    local mb = math.floor(getMemoryMb())
+    if not getgenv().VB_MemBase and mb > 0 then getgenv().VB_MemBase = mb end
+    local growth = mb - (getgenv().VB_MemBase or mb)
+    if writefile then
+        pcall(function()
+            local line = string.format("%s | %s | %d МБ | прирост %d МБ | хопов %d | аптайм %d мин\n",
+                os.date("%H:%M:%S"), tag, mb, growth, stats.hops, math.floor((os.time() - stats.boot) / 60))
+            if appendfile then
+                appendfile(MEM_LOG, line)
+            else
+                local old = (isfile and isfile(MEM_LOG) and readfile(MEM_LOG)) or ""
+                if #old > 20000 then old = old:sub(-10000) end
+                writefile(MEM_LOG, old .. line)
+            end
+        end)
+    end
+    if MEM_GROWTH_LIMIT_MB > 0 and growth > MEM_GROWTH_LIMIT_MB and not getgenv().VB_EmergencyMem then
+        getgenv().VB_EmergencyMem = true
+        warn(string.format("[Mem] ⚠️ Память выросла на %d МБ — аварийный режим: 3D-рендер выключен", growth))
+        pcall(function() RunService:Set3dRenderingEnabled(false) end)
+        pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
+    end
+end
+
 local function hopToRandomServer()
     if getgenv().IsHopping then
         if tick() - (getgenv().HopStartTime or 0) > HOP_PENDING_TIMEOUT then
@@ -1051,6 +1080,7 @@ local function hopToRandomServer()
     saveStats()
     setStatus("Подбираю сервер для хопа…", "hop")
 
+    pcall(logMem, "перед хопом")
     print(string.format("[Mem] Память клиента: %d МБ | прыжков: %d | аптайм: %d мин",
         math.floor(getMemoryMb()), stats.hops, math.floor((os.time() - stats.boot) / 60)))
 
@@ -1780,6 +1810,7 @@ local function huntViciousBee()
 
     print("[Init] ✅ Игра и экран загрузки полностью завершены!")
     gameReady = true
+    pcall(logMem, "сервер загружен")
     buildGui()
     pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
     task.spawn(applyMemoryOptimizer, "late")
