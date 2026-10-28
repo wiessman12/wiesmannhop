@@ -30,6 +30,25 @@ local DISABLE_3D_RENDERING = false   -- 3D-рендер остаётся ВКЛ�
 local LIGHT_VISUALS = false          -- Гашение частиц обходит весь workspace (тяжело для BSS). Включай только если нужно
 local MUTE_GAME = true               -- Выключить звук (меньше памяти и CPU)
 
+-- ====== АНТИ-ЛАГ (портирован из Atlas, набор адаптирован под хоппер) ======
+local ANTILAG_ENABLED = true            -- Главный выключатель. Если вернулись кики 267 — сначала выключи hide*/destroy* пункты ниже по одному
+local ANTILAG = {
+    main = true,                -- Качество графики на минимум, вода/тени/туман (и не даём игре вернуть тени/туман)
+    pollenPopups = true,        -- Выключает всплывающие цифры пыльцы (меняет настройку PollenPopUps в аккаунте игры, как в Atlas)
+    hideTokens = true,          -- Токены (хук CollectiblesAnimator)             — нужен hookfunction
+    hideParticles = true,       -- Шумные эффекты LocalFX по списку из Atlas      — нужен hookfunction
+    hidePrecise = true,         -- Мишени Precise                                 — нужен hookfunction
+    hideDuped = true,           -- Дублированные токены                           — нужен hookfunction
+    hideMarks = true,           -- Метки станций                                  — нужен hookfunction
+    hideBees = true,            -- Модели своих пчёл (только картинка, урон не меняется)
+    hideFlowers = true,         -- Цветы (хоппер пыльцу не собирает; поле определяется по FlowerZones)
+    hideBalloons = true,        -- Шарики на полях
+    destroyTextures = true,     -- Decal/Texture/ParticleEmitter удаляются, материалы -> Plastic (главный выигрыш по памяти)
+    destroyDecorations = true,  -- Безопасный набор декораций (улей, поля, пути, стены и территории НЕ трогаем)
+    hidePlayers = true,         -- Персонажи других игроков (шапки/меши — много памяти на людных серверах)
+    hideBssUi = true,           -- Интерфейс самой игры (PlayerGui.ScreenGui); окно хоппера не затрагивается
+}
+
 -- ====== ИНТЕРФЕЙС ======
 local SHOW_GUI = true                -- Окно со статистикой (чуть выше центра экрана, можно перетаскивать за заголовок)
 local STATS_FILE = "vicious_stats.json"
@@ -1792,6 +1811,272 @@ local function startHover(bee, currentFieldPart, onBeeDiedCallback)
 end
 
 -- ============================================================
+-- ====== АНТИ-ЛАГ (из Atlas) ======
+-- ============================================================
+-- НЕ трогаем то, чем пользуется сам хоппер: Honeycombs (улей), FlowerZones (поле), Monsters (Vicious),
+-- Particles/WTs (WaitingThorn), а также HivePlatforms, Paths, Invisible Walls, Territories.
+local ANTILAG_IGNORED_FX = {
+    AquaWave = true, BeamShot = true, BeesmasLightsFallingStar = true, Bubble = true, BubbleBloatCollect = true,
+    CCRocket = true, CCRocketCrosshairs = true, CCRocketCrosshairsOld = true, DiamondDrain = true, EggShield = true,
+    FallingCoal = true, FallingCoconut = true, FallingSnowflake = true, FallingStar = true, FieldRectPulses = true,
+    FieldStar = true, GoldenRake = true, GummyStar = true, Gummyball = true, HoneyHammer = true, InspireStar = true,
+    JellyBeanToss = true, KickableCoconut = true, KickedComboCoconut = true, LocalFlames = true, MechsquitoShot = true,
+    MythicMeteor = true, OrbExplode = true, PartyPopper = true, PetalShuriken = true, PluckedPetal = true, PopStar = true,
+    PorcelainDipperAbility = true, PuffshroomSporeThrow = true, RectPulse = true, RingPulse = true, ScorchingStar = true,
+    SnowballThrow = true, SnowflakeBreeze = true, SpotlightBeam = true, StarSaw = true, StarShowerGuide = true,
+    StickerTokenBeam = true, SweepArch = true, Triangulate = true, WaterRipple = true,
+}
+local ANTILAG_PRECISE_FX = { LocalTargetPracticeBeam = true, PrecisionPopUp = true, ["Precise Shot"] = true }
+
+-- Верхнеуровневые декорации workspace, которые Atlas удаляет и которые хопперу не нужны
+local ANTILAG_DECO_TOP = {
+    "Amulets", "Shell Amulets", "Stickbug Amulets", "BallArrowFolder", "BoostBalls", "Campsite", "ClassicMinigame",
+    "Cubs", "Faces", "FieldDecos", "Frame", "Frogs", "Goo", "Leaderboards", "TheGamesEvent", "TheGames_WideBanners",
+    "Bee Bear Hive", "Noob Bear", "OnettNPC", "Pro Bear", "Top Bear", "BuckoAtHQ", "RileyAtHQ", "Honey", "Lion",
+}
+local ANTILAG_DECO_SUB = {
+    "35ZoneCave", "BubbleWandChimney", "TreatBooth", "Coconut Field", "Pepper Patch", "Pine Tree",
+    "SpiderCave", "Petal Shop", "JumpGames", "PEggMaze",
+}
+
+local function safeDestroy(inst)
+    if inst then pcall(function() inst:Destroy() end) end
+end
+
+local function destroyChild(parent, name)
+    if parent then safeDestroy(parent:FindFirstChild(name)) end
+end
+
+local function newNoop() return function() end end
+
+-- Хук ставится один раз: повторный запуск скрипта на том же сервере не наслаивает хуки
+local function hookOnce(fn, replacement)
+    if type(fn) ~= "function" or type(hookfunction) ~= "function" then return nil end
+    if isfunctionhooked and isfunctionhooked(fn) then return nil end
+    return hookfunction(fn, replacement)
+end
+
+local function antiLagMain()
+    pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
+    pcall(function()
+        local t = workspace:FindFirstChildOfClass("Terrain")
+        if t then
+            t.WaterWaveSize, t.WaterWaveSpeed, t.WaterReflectance, t.WaterTransparency = 0, 0, 0, 0
+        end
+    end)
+    local Lighting = game:GetService("Lighting")
+    local function applyLighting()
+        pcall(function()
+            if Lighting.GlobalShadows ~= false then Lighting.GlobalShadows = false end
+            if Lighting.FogEnd ~= 9e9 then Lighting.FogEnd = 9e9 end
+            if Lighting.FogStart ~= 9e9 then Lighting.FogStart = 9e9 end
+        end)
+    end
+    applyLighting()
+    table.insert(myConns, Lighting.Changed:Connect(applyLighting)) -- игра меняет освещение по времени суток
+end
+
+local function antiLagPollenPopups()
+    local ev = ReplicatedStorage:FindFirstChild("Events")
+    local se = ev and ev:FindFirstChild("PlayerSettingsEvent")
+    if se and se:IsA("RemoteEvent") then
+        pcall(function() se:FireServer("PollenPopUps", false) end)
+    end
+end
+
+local function antiLagHooks()
+    local needHooks = ANTILAG.hideTokens or ANTILAG.hideParticles or ANTILAG.hidePrecise or ANTILAG.hideDuped or ANTILAG.hideMarks
+    if not needHooks then return end
+    if type(hookfunction) ~= "function" then
+        warn("[AntiLag] hookfunction не поддерживается executor'ом — токены и эффекты не скрываются")
+        return
+    end
+    local RS = ReplicatedStorage
+
+    if ANTILAG.hideTokens then
+        local ok, err = pcall(function()
+            local m = require(RS.CollectiblesAnimator)
+            hookOnce(m.Spawn, newNoop())
+            hookOnce(m.AnimateCollect, newNoop())
+            hookOnce(m.Destroy, newNoop())
+            hookOnce(m.Update, newNoop())
+            destroyChild(workspace, "Collectibles")
+        end)
+        if not ok then warn("[AntiLag] токены:", err) end
+    end
+
+    if ANTILAG.hideParticles or ANTILAG.hidePrecise then
+        local ok, err = pcall(function()
+            local fx = require(RS.LocalFX)
+            local dropAll, dropPrecise = ANTILAG.hideParticles, ANTILAG.hidePrecise
+            local orig
+            orig = hookOnce(fx.ClientRun, function(effectName, ...)
+                if (dropAll and ANTILAG_IGNORED_FX[effectName]) or (dropPrecise and ANTILAG_PRECISE_FX[effectName]) then
+                    return
+                end
+                return orig(effectName, ...)
+            end)
+            if dropAll then
+                hookOnce(require(RS.LocalAmulets).CreatePlayerAmulets, newNoop())
+            end
+        end)
+        if not ok then warn("[AntiLag] эффекты:", err) end
+    end
+
+    if ANTILAG.hideDuped then
+        local ok, err = pcall(function()
+            local d = require(RS.DupedTokensAnimator)
+            hookOnce(d.Spawn, newNoop())
+            hookOnce(d.Destroy, newNoop())
+            hookOnce(d.Charge, newNoop())
+            hookOnce(d.Uncharge, newNoop())
+            local cam = workspace.CurrentCamera
+            destroyChild(cam, "DupedTokens")
+        end)
+        if not ok then warn("[AntiLag] дубли токенов:", err) end
+    end
+
+    if ANTILAG.hideMarks then
+        local ok, err = pcall(function()
+            local a = require(RS.ClientScripts.Listeners.StationsListener).Actions
+            hookOnce(a.Spawn, newNoop())
+            hookOnce(a.AnimDestroy, newNoop())
+            destroyChild(workspace, "Stations")
+        end)
+        if not ok then warn("[AntiLag] метки:", err) end
+    end
+end
+
+local function antiLagWorld()
+    if ANTILAG.hideBees then
+        pcall(function()
+            local bees = workspace:FindFirstChild("Bees")
+            if bees then
+                for _, b in ipairs(bees:GetChildren()) do safeDestroy(b) end
+                table.insert(myConns, bees.ChildAdded:Connect(function(b)
+                    task.spawn(function()
+                        RunService.Heartbeat:Wait()
+                        safeDestroy(b)
+                    end)
+                end))
+            end
+        end)
+    end
+    if ANTILAG.hideFlowers then destroyChild(workspace, "Flowers") end
+    if ANTILAG.hideBalloons then destroyChild(workspace:FindFirstChild("Balloons"), "FieldBalloons") end
+end
+
+local function antiLagDecorations()
+    for _, name in ipairs(ANTILAG_DECO_TOP) do destroyChild(workspace, name) end
+
+    local deco = workspace:FindFirstChild("Decorations")
+    if deco then
+        local misc = deco:FindFirstChild("Misc")
+        if misc then
+            for _, c in ipairs(misc:GetChildren()) do
+                if string.find(c.Name, "Blue Flower") or c.Name == "Bamboo" or c.Name == "Bush" or c.Name == "Mushroom" then
+                    safeDestroy(c)
+                end
+            end
+        end
+        for _, name in ipairs(ANTILAG_DECO_SUB) do destroyChild(deco, name) end
+        for _, c in ipairs(deco:GetChildren()) do
+            local n = c.Name
+            if string.find(n, "Dandelion") or string.find(n, "Clover") or string.find(n, "Rose")
+                or string.find(n, "Sign") or string.find(n, "Glider") or n == "ShopWord" then
+                safeDestroy(c)
+            end
+        end
+    end
+
+    for _, c in ipairs(workspace:GetChildren()) do
+        if c.ClassName == "Part" and c.CollisionGroup == "BoostBallBarrier" then safeDestroy(c) end
+    end
+end
+
+local function antiLagPlayers()
+    local me = Players.LocalPlayer or lp
+    local function watch(plr)
+        if plr == me then return end
+        if plr.Character then safeDestroy(plr.Character) end
+        table.insert(myConns, plr.CharacterAdded:Connect(function(c) safeDestroy(c) end))
+    end
+    for _, plr in ipairs(Players:GetPlayers()) do watch(plr) end
+    table.insert(myConns, Players.PlayerAdded:Connect(watch))
+end
+
+local ANTILAG_PART_CLASSES = {
+    BasePart = true, Part = true, WedgePart = true, TrussPart = true, UnionOperation = true, SpawnLocation = true,
+}
+
+-- Идёт порциями по кадрам, чтобы не фризить клиент; запускается в отдельном потоке и охоту не задерживает
+local function antiLagTextures()
+    local skipRoots = {}
+    for _, name in ipairs({ "Particles", "Collectibles", "Monsters" }) do
+        local r = workspace:FindFirstChild(name)
+        if r then table.insert(skipRoots, r) end
+    end
+    local myChar = (Players.LocalPlayer or lp).Character
+    if myChar then table.insert(skipRoots, myChar) end
+
+    local function skipped(inst)
+        for i = 1, #skipRoots do
+            if inst:IsDescendantOf(skipRoots[i]) then return true end
+        end
+        return false
+    end
+
+    local n = 0
+    for _, inst in ipairs(workspace:GetDescendants()) do
+        n = n + 1
+        if n % 1500 == 0 then
+            task.wait()
+            if not alive() then return end
+        end
+        pcall(function()
+            local cls = inst.ClassName
+            if ANTILAG_PART_CLASSES[cls] then
+                if inst.CollisionGroup == "BoostBallBarrier" then
+                    inst:Destroy()
+                elseif not skipped(inst) then
+                    inst.Material = Enum.Material.Plastic
+                    inst.Reflectance = 0
+                end
+            elseif cls == "Decal" or cls == "Texture" then
+                if inst.Texture ~= "rbxassetid://3581259086" and not skipped(inst) then inst:Destroy() end
+            elseif cls == "ParticleEmitter" then
+                if inst.Name ~= "PuffshroomSpores" and not skipped(inst) then inst:Destroy() end
+            end
+        end)
+    end
+end
+
+local function applyAntiLag()
+    if not ANTILAG_ENABLED then return end
+    local t0 = tick()
+    local function step(name, enabled, fn)
+        if not enabled then return end
+        local ok, err = pcall(fn)
+        if not ok then warn("[AntiLag] " .. name .. ":", err) end
+    end
+
+    step("main", ANTILAG.main, antiLagMain)
+    step("pollenPopups", ANTILAG.pollenPopups, antiLagPollenPopups)
+    step("hooks", true, antiLagHooks)
+    step("world", true, antiLagWorld)
+    step("decorations", ANTILAG.destroyDecorations, antiLagDecorations)
+    step("players", ANTILAG.hidePlayers, antiLagPlayers)
+    step("ui", ANTILAG.hideBssUi, function()
+        local pg = (Players.LocalPlayer or lp):FindFirstChild("PlayerGui")
+        local g = pg and pg:FindFirstChild("ScreenGui")
+        if g and g:IsA("ScreenGui") then g.Enabled = false end
+    end)
+    step("textures", ANTILAG.destroyTextures, antiLagTextures)
+    print(string.format("[AntiLag] ✅ применён за %.1f с", tick() - t0))
+    pcall(logMem, "после антилага")
+end
+
+-- ============================================================
 -- ====== ГЛАВНАЯ ЛОГИКА ОХОТЫ ======
 -- ============================================================
 local function huntViciousBee()
@@ -1812,6 +2097,7 @@ local function huntViciousBee()
     gameReady = true
     pcall(logMem, "сервер загружен")
     buildGui()
+    task.spawn(applyAntiLag)
     pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
     task.spawn(applyMemoryOptimizer, "late")
     print("[Hunt] Ищем Vicious Bee...")
