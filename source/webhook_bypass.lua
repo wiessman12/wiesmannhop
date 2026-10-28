@@ -26,7 +26,8 @@ local EXPIRE_TIME = 20 * 60          -- Сервер хранится 20 мин�
 local QUEUE_MAX_AGE = 8 * 60         -- Список серверов обновляется раз в 8 минут
 
 local TARGET_FPS = 60                -- Лимит FPS (60 защищает от перегрева и утечек VRAM/GPU)
-local DISABLE_3D_RENDERING = false   -- 3D-рендер остаётся ВКЛЮЧЁННЫМ. true = выключить (экономит память, но экран чёрный)
+local DISABLE_3D_RENDERING = true    -- true = 3D-рендер выключен с самого входа на сервер: экран чёрный, окно хоппера видно. Главная защита от роста памяти и VRAM между хопами. false = картинка как обычно
+local DISABLE_COREGUI = true         -- Отключает встроенный интерфейс Roblox (список игроков, чат, рюкзак): его скрипты пересоздаются при каждом телепорте
 local LIGHT_VISUALS = false          -- Гашение частиц обходит весь workspace (тяжело для BSS). Включай только если нужно
 local MUTE_GAME = true               -- Выключить звук (меньше памяти и CPU)
 
@@ -35,11 +36,11 @@ local ANTILAG_ENABLED = true            -- Главный выключатель
 local ANTILAG = {
     main = true,                -- Качество графики на минимум, вода/тени/туман (и не даём игре вернуть тени/туман)
     pollenPopups = true,        -- Выключает всплывающие цифры пыльцы (меняет настройку PollenPopUps в аккаунте игры, как в Atlas)
-    hideTokens = true,          -- Токены (хук CollectiblesAnimator)             — нужен hookfunction
-    hideParticles = true,       -- Шумные эффекты LocalFX по списку из Atlas      — нужен hookfunction
-    hidePrecise = true,         -- Мишени Precise                                 — нужен hookfunction
-    hideDuped = true,           -- Дублированные токены                           — нужен hookfunction
-    hideMarks = true,           -- Метки станций                                  — нужен hookfunction
+    hideTokens = false,          -- Токены (хук на модуль игры, нужен hookfunction). ВЫКЛЮЧЕНО: executor может держать замены функций между серверами
+    hideParticles = false,       -- Эффекты (хук на модуль игры, нужен hookfunction). ВЫКЛЮЧЕНО: executor может держать замены функций между серверами
+    hidePrecise = false,         -- Мишени Precise (хук на модуль игры, нужен hookfunction). ВЫКЛЮЧЕНО: executor может держать замены функций между серверами
+    hideDuped = false,           -- Дубли токенов (хук на модуль игры, нужен hookfunction). ВЫКЛЮЧЕНО: executor может держать замены функций между серверами
+    hideMarks = false,           -- Метки станций (хук на модуль игры, нужен hookfunction). ВЫКЛЮЧЕНО: executor может держать замены функций между серверами
     hideBees = true,            -- Модели своих пчёл (только картинка, урон не меняется)
     hideFlowers = true,         -- Цветы (хоппер пыльцу не собирает; поле определяется по FlowerZones)
     hideBalloons = true,        -- Шарики на полях
@@ -48,6 +49,12 @@ local ANTILAG = {
     hidePlayers = true,         -- Персонажи других игроков (шапки/меши — много памяти на людных серверах)
     hideBssUi = true,           -- Интерфейс самой игры (PlayerGui.ScreenGui); окно хоппера не затрагивается
 }
+
+-- ====== ПЛАНОВЫЙ ПЕРЕЗАПУСК КЛИЕНТА (лечит накопление памяти между телепортами, которое скрипт изнутри не освобождает) ======
+local RESTART_ENABLED = false   -- true = скрипт САМ закрывает Roblox (game:Shutdown) до вылета. Включай только вместе с vb_watchdog.ps1, иначе клиент закроется и не вернётся
+local RESTART_AFTER_MIN = 75    -- закрыться, когда клиент работает дольше стольки минут (0 = не проверять)
+local RESTART_AT_MB = 0         -- ...или когда память клиента выше стольки МБ (0 = не проверять)
+local RESTART_FLAG = "vb_restart.flag"  -- метка «это плановый перезапуск»: после него цифры в меню не сбрасываются
 
 -- ====== ИНТЕРФЕЙС ======
 local SHOW_GUI = true                -- Окно со статистикой (чуть выше центра экрана, можно перетаскивать за заголовок)
@@ -147,12 +154,24 @@ do
     local curUp = getProcUptime()
     local data = readStatsRetry(STATS_FILE) or readStatsRetry(STATS_BAK)
     local sameProcess = false
+
+    -- Метка планового перезапуска (ставится в checkPlannedRestart перед game:Shutdown)
+    local plannedRestart = false
+    pcall(function()
+        if fileExists(RESTART_FLAG) then
+            local t = tonumber(readfile(RESTART_FLAG))
+            if t and now - t < 1800 then plannedRestart = true end
+            if delfile then delfile(RESTART_FLAG) else writefile(RESTART_FLAG, "") end
+        end
+    end)
     local reason = "файла статистики нет — старт с нуля"
 
     if data then
         local gap = now - (tonumber(data.lastSeen) or 0)
         if getgenv().VB_ProcessAlive then
             sameProcess, reason = true, "тот же запуск Roblox (executor помнит прошлый запуск)"
+        elseif plannedRestart then
+            sameProcess, reason = true, string.format("плановый перезапуск клиента, пауза %d с", gap)
         elseif not RESET_ON_RELAUNCH then
             sameProcess, reason = true, "RESET_ON_RELAUNCH выключен"
         elseif gap < RELAUNCH_MIN_GAP then
@@ -740,14 +759,41 @@ local function applyMemoryOptimizer(stage)
 
         -- Выключаем 3D до подгрузки текстур/мешей — они не попадают в VRAM/RAM
         if DISABLE_3D_RENDERING or getgenv().VB_EmergencyMem then
-            pcall(function()
+            local ok3d, err3d = pcall(function()
                 RunService:Set3dRenderingEnabled(false)
+            end)
+            if not ok3d then warn("[Memory] Не удалось выключить 3D-рендер:", err3d) end
+        end
+
+        -- Встроенный интерфейс Roblox: CoreGui регистрируется не сразу, поэтому пробуем несколько секунд
+        if DISABLE_COREGUI then
+            task.spawn(function()
+                for _ = 1, 40 do
+                    if not alive() then return end
+                    local ok = pcall(function()
+                        game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.All, false)
+                    end)
+                    if ok then break end
+                    task.wait(0.5)
+                end
+                pcall(function()
+                    local tcs = game:GetService("TextChatService")
+                    tcs.ChatWindowConfiguration.Enabled = false
+                    tcs.ChatInputBarConfiguration.Enabled = false
+                end)
             end)
         end
         return
     end
 
     -- ---- stage == "late" ----
+    -- Повторяем то, что ранний этап мог не успеть применить
+    if DISABLE_3D_RENDERING or getgenv().VB_EmergencyMem then
+        pcall(function() RunService:Set3dRenderingEnabled(false) end)
+    end
+    if DISABLE_COREGUI then
+        pcall(function() game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.All, false) end)
+    end
     local Lighting = game:GetService("Lighting")
     pcall(function()
         Lighting.GlobalShadows = false
@@ -1058,14 +1104,51 @@ end
 local MEM_LOG = "vb_mem_log.txt"
 local MEM_GROWTH_LIMIT_MB = 1200   -- Прирост памяти (МБ) от первого замера за запуск Roblox, после которого включается аварийный режим (3D-рендер выкл.). 0 = выключено
 
+-- Какие категории памяти самые большие (Instances / LuaHeap / GraphicsTexture ...) — показывает, где именно утечка
+local function memTopTags()
+    local out = {}
+    pcall(function()
+        local Stats = game:GetService("Stats")
+        for _, tag in ipairs(Enum.DeveloperMemoryTag:GetEnumItems()) do
+            local okT, v = pcall(function() return Stats:GetMemoryUsageMbForTag(tag) end)
+            if okT and type(v) == "number" and v >= 50 then table.insert(out, { tag.Name, v }) end
+        end
+    end)
+    table.sort(out, function(a, b) return a[2] > b[2] end)
+    local parts = {}
+    for i = 1, math.min(5, #out) do parts[i] = string.format("%s %d", out[i][1], out[i][2]) end
+    return table.concat(parts, ", ")
+end
+
+local function memInstanceCount()
+    local ok, v = pcall(function() return game:GetService("Stats").InstanceCount end)
+    return (ok and tonumber(v)) or -1
+end
+
 local function logMem(tag)
     local mb = math.floor(getMemoryMb())
     if not getgenv().VB_MemBase and mb > 0 then getgenv().VB_MemBase = mb end
     local growth = mb - (getgenv().VB_MemBase or mb)
+
+    -- Утечка на хоп: сравниваем память сразу после загрузки сервера с первым замером за запуск Roblox
+    local leakNote = ""
+    if tag == "сервер загружен" then
+        getgenv().VB_LoadN = (getgenv().VB_LoadN or 0) + 1
+        getgenv().VB_LoadFirstMb = getgenv().VB_LoadFirstMb or mb
+        if getgenv().VB_LoadN >= 4 then
+            local perHop = (mb - getgenv().VB_LoadFirstMb) / (getgenv().VB_LoadN - 1)
+            leakNote = string.format(" | рост ≈ %d МБ/хоп (за %d хопов)", math.floor(perHop), getgenv().VB_LoadN)
+            print("[Mem]" .. leakNote)
+        end
+    end
+
     if writefile then
         pcall(function()
-            local line = string.format("%s | %s | %d МБ | прирост %d МБ | хопов %d | аптайм %d мин\n",
-                os.date("%H:%M:%S"), tag, mb, growth, stats.hops, math.floor((os.time() - stats.boot) / 60))
+            local line = string.format("%s | %s | %d МБ | прирост %d МБ | хопов %d | аптайм %d мин | инстансов %d | попыток телепорта %d | топ: %s%s\n",
+                os.date("%H:%M:%S"), tag, mb, growth, stats.hops, math.floor((os.time() - stats.boot) / 60),
+                memInstanceCount(),
+                (tag == "сервер загружен") and (getgenv().VB_PrevAttempts or 0) or (getgenv().VB_HopAttempts or 0),
+                memTopTags(), leakNote)
             if appendfile then
                 appendfile(MEM_LOG, line)
             else
@@ -1083,6 +1166,32 @@ local function logMem(tag)
     end
 end
 
+-- Время работы клиента считаем сами: getgenv() живёт, пока жив процесс Roblox, и обнуляется при новом запуске
+getgenv().VB_ClientStart = getgenv().VB_ClientStart or os.time()
+
+local function checkPlannedRestart()
+    if not RESTART_ENABLED or getgenv().VB_RestartFailed then return end
+    local upMin = (os.time() - getgenv().VB_ClientStart) / 60
+    local mb = getMemoryMb()
+    local byTime = RESTART_AFTER_MIN > 0 and upMin >= RESTART_AFTER_MIN
+    local byMem = RESTART_AT_MB > 0 and mb >= RESTART_AT_MB
+    if not (byTime or byMem) then return end
+
+    warn(string.format("[Restart] Плановый перезапуск клиента: работает %d мин, память %d МБ (%s)",
+        math.floor(upMin), math.floor(mb), byTime and "по времени" or "по памяти"))
+    setStatus("Плановый перезапуск Roblox…", "hop")
+    saveStats()
+    pcall(logMem, "плановый перезапуск")
+    if writefile then pcall(writefile, RESTART_FLAG, tostring(os.time())) end
+    task.wait(1)
+    pcall(function() game:Shutdown() end)
+    task.wait(15)
+    -- Если мы ещё здесь, закрыться не удалось: больше не пытаемся и продолжаем хопы
+    getgenv().VB_RestartFailed = true
+    warn("[Restart] game:Shutdown() не закрыл клиент — плановый перезапуск отключён, закрой Roblox вручную")
+    if delfile and isfile and isfile(RESTART_FLAG) then pcall(delfile, RESTART_FLAG) end
+end
+
 local function hopToRandomServer()
     if getgenv().IsHopping then
         if tick() - (getgenv().HopStartTime or 0) > HOP_PENDING_TIMEOUT then
@@ -1091,6 +1200,8 @@ local function hopToRandomServer()
             return
         end
     end
+
+    pcall(checkPlannedRestart) -- если пора — закроет клиент прямо здесь
 
     getgenv().IsHopping = true
     getgenv().HopStartTime = tick()
@@ -1858,6 +1969,7 @@ end
 
 local function antiLagMain()
     pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
+    pcall(function() settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level04 end)
     pcall(function()
         local t = workspace:FindFirstChildOfClass("Terrain")
         if t then
@@ -2005,6 +2117,8 @@ local function antiLagPlayers()
     table.insert(myConns, Players.PlayerAdded:Connect(watch))
 end
 
+local antiLagPlayersDone = false
+
 local ANTILAG_PART_CLASSES = {
     BasePart = true, Part = true, WedgePart = true, TrussPart = true, UnionOperation = true, SpawnLocation = true,
 }
@@ -2065,7 +2179,10 @@ local function applyAntiLag()
     step("hooks", true, antiLagHooks)
     step("world", true, antiLagWorld)
     step("decorations", ANTILAG.destroyDecorations, antiLagDecorations)
-    step("players", ANTILAG.hidePlayers, antiLagPlayers)
+    step("players", ANTILAG.hidePlayers and not antiLagPlayersDone, function()
+        antiLagPlayersDone = true
+        antiLagPlayers()
+    end)
     step("ui", ANTILAG.hideBssUi, function()
         local pg = (Players.LocalPlayer or lp):FindFirstChild("PlayerGui")
         local g = pg and pg:FindFirstChild("ScreenGui")
@@ -2082,6 +2199,12 @@ end
 local function huntViciousBee()
     -- 1. Ранняя оптимизация (до загрузки мира)
     applyMemoryOptimizer("early")
+    pcall(logMem, "старт скрипта") -- память в начале нового сервера: растёт от хопа к хопу => часть прошлого сервера не освободилась
+    -- Чужих персонажей убираем сразу, пока их шапки/меши ещё не подгрузились (раньше это делалось только после загрузки)
+    if ANTILAG_ENABLED and ANTILAG.hidePlayers and not antiLagPlayersDone then
+        antiLagPlayersDone = true
+        pcall(antiLagPlayers)
+    end
     setStatus("Загрузка сервера…", "info")
 
     -- 2. Ждем корректной прогрузки игры перед началом охоты
