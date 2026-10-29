@@ -15,7 +15,6 @@ _G.unlocktween = true
 _G.ViciousHunterRunning = true
 
 local TWEEN_SPEED = 150              -- Скорость полета (150 стадс/сек)
-local HOP_DELAY = 3
 
 -- ====== ПОЛЁТ НАД ПЧЕЛОЙ (вместо мансинга) ======
 local HOVER_HEIGHT = 10              -- На какой высоте над Vicious висит персонаж
@@ -31,30 +30,12 @@ local DISABLE_3D_RENDERING = false   -- 3D-рендер остаётся ВКЛ�
 local LIGHT_VISUALS = false          -- Гашение частиц обходит весь workspace (тяжело для BSS). Включай только если нужно
 local MUTE_GAME = true               -- Выключить звук (меньше памяти и CPU)
 
--- ====== АНТИ-ЛАГ (портирован из Atlas, набор адаптирован под хоппер) ======
-local ANTILAG_ENABLED = true            -- Главный выключатель. Если вернулись кики 267 — сначала выключи hide*/destroy* пункты ниже по одному
-local ANTILAG = {
-    main = true,                -- Качество графики на минимум, вода/тени/туман (и не даём игре вернуть тени/туман)
-    pollenPopups = true,        -- Выключает всплывающие цифры пыльцы (меняет настройку PollenPopUps в аккаунте игры, как в Atlas)
-    hideTokens = true,          -- Токены (хук CollectiblesAnimator)             — нужен hookfunction
-    hideParticles = true,       -- Шумные эффекты LocalFX по списку из Atlas      — нужен hookfunction
-    hidePrecise = true,         -- Мишени Precise                                 — нужен hookfunction
-    hideDuped = true,           -- Дублированные токены                           — нужен hookfunction
-    hideMarks = true,           -- Метки станций                                  — нужен hookfunction
-    hideBees = true,            -- Модели своих пчёл (только картинка, урон не меняется)
-    hideFlowers = true,         -- Цветы (хоппер пыльцу не собирает; поле определяется по FlowerZones)
-    hideBalloons = true,        -- Шарики на полях
-    destroyTextures = true,     -- Decal/Texture/ParticleEmitter удаляются, материалы -> Plastic (главный выигрыш по памяти)
-    destroyDecorations = true,  -- Безопасный набор декораций (улей, поля, пути, стены и территории НЕ трогаем)
-    hidePlayers = true,         -- Персонажи других игроков (шапки/меши — много памяти на людных серверах)
-    hideBssUi = true,           -- Интерфейс самой игры (PlayerGui.ScreenGui); окно хоппера не затрагивается
-}
-
 -- ====== ИНТЕРФЕЙС ======
 local SHOW_GUI = true                -- Окно со статистикой (чуть выше центра экрана, можно перетаскивать за заголовок)
 local STATS_FILE = "vicious_stats.json"
 
-local LOAD_TIMEOUT = 45              -- Если игра не прогрузилась за N секунд — скрипт хопает на другой сервер
+local LOAD_TIMEOUT = 10              -- Если игра/интерфейс не прогрузились за N секунд с момента входа на сервер — скрипт хопает на другой сервер
+local MIN_HOP_DELAY = 4             -- Минимум секунд на сервере с момента входа, прежде чем скрипт может хопнуть (даже если всё уже загружено)
 local HIVE_MAX_ATTEMPTS = 6         -- Сколько раз пробовать занять улей, прежде чем хопнуть
 local RESET_ON_RELAUNCH = true      -- Сбрасывать цифры в меню при каждом новом запуске Roblox (хопы внутри одного запуска цифры не сбрасывают)
 local HOP_PENDING_TIMEOUT = 40          -- Сколько секунд ждать завершения телепорта, прежде чем пробовать снова
@@ -62,6 +43,7 @@ local RECOVERY_STEP_TIMEOUT = 12        -- После дисконнекта (26
 local RELAUNCH_MIN_GAP = 90             -- Перезапуском Roblox считается только пауза не меньше стольки секунд между последним сохранением и стартом (обычный хоп короче)
 
 getgenv().IsHopping = false
+local serverJoinTime = tick()   -- Момент входа на этот сервер (скрипт стартует вместе с ним)
 
 local lp = Players.LocalPlayer
 local StatsService = game:GetService("Stats")
@@ -740,7 +722,7 @@ local function applyMemoryOptimizer(stage)
         end
 
         -- Выключаем 3D до подгрузки текстур/мешей — они не попадают в VRAM/RAM
-        if DISABLE_3D_RENDERING or getgenv().VB_EmergencyMem then
+        if DISABLE_3D_RENDERING then
             pcall(function()
                 RunService:Set3dRenderingEnabled(false)
             end)
@@ -775,9 +757,6 @@ local function applyMemoryOptimizer(stage)
         task.spawn(lightenWorld)
     end
 
-    pcall(function()
-        collectgarbage("collect")
-    end)
 end
 
 -- ============================================================
@@ -1055,35 +1034,6 @@ local function fetchNewServers(data)
     return #data.queue > 0
 end
 
--- ====== КОНТРОЛЬ ПАМЯТИ: лог роста + аварийный режим, если клиент раздулся ======
-local MEM_LOG = "vb_mem_log.txt"
-local MEM_GROWTH_LIMIT_MB = 1200   -- Прирост памяти (МБ) от первого замера за запуск Roblox, после которого включается аварийный режим (3D-рендер выкл.). 0 = выключено
-
-local function logMem(tag)
-    local mb = math.floor(getMemoryMb())
-    if not getgenv().VB_MemBase and mb > 0 then getgenv().VB_MemBase = mb end
-    local growth = mb - (getgenv().VB_MemBase or mb)
-    if writefile then
-        pcall(function()
-            local line = string.format("%s | %s | %d МБ | прирост %d МБ | хопов %d | аптайм %d мин\n",
-                os.date("%H:%M:%S"), tag, mb, growth, stats.hops, math.floor((os.time() - stats.boot) / 60))
-            if appendfile then
-                appendfile(MEM_LOG, line)
-            else
-                local old = (isfile and isfile(MEM_LOG) and readfile(MEM_LOG)) or ""
-                if #old > 20000 then old = old:sub(-10000) end
-                writefile(MEM_LOG, old .. line)
-            end
-        end)
-    end
-    if MEM_GROWTH_LIMIT_MB > 0 and growth > MEM_GROWTH_LIMIT_MB and not getgenv().VB_EmergencyMem then
-        getgenv().VB_EmergencyMem = true
-        warn(string.format("[Mem] ⚠️ Память выросла на %d МБ — аварийный режим: 3D-рендер выключен", growth))
-        pcall(function() RunService:Set3dRenderingEnabled(false) end)
-        pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
-    end
-end
-
 local function hopToRandomServer()
     if getgenv().IsHopping then
         if tick() - (getgenv().HopStartTime or 0) > HOP_PENDING_TIMEOUT then
@@ -1096,13 +1046,17 @@ local function hopToRandomServer()
     getgenv().IsHopping = true
     getgenv().HopStartTime = tick()
     getgenv().VB_HopAttempts = (getgenv().VB_HopAttempts or 0) + 1
-    pcall(refreshThorns) -- фиксируем шипы перед уходом с сервера
-    saveStats()
     setStatus("Подбираю сервер для хопа…", "hop")
 
-    pcall(logMem, "перед хопом")
-    print(string.format("[Mem] Память клиента: %d МБ | прыжков: %d | аптайм: %d мин",
-        math.floor(getMemoryMb()), stats.hops, math.floor((os.time() - stats.boot) / 60)))
+    -- Минимальная задержка хопа: не раньше MIN_HOP_DELAY секунд после входа на сервер, даже если всё уже загружено
+    local sinceJoin = tick() - serverJoinTime
+    if sinceJoin < MIN_HOP_DELAY then
+        task.wait(MIN_HOP_DELAY - sinceJoin)
+        if not alive() then
+            getgenv().IsHopping = false
+            return
+        end
+    end
 
     local currentLp = Players.LocalPlayer or lp
     do
@@ -1130,19 +1084,26 @@ local function hopToRandomServer()
     end
     data.queue = validQueue
 
+    -- Запись файлов и подсчёт шипов не нужны самому телепорту, поэтому делаются ПОСЛЕ его запуска
+    -- (старый сервер живёт ещё несколько секунд). Раньше они шли перед телепортом и растягивали каждый хоп.
+    local function finishBookkeeping()
+        pcall(refreshThorns)
+        saveData(data)
+        saveStats()
+    end
+
     if #data.queue == 0 then
         local ok = fetchNewServers(data)
         if not ok or #data.queue == 0 then
             data.visited = {}
             if game.JobId and game.JobId ~= "" then data.visited[game.JobId] = os.time() end
-            saveData(data)
             warn("[Hop] Очередь пуста. Резервный хоп через матчмейкинг...")
             setStatus("Очередь пуста — резервный телепорт…", "warn")
             pcall(function()
-                collectgarbage("collect")
                 TeleportService:Teleport(game.PlaceId, currentLp)
             end)
-            
+            finishBookkeeping()
+
             task.wait(6)
             getgenv().IsHopping = false
             return
@@ -1153,15 +1114,9 @@ local function hopToRandomServer()
     local targetJobId = table.remove(data.queue, chosenIndex)
 
     data.visited[targetJobId] = os.time()
-    saveData(data)
 
     print(string.format("[Hop] 🚀 Переход на сервер: %s (Осталось: %d)", targetJobId, #data.queue))
     setStatus("Телепорт на сервер …" .. tostring(targetJobId):sub(-6), "hop")
-
-    -- Принудительный сбор мусора перед телепортом для предотвращения утечек памяти
-    pcall(function()
-        collectgarbage("collect")
-    end)
 
     local ok, err = pcall(function()
         TeleportService:TeleportToPlaceInstance(game.PlaceId, targetJobId, currentLp)
@@ -1175,6 +1130,8 @@ local function hopToRandomServer()
         end)
         getgenv().IsHopping = false
     end
+
+    finishBookkeeping()
 end
 
 -- ============================================================
@@ -1812,272 +1769,6 @@ local function startHover(bee, currentFieldPart, onBeeDiedCallback)
 end
 
 -- ============================================================
--- ====== АНТИ-ЛАГ (из Atlas) ======
--- ============================================================
--- НЕ трогаем то, чем пользуется сам хоппер: Honeycombs (улей), FlowerZones (поле), Monsters (Vicious),
--- Particles/WTs (WaitingThorn), а также HivePlatforms, Paths, Invisible Walls, Territories.
-local ANTILAG_IGNORED_FX = {
-    AquaWave = true, BeamShot = true, BeesmasLightsFallingStar = true, Bubble = true, BubbleBloatCollect = true,
-    CCRocket = true, CCRocketCrosshairs = true, CCRocketCrosshairsOld = true, DiamondDrain = true, EggShield = true,
-    FallingCoal = true, FallingCoconut = true, FallingSnowflake = true, FallingStar = true, FieldRectPulses = true,
-    FieldStar = true, GoldenRake = true, GummyStar = true, Gummyball = true, HoneyHammer = true, InspireStar = true,
-    JellyBeanToss = true, KickableCoconut = true, KickedComboCoconut = true, LocalFlames = true, MechsquitoShot = true,
-    MythicMeteor = true, OrbExplode = true, PartyPopper = true, PetalShuriken = true, PluckedPetal = true, PopStar = true,
-    PorcelainDipperAbility = true, PuffshroomSporeThrow = true, RectPulse = true, RingPulse = true, ScorchingStar = true,
-    SnowballThrow = true, SnowflakeBreeze = true, SpotlightBeam = true, StarSaw = true, StarShowerGuide = true,
-    StickerTokenBeam = true, SweepArch = true, Triangulate = true, WaterRipple = true,
-}
-local ANTILAG_PRECISE_FX = { LocalTargetPracticeBeam = true, PrecisionPopUp = true, ["Precise Shot"] = true }
-
--- Верхнеуровневые декорации workspace, которые Atlas удаляет и которые хопперу не нужны
-local ANTILAG_DECO_TOP = {
-    "Amulets", "Shell Amulets", "Stickbug Amulets", "BallArrowFolder", "BoostBalls", "Campsite", "ClassicMinigame",
-    "Cubs", "Faces", "FieldDecos", "Frame", "Frogs", "Goo", "Leaderboards", "TheGamesEvent", "TheGames_WideBanners",
-    "Bee Bear Hive", "Noob Bear", "OnettNPC", "Pro Bear", "Top Bear", "BuckoAtHQ", "RileyAtHQ", "Honey", "Lion",
-}
-local ANTILAG_DECO_SUB = {
-    "35ZoneCave", "BubbleWandChimney", "TreatBooth", "Coconut Field", "Pepper Patch", "Pine Tree",
-    "SpiderCave", "Petal Shop", "JumpGames", "PEggMaze",
-}
-
-local function safeDestroy(inst)
-    if inst then pcall(function() inst:Destroy() end) end
-end
-
-local function destroyChild(parent, name)
-    if parent then safeDestroy(parent:FindFirstChild(name)) end
-end
-
-local function newNoop() return function() end end
-
--- Хук ставится один раз: повторный запуск скрипта на том же сервере не наслаивает хуки
-local function hookOnce(fn, replacement)
-    if type(fn) ~= "function" or type(hookfunction) ~= "function" then return nil end
-    if isfunctionhooked and isfunctionhooked(fn) then return nil end
-    return hookfunction(fn, replacement)
-end
-
-local function antiLagMain()
-    pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
-    pcall(function()
-        local t = workspace:FindFirstChildOfClass("Terrain")
-        if t then
-            t.WaterWaveSize, t.WaterWaveSpeed, t.WaterReflectance, t.WaterTransparency = 0, 0, 0, 0
-        end
-    end)
-    local Lighting = game:GetService("Lighting")
-    local function applyLighting()
-        pcall(function()
-            if Lighting.GlobalShadows ~= false then Lighting.GlobalShadows = false end
-            if Lighting.FogEnd ~= 9e9 then Lighting.FogEnd = 9e9 end
-            if Lighting.FogStart ~= 9e9 then Lighting.FogStart = 9e9 end
-        end)
-    end
-    applyLighting()
-    table.insert(myConns, Lighting.Changed:Connect(applyLighting)) -- игра меняет освещение по времени суток
-end
-
-local function antiLagPollenPopups()
-    local ev = ReplicatedStorage:FindFirstChild("Events")
-    local se = ev and ev:FindFirstChild("PlayerSettingsEvent")
-    if se and se:IsA("RemoteEvent") then
-        pcall(function() se:FireServer("PollenPopUps", false) end)
-    end
-end
-
-local function antiLagHooks()
-    local needHooks = ANTILAG.hideTokens or ANTILAG.hideParticles or ANTILAG.hidePrecise or ANTILAG.hideDuped or ANTILAG.hideMarks
-    if not needHooks then return end
-    if type(hookfunction) ~= "function" then
-        warn("[AntiLag] hookfunction не поддерживается executor'ом — токены и эффекты не скрываются")
-        return
-    end
-    local RS = ReplicatedStorage
-
-    if ANTILAG.hideTokens then
-        local ok, err = pcall(function()
-            local m = require(RS.CollectiblesAnimator)
-            hookOnce(m.Spawn, newNoop())
-            hookOnce(m.AnimateCollect, newNoop())
-            hookOnce(m.Destroy, newNoop())
-            hookOnce(m.Update, newNoop())
-            destroyChild(workspace, "Collectibles")
-        end)
-        if not ok then warn("[AntiLag] токены:", err) end
-    end
-
-    if ANTILAG.hideParticles or ANTILAG.hidePrecise then
-        local ok, err = pcall(function()
-            local fx = require(RS.LocalFX)
-            local dropAll, dropPrecise = ANTILAG.hideParticles, ANTILAG.hidePrecise
-            local orig
-            orig = hookOnce(fx.ClientRun, function(effectName, ...)
-                if (dropAll and ANTILAG_IGNORED_FX[effectName]) or (dropPrecise and ANTILAG_PRECISE_FX[effectName]) then
-                    return
-                end
-                return orig(effectName, ...)
-            end)
-            if dropAll then
-                hookOnce(require(RS.LocalAmulets).CreatePlayerAmulets, newNoop())
-            end
-        end)
-        if not ok then warn("[AntiLag] эффекты:", err) end
-    end
-
-    if ANTILAG.hideDuped then
-        local ok, err = pcall(function()
-            local d = require(RS.DupedTokensAnimator)
-            hookOnce(d.Spawn, newNoop())
-            hookOnce(d.Destroy, newNoop())
-            hookOnce(d.Charge, newNoop())
-            hookOnce(d.Uncharge, newNoop())
-            local cam = workspace.CurrentCamera
-            destroyChild(cam, "DupedTokens")
-        end)
-        if not ok then warn("[AntiLag] дубли токенов:", err) end
-    end
-
-    if ANTILAG.hideMarks then
-        local ok, err = pcall(function()
-            local a = require(RS.ClientScripts.Listeners.StationsListener).Actions
-            hookOnce(a.Spawn, newNoop())
-            hookOnce(a.AnimDestroy, newNoop())
-            destroyChild(workspace, "Stations")
-        end)
-        if not ok then warn("[AntiLag] метки:", err) end
-    end
-end
-
-local function antiLagWorld()
-    if ANTILAG.hideBees then
-        pcall(function()
-            local bees = workspace:FindFirstChild("Bees")
-            if bees then
-                for _, b in ipairs(bees:GetChildren()) do safeDestroy(b) end
-                table.insert(myConns, bees.ChildAdded:Connect(function(b)
-                    task.spawn(function()
-                        RunService.Heartbeat:Wait()
-                        safeDestroy(b)
-                    end)
-                end))
-            end
-        end)
-    end
-    if ANTILAG.hideFlowers then destroyChild(workspace, "Flowers") end
-    if ANTILAG.hideBalloons then destroyChild(workspace:FindFirstChild("Balloons"), "FieldBalloons") end
-end
-
-local function antiLagDecorations()
-    for _, name in ipairs(ANTILAG_DECO_TOP) do destroyChild(workspace, name) end
-
-    local deco = workspace:FindFirstChild("Decorations")
-    if deco then
-        local misc = deco:FindFirstChild("Misc")
-        if misc then
-            for _, c in ipairs(misc:GetChildren()) do
-                if string.find(c.Name, "Blue Flower") or c.Name == "Bamboo" or c.Name == "Bush" or c.Name == "Mushroom" then
-                    safeDestroy(c)
-                end
-            end
-        end
-        for _, name in ipairs(ANTILAG_DECO_SUB) do destroyChild(deco, name) end
-        for _, c in ipairs(deco:GetChildren()) do
-            local n = c.Name
-            if string.find(n, "Dandelion") or string.find(n, "Clover") or string.find(n, "Rose")
-                or string.find(n, "Sign") or string.find(n, "Glider") or n == "ShopWord" then
-                safeDestroy(c)
-            end
-        end
-    end
-
-    for _, c in ipairs(workspace:GetChildren()) do
-        if c.ClassName == "Part" and c.CollisionGroup == "BoostBallBarrier" then safeDestroy(c) end
-    end
-end
-
-local function antiLagPlayers()
-    local me = Players.LocalPlayer or lp
-    local function watch(plr)
-        if plr == me then return end
-        if plr.Character then safeDestroy(plr.Character) end
-        table.insert(myConns, plr.CharacterAdded:Connect(function(c) safeDestroy(c) end))
-    end
-    for _, plr in ipairs(Players:GetPlayers()) do watch(plr) end
-    table.insert(myConns, Players.PlayerAdded:Connect(watch))
-end
-
-local ANTILAG_PART_CLASSES = {
-    BasePart = true, Part = true, WedgePart = true, TrussPart = true, UnionOperation = true, SpawnLocation = true,
-}
-
--- Идёт порциями по кадрам, чтобы не фризить клиент; запускается в отдельном потоке и охоту не задерживает
-local function antiLagTextures()
-    local skipRoots = {}
-    for _, name in ipairs({ "Particles", "Collectibles", "Monsters" }) do
-        local r = workspace:FindFirstChild(name)
-        if r then table.insert(skipRoots, r) end
-    end
-    local myChar = (Players.LocalPlayer or lp).Character
-    if myChar then table.insert(skipRoots, myChar) end
-
-    local function skipped(inst)
-        for i = 1, #skipRoots do
-            if inst:IsDescendantOf(skipRoots[i]) then return true end
-        end
-        return false
-    end
-
-    local n = 0
-    for _, inst in ipairs(workspace:GetDescendants()) do
-        n = n + 1
-        if n % 1500 == 0 then
-            task.wait()
-            if not alive() then return end
-        end
-        pcall(function()
-            local cls = inst.ClassName
-            if ANTILAG_PART_CLASSES[cls] then
-                if inst.CollisionGroup == "BoostBallBarrier" then
-                    inst:Destroy()
-                elseif not skipped(inst) then
-                    inst.Material = Enum.Material.Plastic
-                    inst.Reflectance = 0
-                end
-            elseif cls == "Decal" or cls == "Texture" then
-                if inst.Texture ~= "rbxassetid://3581259086" and not skipped(inst) then inst:Destroy() end
-            elseif cls == "ParticleEmitter" then
-                if inst.Name ~= "PuffshroomSpores" and not skipped(inst) then inst:Destroy() end
-            end
-        end)
-    end
-end
-
-local function applyAntiLag()
-    if not ANTILAG_ENABLED then return end
-    local t0 = tick()
-    local function step(name, enabled, fn)
-        if not enabled then return end
-        local ok, err = pcall(fn)
-        if not ok then warn("[AntiLag] " .. name .. ":", err) end
-    end
-
-    step("main", ANTILAG.main, antiLagMain)
-    step("pollenPopups", ANTILAG.pollenPopups, antiLagPollenPopups)
-    step("hooks", true, antiLagHooks)
-    step("world", true, antiLagWorld)
-    step("decorations", ANTILAG.destroyDecorations, antiLagDecorations)
-    step("players", ANTILAG.hidePlayers, antiLagPlayers)
-    step("ui", ANTILAG.hideBssUi, function()
-        local pg = (Players.LocalPlayer or lp):FindFirstChild("PlayerGui")
-        local g = pg and pg:FindFirstChild("ScreenGui")
-        if g and g:IsA("ScreenGui") then g.Enabled = false end
-    end)
-    step("textures", ANTILAG.destroyTextures, antiLagTextures)
-    print(string.format("[AntiLag] ✅ применён за %.1f с", tick() - t0))
-    pcall(logMem, "после антилага")
-end
-
--- ============================================================
 -- ====== ГЛАВНАЯ ЛОГИКА ОХОТЫ ======
 -- ============================================================
 local function huntViciousBee()
@@ -2096,15 +1787,18 @@ local function huntViciousBee()
 
     print("[Init] ✅ Игра и экран загрузки полностью завершены!")
     gameReady = true
-    pcall(logMem, "сервер загружен")
     buildGui()
-    task.spawn(applyAntiLag)
     pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
     task.spawn(applyMemoryOptimizer, "late")
     print("[Hunt] Ищем Vicious Bee...")
     setStatus("Ищу Vicious Bee…", "info")
 
     local bee = findViciousBee()
+    -- Мир мог ещё не дореплицироваться: до MIN_HOP_DELAY секунд после входа на сервер продолжаем искать и только потом хопаем
+    while not bee and alive() and (tick() - serverJoinTime) < MIN_HOP_DELAY do
+        task.wait(0.25)
+        bee = findViciousBee()
+    end
     if not bee then
         print("[Hunt] ❌ Vicious не найден — ХОП")
         setStatus("Vicious не найден — меняю сервер", "hop")
@@ -2328,7 +2022,6 @@ task.spawn(function()
             warn("[Watchdog] ⏰ Сервер превысил лимит — принудительный хоп!")
             -- Следующая попытка через WATCHDOG_RETRY сек, если хоп не сработает (раньше сторож просто умирал)
             serverEntryTime = tick() - (WATCHDOG_LIMIT - WATCHDOG_RETRY)
-            pcall(function() collectgarbage("collect") end)
             -- Внутри hopToRandomServer уже есть защита от наложения телепортов
             pcall(hopToRandomServer)
         end
