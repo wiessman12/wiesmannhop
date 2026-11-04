@@ -50815,11 +50815,11 @@ do
 
 		function PT.pause()
 			PT.depth += 1
-			state.speedPausedUntil = os.clock() + 15 -- failsafe
+			state.speedPausedUntil = os.clock() + 8 -- failsafe
 
 			local humanoid = getHumanoid()
 			local modifiers = gameApi:Cache({ "ModifierCaches", "Value" })
-			local legit = (modifiers and modifiers.PlayerMovespeed and modifiers.PlayerMovespeed._) or state.baseWalkSpeed
+			local legit = modifiers and modifiers.PlayerMovespeed and modifiers.PlayerMovespeed._
 
 			if legit and humanoid.WalkSpeed > legit then
 				humanoid.WalkSpeed = legit
@@ -50879,7 +50879,7 @@ do
 				end
 
 				dt = math.min(RunService.Heartbeat:Wait(), 0.1)
-				state.speedPausedUntil = os.clock() + 15
+				state.speedPausedUntil = os.clock() + 8
 			end
 
 			if lastTarget and holdFor and holdFor > 0 then
@@ -66564,16 +66564,11 @@ more accurate dodging]],
 					else
 						threads:Add("walkspeed", function()
 							while task.wait(0.1) do
-								local humanoid = getHumanoid()
-								local holdSpeed = os.clock() < (state.speedPausedUntil or 0) or (tracked and (next(tracked.precise) ~= nil or next(tracked.precise2) ~= nil))
-
-								if not holdSpeed and humanoid.WalkSpeed < cfg.vars.walkspeed then
-									state.baseWalkSpeed = humanoid.WalkSpeed
-								end
-
-								if holdSpeed then
+								-- speed hack is off only while precise targets are being collected
+								if os.clock() < (state.speedPausedUntil or 0) then
 									local modifiers = gameApi:Cache({ "ModifierCaches", "Value" })
-									local legit = (modifiers and modifiers.PlayerMovespeed and modifiers.PlayerMovespeed._) or state.baseWalkSpeed
+									local legit = modifiers and modifiers.PlayerMovespeed and modifiers.PlayerMovespeed._
+									local humanoid = getHumanoid()
 
 									if legit and humanoid.WalkSpeed > legit then
 										humanoid.WalkSpeed = legit
