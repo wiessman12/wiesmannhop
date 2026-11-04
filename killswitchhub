@@ -1422,11 +1422,11 @@ do
 	local vector22 = Vector2.new(450, 280)
 	local vector23 = Vector2.new(450, 280)
 	local vector24 = Vector2.new(450, 280)
-	local color_ = Color3.fromRGB(11, 12, 14)
-	local color_2 = Color3.fromRGB(16, 17, 20)
-	local color_3 = Color3.fromRGB(21, 22, 26)
-	local color_4 = Color3.fromRGB(32, 34, 40)
-	local color_5 = Color3.fromRGB(48, 51, 60)
+	local color_ = Color3.fromRGB(10, 14, 24)
+	local color_2 = Color3.fromRGB(13, 18, 31)
+	local color_3 = Color3.fromRGB(17, 24, 41)
+	local color_4 = Color3.fromRGB(26, 36, 60)
+	local color_5 = Color3.fromRGB(40, 55, 90)
 	local ImageLabel = _G.background and Instance.new("ImageLabel") or Instance.new("Frame")
 	ImageLabel.Name = "Window"
 	ImageLabel.Active = true
@@ -1439,9 +1439,15 @@ do
 	mobileToggleButton = ImageLabel
 	do
 		local winStroke = Instance.new("UIStroke")
-		winStroke.Color = Color3.fromRGB(38, 40, 48)
+		winStroke.Color = Color3.fromRGB(30, 42, 70)
 		winStroke.Thickness = 1
 		winStroke.Parent = ImageLabel
+		if not _G.background then
+			local winGrad = Instance.new("UIGradient")
+			winGrad.Rotation = 90
+			winGrad.Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(170, 184, 214))
+			winGrad.Parent = ImageLabel
+		end
 	end
 
 	local fieldImages = {
@@ -1547,7 +1553,7 @@ do
 	end))
 
 	local title = _G.title and string.find(string.lower(_G.title), "atlas") and not string.find(string.lower(_G.title), "pre") and not string.find(string.lower(_G.title), "paid") and _G.title or "KillSwitchHub"
-	local uicolor = _G.uicolor and _G.uicolor or Color3.fromRGB(52, 211, 153)
+	local uicolor = _G.uicolor and _G.uicolor or Color3.fromRGB(59, 130, 246)
 	local isDesktop = ScreenGui.AbsoluteSize.X >= 850 and ScreenGui.AbsoluteSize.Y >= 500
 
 	if _G.background then
@@ -1570,9 +1576,21 @@ do
 	TextLabel.TextSize = 14
 	TextLabel.TextTransparency = 0
 	TextLabel.TextXAlignment = Enum.TextXAlignment.Left
-	TextLabel.Position = UDim2.new(0, 14, 0, 0)
+	TextLabel.Position = UDim2.new(0, 28, 0, 0)
 	TextLabel.Size = UDim2.new(0.5, -10, 0, 25)
 	TextLabel.Parent = Frame
+	do
+		local dot = Instance.new("Frame")
+		dot.Name = "Dot"
+		dot.BackgroundColor3 = uicolor
+		dot.BorderSizePixel = 0
+		dot.Position = UDim2.new(0, 13, 0.5, -4)
+		dot.Size = UDim2.new(0, 8, 0, 8)
+		dot.Parent = Frame
+		local dotCorner = Instance.new("UICorner")
+		dotCorner.CornerRadius = UDim.new(1, 0)
+		dotCorner.Parent = dot
+	end
 	local ImageButton = Instance.new("ImageButton")
 	ImageButton.Name = "Indicator"
 	ImageButton.BackgroundTransparency = 1
@@ -1584,17 +1602,22 @@ do
 	ImageButton.Parent = Frame
 	local Frame2 = Instance.new("Frame")
 	Frame2.BackgroundColor3 = uicolor
-	Frame2.BackgroundTransparency = 0.65
+	Frame2.BackgroundTransparency = 0.15
 	Frame2.BorderSizePixel = 0
 	Frame2.Position = UDim2.new(0, 0, 1, -1)
 	Frame2.Size = UDim2.new(1, 0, 0, 1)
 	Frame2.Parent = Frame
+	do
+		local lineFade = Instance.new("UIGradient")
+		lineFade.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.55, 0.65), NumberSequenceKeypoint.new(1, 1) })
+		lineFade.Parent = Frame2
+	end
 	local TextButton = Instance.new("TextButton")
 	TextButton.AutoButtonColor = false
 	TextButton.BackgroundColor3 = uicolor
 	TextButton.BackgroundTransparency = 1
 	TextButton.Font = Enum.Font.BuilderSansMedium
-	TextButton.TextColor3 = Color3.fromRGB(225, 228, 234)
+	TextButton.TextColor3 = Color3.fromRGB(160, 175, 202)
 	TextButton.TextSize = 13
 	TextButton.TextXAlignment = Enum.TextXAlignment.Left
 	TextButton.Size = UDim2.new(1, 0, 0, 23)
@@ -1606,9 +1629,23 @@ do
 	ImageLabel2.Name = "TabIcon"
 	ImageLabel2.BackgroundTransparency = 1
 	ImageLabel2.ImageTransparency = 0
+	ImageLabel2.ImageColor3 = Color3.fromRGB(140, 158, 192)
 	ImageLabel2.Position = UDim2.new(0, 6, 0, 5)
 	ImageLabel2.Size = UDim2.new(0, 12, 0, 12)
 	ImageLabel2.Parent = TextButton
+	do
+		local tabBar = Instance.new("Frame")
+		tabBar.Name = "TabBar"
+		tabBar.BackgroundColor3 = uicolor
+		tabBar.BackgroundTransparency = 1
+		tabBar.BorderSizePixel = 0
+		tabBar.Position = UDim2.new(0, 0, 0.5, -7)
+		tabBar.Size = UDim2.new(0, 3, 0, 14)
+		tabBar.Parent = TextButton
+		local tabBarCorner = Instance.new("UICorner")
+		tabBarCorner.CornerRadius = UDim.new(1, 0)
+		tabBarCorner.Parent = tabBar
+	end
 	local Frame3 = Instance.new("Frame")
 	Frame3.BackgroundTransparency = 1
 	Frame3.BorderSizePixel = 0
@@ -1626,7 +1663,7 @@ do
 	uiParts.folder = Frame4
 	do
 		local fc = Instance.new("UICorner"); fc.CornerRadius = UDim.new(0, 6); fc.Parent = Frame4
-		local fs = Instance.new("UIStroke"); fs.Color = Color3.fromRGB(36, 38, 46); fs.Thickness = 1; fs.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; fs.Parent = Frame4
+		local fs = Instance.new("UIStroke"); fs.Color = Color3.fromRGB(28, 40, 66); fs.Thickness = 1; fs.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; fs.Parent = Frame4
 	end
 	local TextButton2 = Instance.new("TextButton")
 	TextButton2.AutoButtonColor = false
@@ -1724,6 +1761,50 @@ do
 	TextLabel2.TextXAlignment = Enum.TextXAlignment.Left
 	uiParts.label = TextLabel2
 
+	local function cloneSwitch()
+		local row = uiParts.switch:Clone()
+		local box = row.Switch
+		local border = box:FindFirstChildOfClass("UIStroke")
+		local info = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+		box:GetPropertyChangedSignal("Text"):Connect(function()
+			local on = box.Text ~= ""
+			local fill = on and uicolor or color_4
+			local edge = on and uicolor or color_5
+
+			if box:IsDescendantOf(game) then
+				TweenService:Create(box, info, { BackgroundColor3 = fill }):Play()
+
+				if border then
+					TweenService:Create(border, info, { Color = edge }):Play()
+				end
+			else
+				box.BackgroundColor3 = fill
+
+				if border then
+					border.Color = edge
+				end
+			end
+		end)
+
+		return row
+	end
+
+	local function cloneButton()
+		local btn = uiParts.button:Clone()
+		local info = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+		btn.MouseEnter:Connect(function()
+			TweenService:Create(btn, info, { BackgroundColor3 = color_5 }):Play()
+		end)
+
+		btn.MouseLeave:Connect(function()
+			TweenService:Create(btn, info, { BackgroundColor3 = color_4 }):Play()
+		end)
+
+		return btn
+	end
+
 	do
 		local Frame8 = Instance.new("Frame")
 		Frame8.Name = "Switch"
@@ -1739,7 +1820,7 @@ do
 		TextButton3.BorderSizePixel = 0
 		TextButton3.Font = Enum.Font.SourceSansBold
 		TextButton3.Text = ""
-		TextButton3.TextColor3 = uicolor
+		TextButton3.TextColor3 = Color3.new(1, 1, 1)
 		TextButton3.TextSize = 20
 		TextButton3.Size = UDim2.new(0, 20, 0, 20)
 		TextButton3.Parent = Frame8
@@ -1767,6 +1848,13 @@ do
 		Frame8.BorderSizePixel = 0
 		Frame8.Size = UDim2.new(1, -15, 0, 20)
 		uiParts.textbox = Frame8
+		do
+			local bd = Instance.new("UIStroke")
+			bd.Color = color_5
+			bd.Thickness = 1
+			bd.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+			bd.Parent = Frame8
+		end
 		local UICorner5 = Instance.new("UICorner")
 		UICorner5.Name = "UICorner"
 		UICorner5.CornerRadius = UDim.new(0, 6)
@@ -1776,7 +1864,7 @@ do
 		TextBox.BorderSizePixel = 0
 		TextBox.Font = Enum.Font.BuilderSansMedium
 		TextBox.MultiLine = false
-		TextBox.PlaceholderColor3 = Color3.fromRGB(236, 238, 242)
+		TextBox.PlaceholderColor3 = Color3.fromRGB(125, 140, 170)
 		TextBox.Text = ""
 		TextBox.TextColor3 = Color3.fromRGB(236, 238, 242)
 		TextBox.TextSize = 14
@@ -1807,6 +1895,13 @@ do
 		UICorner5.Name = "UICorner"
 		UICorner5.CornerRadius = UDim.new(0, 6)
 		UICorner5.Parent = TextButton3
+		do
+			local bd = Instance.new("UIStroke")
+			bd.Color = color_5
+			bd.Thickness = 1
+			bd.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+			bd.Parent = TextButton3
+		end
 		local ImageLabel4 = Instance.new("ImageLabel")
 		ImageLabel4.Name = "Indicator"
 		ImageLabel4.BackgroundTransparency = 1
@@ -1822,6 +1917,13 @@ do
 		Frame9.Position = UDim2.new(0, 0, 0, 24)
 		Frame9.Size = UDim2.new(1, 0, 1, -20)
 		Frame9.Parent = Frame8
+		do
+			local bd = Instance.new("UIStroke")
+			bd.Color = color_5
+			bd.Thickness = 1
+			bd.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+			bd.Parent = Frame9
+		end
 		local UICorner6 = Instance.new("UICorner")
 		UICorner6.Name = "UICorner"
 		UICorner6.CornerRadius = UDim.new(0, 6)
@@ -1831,7 +1933,8 @@ do
 		ScrollingFrame.BackgroundTransparency = 1
 		ScrollingFrame.BorderSizePixel = 0
 		ScrollingFrame.CanvasSize = UDim2.new()
-		ScrollingFrame.ScrollBarThickness = 6
+		ScrollingFrame.ScrollBarThickness = 4
+		ScrollingFrame.ScrollBarImageColor3 = color_5
 		ScrollingFrame.ScrollingDirection = Enum.ScrollingDirection.Y
 		ScrollingFrame.Size = UDim2.new(1, 0, 1, 0)
 		ScrollingFrame.Parent = Frame9
@@ -1852,6 +1955,13 @@ do
 		Frame8.BorderSizePixel = 0
 		Frame8.Size = UDim2.new(1, -15, 0, 20)
 		uiParts.slider = Frame8
+		do
+			local bd = Instance.new("UIStroke")
+			bd.Color = color_5
+			bd.Thickness = 1
+			bd.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+			bd.Parent = Frame8
+		end
 		local UICorner5 = Instance.new("UICorner")
 		UICorner5.Name = "UICorner"
 		UICorner5.CornerRadius = UDim.new(0, 6)
@@ -1863,11 +1973,16 @@ do
 		TextButton3.Parent = Frame8
 		local Frame9 = Instance.new("Frame")
 		Frame9.Name = "Indicator"
-		Frame9.BackgroundColor3 = uicolor
-		Frame9.BackgroundTransparency = 0.6
+		Frame9.BackgroundColor3 = Color3.new(1, 1, 1)
+		Frame9.BackgroundTransparency = 0.4
 		Frame9.BorderSizePixel = 0
 		Frame9.Size = UDim2.new(0, 0, 0, 20)
 		Frame9.Parent = Frame8
+		do
+			local fillGrad = Instance.new("UIGradient")
+			fillGrad.Color = ColorSequence.new(uicolor:Lerp(Color3.new(0, 0, 0), 0.2), uicolor:Lerp(Color3.new(1, 1, 1), 0.3))
+			fillGrad.Parent = Frame9
+		end
 		local UICorner6 = Instance.new("UICorner")
 		UICorner6.Name = "UICorner"
 		UICorner6.CornerRadius = UDim.new(0, 6)
@@ -1897,7 +2012,7 @@ do
 	do
 		local Frame8 = Instance.new("Frame")
 		Frame8.Name = "Modal"
-		Frame8.BackgroundColor3 = Color3.fromRGB(16, 17, 20)
+		Frame8.BackgroundColor3 = Color3.fromRGB(13, 18, 31)
 		Frame8.BorderSizePixel = 0
 		Frame8.Position = UDim2.new(0.5, -150, 0.05, 0)
 		Frame8.Size = UDim2.new(0, 300, 0.9, 0)
@@ -1912,7 +2027,8 @@ do
 		ScrollingFrame.BackgroundTransparency = 1
 		ScrollingFrame.BorderSizePixel = 0
 		ScrollingFrame.CanvasSize = UDim2.new()
-		ScrollingFrame.ScrollBarThickness = 6
+		ScrollingFrame.ScrollBarThickness = 4
+		ScrollingFrame.ScrollBarImageColor3 = color_5
 		ScrollingFrame.ScrollingDirection = Enum.ScrollingDirection.Y
 		ScrollingFrame.Size = UDim2.new(1, 0, 1, 0)
 		ScrollingFrame.Parent = Frame8
@@ -2000,7 +2116,8 @@ do
 		ScrollingFrame.BorderSizePixel = 0
 		ScrollingFrame.CanvasSize = UDim2.new()
 		ScrollingFrame.ElasticBehavior = Enum.ElasticBehavior.Never
-		ScrollingFrame.ScrollBarThickness = 6
+		ScrollingFrame.ScrollBarThickness = 4
+		ScrollingFrame.ScrollBarImageColor3 = color_5
 		ScrollingFrame.ScrollingDirection = Enum.ScrollingDirection.XY
 		ScrollingFrame.Position = UDim2.new(0, 5, 0, 30)
 		ScrollingFrame.Size = UDim2.new(1, -10, 1, -35)
@@ -2334,9 +2451,16 @@ do
 	Frame10.BorderSizePixel = 0
 	Frame10.Size = UDim2.new(1, 0, 0, 23)
 	Frame10.Parent = ScrollingFrame
+	do
+		local sbStroke = Instance.new("UIStroke")
+		sbStroke.Color = color_5
+		sbStroke.Thickness = 1
+		sbStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		sbStroke.Parent = Frame10
+	end
 	local Frame11 = Instance.new("Frame")
 	Frame11.Name = "Divider"
-	Frame11.BackgroundColor3 = Color3.fromRGB(32, 34, 40)
+	Frame11.BackgroundColor3 = Color3.fromRGB(26, 36, 60)
 	Frame11.BorderSizePixel = 0
 	Frame11.Position = UDim2.new(0, 0, 0, 28)
 	Frame11.Size = UDim2.new(1, 0, 0, 2)
@@ -2349,7 +2473,7 @@ do
 	TextBox.Font = Enum.Font.BuilderSansMedium
 	TextBox.PlaceholderText = "Search"
 	TextBox.TextXAlignment = Enum.TextXAlignment.Left
-	TextBox.PlaceholderColor3 = Color3.fromRGB(150, 155, 168)
+	TextBox.PlaceholderColor3 = Color3.fromRGB(125, 140, 170)
 	TextBox.Text = ""
 	TextBox.TextColor3 = Color3.fromRGB(245, 246, 248)
 	TextBox.TextSize = 13
@@ -2386,6 +2510,22 @@ do
 			end
 		end
 	end)
+
+	local tabInfo = TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	local tabTextOn, tabTextOff = Color3.fromRGB(255, 255, 255), Color3.fromRGB(160, 175, 202)
+	local tabIconOn, tabIconOff = uicolor:Lerp(Color3.new(1, 1, 1), 0.35), Color3.fromRGB(140, 158, 192)
+
+	local function styleTab(btn, active)
+		TweenService:Create(btn, tabInfo, { BackgroundTransparency = active and 0.8 or 1, TextColor3 = active and tabTextOn or tabTextOff }):Play()
+		local bar = btn:FindFirstChild("TabBar")
+		if bar then
+			TweenService:Create(bar, tabInfo, { BackgroundTransparency = active and 0 or 1 }):Play()
+		end
+		local icon = btn:FindFirstChild("TabIcon")
+		if icon then
+			TweenService:Create(icon, tabInfo, { ImageColor3 = active and tabIconOn or tabIconOff }):Play()
+		end
+	end
 
 	ui.AddTab = function(tabName, image, twoColumn, v71)
 		local clone = uiParts.tabbutton:Clone()
@@ -2456,8 +2596,8 @@ do
 					activeTabFrame2.Parent = nil
 				end
 
-				TweenService:Create(activeTabButton, TweenInfo.new(0.15, Enum.EasingStyle.Linear, Enum.EasingDirection.In), { BackgroundTransparency = 1 }):Play()
-				TweenService:Create(clone, TweenInfo.new(0.15, Enum.EasingStyle.Linear, Enum.EasingDirection.In), { BackgroundTransparency = 0.78 }):Play()
+				styleTab(activeTabButton, false)
+				styleTab(clone, true)
 				ScrollingFrame2.Parent = ImageLabel
 				activeTabButton = clone
 				activeTabFrame = ScrollingFrame2
@@ -2470,7 +2610,7 @@ do
 		end)
 
 		if v71 then
-			TweenService:Create(clone, TweenInfo.new(0.15, Enum.EasingStyle.Linear, Enum.EasingDirection.In), { BackgroundTransparency = 0.78 }):Play()
+			styleTab(clone, true)
 			ScrollingFrame2.Parent = ImageLabel
 			activeTabButton = clone
 			activeTabFrame = ScrollingFrame2
@@ -2520,7 +2660,7 @@ do
 
 			folderApi.AddButton = function(text, callback, width)
 				table.insert(fieldClones, { text, clone })
-				local clone5 = uiParts.button:Clone()
+				local clone5 = cloneButton()
 
 				if width then
 					clone5.Size = UDim2.new(0, width, 0, 20)
@@ -2555,7 +2695,7 @@ do
 
 			folderApi.AddSwitch = function(text, callback, configSource, configKey, options)
 				local switchApi = {}
-				local clone5 = uiParts.switch:Clone()
+				local clone5 = cloneSwitch()
 				local switch = clone5.Switch
 				local title2 = switch.Title
 				title2.Text = text
@@ -3253,7 +3393,7 @@ do
 
 			folderApi.AddModal = function(n, y, o, Z, p)
 				table.insert(fieldClones, { n, clone })
-				local P = uiParts.button:Clone()
+				local P = cloneButton()
 				P.Size = UDim2.new(0, o, 0, 20)
 				P.Text = n
 				P.Parent = box
@@ -3265,7 +3405,7 @@ do
 
 			folderApi.AddAmuletModal = function(n, y, o)
 				table.insert(fieldClones, { n, clone })
-				local H = uiParts.button:Clone()
+				local H = cloneButton()
 				H.Size = UDim2.new(0, 130, 0, 20)
 				H.Text = "Configure Amulet"
 				H.Parent = box
@@ -3303,7 +3443,7 @@ do
 
 					local Frame12 = Instance.new("Frame")
 					Frame12.Name = "Modal"
-					Frame12.BackgroundColor3 = Color3.fromRGB(16, 17, 20)
+					Frame12.BackgroundColor3 = Color3.fromRGB(13, 18, 31)
 					Frame12.BorderSizePixel = 0
 					Frame12.Position = UDim2.new(0.5, -125, 0.125, 0)
 					Frame12.Size = UDim2.new(0, 250, 0.75, 0)
@@ -3318,7 +3458,8 @@ do
 					ScrollingFrame4.BackgroundTransparency = 1
 					ScrollingFrame4.BorderSizePixel = 0
 					ScrollingFrame4.CanvasSize = UDim2.new()
-					ScrollingFrame4.ScrollBarThickness = 6
+					ScrollingFrame4.ScrollBarThickness = 4
+					ScrollingFrame4.ScrollBarImageColor3 = color_5
 					ScrollingFrame4.ScrollingDirection = Enum.ScrollingDirection.Y
 					ScrollingFrame4.Size = UDim2.new(1, 0, 1, 0)
 					ScrollingFrame4.Parent = Frame12
@@ -3605,7 +3746,7 @@ do
 		end
 
 		local function addEntry(itemName, itemConfig)
-			local clone2 = uiParts.switch:Clone()
+			local clone2 = cloneSwitch()
 			clone2.Name = "Frame"
 			local rowHeight = 45
 
@@ -3774,7 +3915,7 @@ do
 				TweenService:Create(indicator, TweenInfo.new(0.08, Enum.EasingStyle.Linear, Enum.EasingDirection.In), { Size = UDim2.new(0, (math.clamp(tonumber(text2) or 0, 0, 5) - 0) / 5 * clone3.AbsoluteSize.X, 0, 20) }):Play()
 			elseif text == "BQs To Delete" then
 				local alwaysDelete = false
-				local switch2 = uiParts.switch:Clone().Switch
+				local switch2 = cloneSwitch().Switch
 				switch2.Title.Text = "Always Delete"
 				switch2.Position = UDim2.new(0, 0, 0, 25)
 				switch2.Parent = clone2
@@ -3840,7 +3981,7 @@ do
 			elseif text == "RBC Materials" then
 				if itemName == "Stinger" then
 					local autoStarSaw = false
-					local switch2 = uiParts.switch:Clone().Switch
+					local switch2 = cloneSwitch().Switch
 					switch2.Title.Text = "Auto Star Saw"
 					switch2.Position = UDim2.new(0, 0, 0, 25)
 					switch2.Parent = clone2
@@ -4155,7 +4296,7 @@ do
 					v80.Size = uDim2New(v81, (math.clamp(tonumber(text2) or 0, 1, 60) - 1) / 59 * clone3.AbsoluteSize.X, 0, 20)
 					create(v78, v79, tweenInfo, v80):Play()
 					local useAfterInterval = false
-					local switch2 = uiParts.switch:Clone().Switch
+					local switch2 = cloneSwitch().Switch
 					switch2.Title.Text = "Use After Interval"
 					switch2.Position = UDim2.new(0, 0, 0, 50)
 					switch2.Parent = clone2
@@ -4184,7 +4325,7 @@ do
 
 					if itemName == "Stinger" then
 						local useUntilStarSaw = false
-						local switch3 = uiParts.switch:Clone().Switch
+						local switch3 = cloneSwitch().Switch
 						switch3.Title.Text = "Use Until Star Saw"
 						switch3.Position = UDim2.new(0, 0, 0, 75)
 						switch3.Parent = clone2
@@ -4224,7 +4365,7 @@ do
 					end
 
 					local usePopStar = false
-					local switch3 = uiParts.switch:Clone().Switch
+					local switch3 = cloneSwitch().Switch
 					switch3.Title.Text = "Use When Pop Star"
 					local uDim2New2 = UDim2.new
 					local v84 = 0
@@ -4254,7 +4395,7 @@ do
 					end)
 
 					local useScorchingStar = false
-					local switch4 = uiParts.switch:Clone().Switch
+					local switch4 = cloneSwitch().Switch
 					switch4.Title.Text = "Use When Scorching Star"
 					switch4.Position = UDim2.new(v84, 0, 0, itemName == "Stinger" and 125 or 100)
 					switch4.Parent = clone2
@@ -4282,7 +4423,7 @@ do
 					end)
 
 					local useGummyStar = false
-					local switch5 = uiParts.switch:Clone().Switch
+					local switch5 = cloneSwitch().Switch
 					switch5.Title.Text = "Use When Gummy Star"
 					switch5.Position = UDim2.new(v84, 0, 0, itemName == "Stinger" and 150 or 125)
 					switch5.Parent = clone2
@@ -4311,7 +4452,7 @@ do
 				end
 			else
 				local lockUpgrade = false
-				local switch2 = uiParts.switch:Clone().Switch
+				local switch2 = cloneSwitch().Switch
 				switch2.Title.Text = "Lock Upgrade"
 				switch2.Position = UDim2.new(0, 0, 0, 25)
 				switch2.Parent = clone2
@@ -4536,7 +4677,7 @@ do
 		local function addStatRow(parent, v78, statConfig, text2, minValue, maxValue, stepSize, hasRequired, v84)
 			local statEntry = statConfig[text2]
 			local isPassive = string.find(text2, "Passive") ~= nil
-			local clone2 = uiParts.switch:Clone()
+			local clone2 = cloneSwitch()
 			clone2.Name = "Frame"
 			local uDim2New = UDim2.new
 			local v87 = 1
@@ -4578,7 +4719,7 @@ do
 
 			if hasRequired then
 				local isRequired = false
-				local switch2 = uiParts.switch:Clone().Switch
+				local switch2 = cloneSwitch().Switch
 				switch2.Title.Text = "Required"
 				switch2.Position = UDim2.new(0, 0, 0, 25)
 				switch2.Parent = clone2
@@ -4829,7 +4970,7 @@ do
 		ImageLabel5.Name = "Tooltip"
 		ImageLabel5.BackgroundTransparency = 1
 		ImageLabel5.Image = "rbxassetid://11942813307"
-		ImageLabel5.ImageColor3 = Color3.fromRGB(16, 17, 20)
+		ImageLabel5.ImageColor3 = Color3.fromRGB(13, 18, 31)
 		ImageLabel5.ImageTransparency = 0.05
 		ImageLabel5.ScaleType = Enum.ScaleType.Slice
 		ImageLabel5.SliceCenter = Rect.new(512, 512, 512, 512)
@@ -4860,7 +5001,7 @@ do
 		TextLabel4.BackgroundTransparency = 1
 		TextLabel4.Font = Enum.Font.BuilderSans
 		TextLabel4.Text = text2
-		TextLabel4.TextColor3 = Color3.fromRGB(190, 194, 204)
+		TextLabel4.TextColor3 = Color3.fromRGB(165, 180, 208)
 		TextLabel4.TextSize = 13
 		TextLabel4.TextXAlignment = Enum.TextXAlignment.Left
 		TextLabel4.Position = UDim2.new(0, 10, 0, newlineCount == 2 and 37.5 or newlineCount == 1 and 27.5 or 30)
