@@ -301,6 +301,7 @@ local cfg = {
 		fastprecisemark = false,
 		fastprecisemarkmethod = "Tween",
 		precisetweenspeed = 150,
+		precisespeedradius = 10,
 		rares = false,
 	},
 	dispensers = {
@@ -50818,11 +50819,10 @@ do
 			state.speedPausedUntil = os.clock() + 8 -- failsafe
 
 			local humanoid = getHumanoid()
-			local modifiers = gameApi:Cache({ "ModifierCaches", "Value" })
-			local legit = modifiers and modifiers.PlayerMovespeed and modifiers.PlayerMovespeed._
+			local native = state.nativeWalkSpeed
 
-			if legit and humanoid.WalkSpeed > legit then
-				humanoid.WalkSpeed = legit
+			if native and native >= 8 and humanoid.WalkSpeed > native then
+				humanoid.WalkSpeed = native
 			end
 		end
 
@@ -50830,7 +50830,7 @@ do
 			PT.depth = math.max(PT.depth - 1, 0)
 
 			if PT.depth == 0 then
-				state.speedPausedUntil = os.clock() + 0.25
+				state.speedPausedUntil = os.clock() + 0.15
 			end
 		end
 
@@ -51584,45 +51584,27 @@ do
 			end
 
 			if targetKind == "Precise Convert" then
-				PT.pause()
-				local ok = followPrecise(targetObject, options)
-				PT.resume()
-				return ok
+				return followPrecise(targetObject, options)
 			end
 
 			if targetKind == "Precise Purple" then
-				PT.pause()
-				local ok = dodgePrecise(targetObject, options, fastMode(cfg.detected.fastprecisemark, cfg.detected.fastprecisemarkmethod))
-				PT.resume()
-				return ok
+				return dodgePrecise(targetObject, options, fastMode(cfg.detected.fastprecisemark, cfg.detected.fastprecisemarkmethod))
 			end
 
 			if targetKind == "Precise" then
-				PT.pause()
-				local ok = collectObject(targetObject, "precise", 6, nil, nil, fastMode(cfg.detected.fastprecise, cfg.detected.fastprecisemethod))
-				PT.resume()
-				return ok
+				return collectObject(targetObject, "precise", 6, nil, nil, fastMode(cfg.detected.fastprecise, cfg.detected.fastprecisemethod))
 			end
 
 			if targetKind == "Precise2Convert" then
-				PT.pause()
-				local ok = followMarks(targetObject, options)
-				PT.resume()
-				return ok
+				return followMarks(targetObject, options)
 			end
 
 			if targetKind == "Precise2Purple" then
-				PT.pause()
-				local ok = dodgeMarks(targetObject, options, fastMode(cfg.detected.fastprecisemark, cfg.detected.fastprecisemarkmethod))
-				PT.resume()
-				return ok
+				return dodgeMarks(targetObject, options, fastMode(cfg.detected.fastprecisemark, cfg.detected.fastprecisemarkmethod))
 			end
 
 			if targetKind == "Precise2" or targetKind == "Precise2All" then
-				PT.pause()
-				local ok = collectObject(targetObject, nil, 6, nil, nil, fastMode(cfg.detected.fastprecise, cfg.detected.fastprecisemethod), nil, true)
-				PT.resume()
-				return ok
+				return collectObject(targetObject, nil, 6, nil, nil, fastMode(cfg.detected.fastprecise, cfg.detected.fastprecisemethod), nil, true)
 			end
 
 			if targetKind == "Puppy Ball" then
@@ -66564,14 +66546,48 @@ more accurate dodging]],
 					else
 						threads:Add("walkspeed", function()
 							while task.wait(0.1) do
-								-- speed hack is off only while precise targets are being collected
-								if os.clock() < (state.speedPausedUntil or 0) then
-									local modifiers = gameApi:Cache({ "ModifierCaches", "Value" })
-									local legit = modifiers and modifiers.PlayerMovespeed and modifiers.PlayerMovespeed._
-									local humanoid = getHumanoid()
+								local humanoid = getHumanoid()
+								local holdSpeed = os.clock() < (state.speedPausedUntil or 0)
 
-									if legit and humanoid.WalkSpeed > legit then
-										humanoid.WalkSpeed = legit
+								-- speed hack is off only while close to an active precise target
+								if not holdSpeed and tracked then
+									local root = getRootPart()
+									local pos = root.Position
+									local vel = root.AssemblyLinearVelocity
+									local ahead = pos + Vector3.new(vel.X, 0, vel.Z) * 0.15
+									local radius = tonumber(cfg.detected.precisespeedradius) or 10
+
+									local function isNear(p)
+										return Vector3.new(p.X - pos.X, 0, p.Z - pos.Z).Magnitude < radius or Vector3.new(p.X - ahead.X, 0, p.Z - ahead.Z).Magnitude < radius
+									end
+
+									for k in pairs(tracked.precise) do
+										if k.Parent and k.BrickColor.Name ~= "Flint" and isNear(k.Position) then
+											holdSpeed = true
+											break
+										end
+									end
+
+									if not holdSpeed then
+										for _, mark in pairs(tracked.precise2) do
+											if not mark.Touched and isNear(mark.Position) then
+												holdSpeed = true
+												break
+											end
+										end
+									end
+								end
+
+								-- remember the game's own speed (before the hack raises it)
+								if not holdSpeed and humanoid.WalkSpeed < cfg.vars.walkspeed then
+									state.nativeWalkSpeed = humanoid.WalkSpeed
+								end
+
+								if holdSpeed then
+									local native = state.nativeWalkSpeed
+
+									if native and native >= 8 and humanoid.WalkSpeed > native then
+										humanoid.WalkSpeed = native
 									end
 
 									continue
@@ -69355,6 +69371,8 @@ Are you sure you want to enable it?]])
 				detectedFolder.AddDropdown("Fast Precise Mark Method", { "Tween", "Teleport" }, nil, nil, "detected", "fastprecisemarkmethod", { Width = 250 })
 
 				detectedFolder.AddSlider("Precise Tween Speed", nil, 40, 400, "detected", "precisetweenspeed", { Left = true })
+
+				detectedFolder.AddSlider("Precise Speed Hack Off Radius", nil, 4, 30, "detected", "precisespeedradius", { Left = true })
 
 				local eggIconIds = {
 					Sticker = "Sticker",
