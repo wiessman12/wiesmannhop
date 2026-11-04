@@ -51069,6 +51069,33 @@ do
 			return nodePositions, nodeEdges
 		end
 
+		-- Speed hack pause while collecting precise (anti-kick 267)
+		local PT = { depth = 0 }
+
+		function PT.pause()
+			PT.depth += 1
+			state.speedPausedUntil = os.clock() + 15 -- failsafe
+			if not cfg.vars.walkspeedenabled then
+				return
+			end
+
+			local modifiers = gameApi:Cache({ "ModifierCaches", "Value" })
+			local legit = modifiers and modifiers.PlayerMovespeed and modifiers.PlayerMovespeed._
+			local humanoid = getHumanoid()
+
+			if legit and humanoid.WalkSpeed > legit then
+				humanoid.WalkSpeed = legit
+			end
+		end
+
+		function PT.resume()
+			PT.depth = math.max(PT.depth - 1, 0)
+
+			if PT.depth == 0 then
+				state.speedPausedUntil = os.clock() + 0.25
+			end
+		end
+
 		-- Fast movement helper for Fast Precise / Fast Precise Mark.
 		-- Returns nil when the feature is off, "Teleport" or true (tween) otherwise.
 		local function fastMode(enabled, method)
@@ -51455,27 +51482,45 @@ do
 			end
 
 			if targetKind == "Precise Convert" then
-				return followPrecise(targetObject, options)
+				PT.pause()
+				local ok = followPrecise(targetObject, options)
+				PT.resume()
+				return ok
 			end
 
 			if targetKind == "Precise Purple" then
-				return dodgePrecise(targetObject, options, fastMode(cfg.detected.fastprecisemark, cfg.detected.fastprecisemarkmethod))
+				PT.pause()
+				local ok = dodgePrecise(targetObject, options, fastMode(cfg.detected.fastprecisemark, cfg.detected.fastprecisemarkmethod))
+				PT.resume()
+				return ok
 			end
 
 			if targetKind == "Precise" then
-				return collectObject(targetObject, "precise", 6, nil, nil, fastMode(cfg.detected.fastprecise, cfg.detected.fastprecisemethod))
+				PT.pause()
+				local ok = collectObject(targetObject, "precise", 6, nil, nil, fastMode(cfg.detected.fastprecise, cfg.detected.fastprecisemethod))
+				PT.resume()
+				return ok
 			end
 
 			if targetKind == "Precise2Convert" then
-				return followMarks(targetObject, options)
+				PT.pause()
+				local ok = followMarks(targetObject, options)
+				PT.resume()
+				return ok
 			end
 
 			if targetKind == "Precise2Purple" then
-				return dodgeMarks(targetObject, options, fastMode(cfg.detected.fastprecisemark, cfg.detected.fastprecisemarkmethod))
+				PT.pause()
+				local ok = dodgeMarks(targetObject, options, fastMode(cfg.detected.fastprecisemark, cfg.detected.fastprecisemarkmethod))
+				PT.resume()
+				return ok
 			end
 
 			if targetKind == "Precise2" or targetKind == "Precise2All" then
-				return collectObject(targetObject, nil, 6, nil, nil, fastMode(cfg.detected.fastprecise, cfg.detected.fastprecisemethod), nil, true)
+				PT.pause()
+				local ok = collectObject(targetObject, nil, 6, nil, nil, fastMode(cfg.detected.fastprecise, cfg.detected.fastprecisemethod), nil, true)
+				PT.resume()
+				return ok
 			end
 
 			if targetKind == "Puppy Ball" then
@@ -66417,6 +66462,10 @@ more accurate dodging]],
 					else
 						threads:Add("walkspeed", function()
 							while task.wait(0.1) do
+								if os.clock() < (state.speedPausedUntil or 0) then
+									continue
+								end
+
 								if not cfg.vars.walkdynamic then
 									local walkspeed = cfg.vars.walkspeed
 
