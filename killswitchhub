@@ -629,13 +629,13 @@ local cfg = {
 		accentr = 41, accentg = 74, accentb = 122,
 		gradient = false,
 		gradr = 70, gradg = 110, gradb = 180,
-		gradrotation = 90,
+		gradrotation = 0,
 		gradanimated = false,
 		rainbow = false,
 		bgr = 21, bgg = 22, bgb = 23,
 		bggradient = false,
 		bgendr = 30, bgendg = 34, bgendb = 48,
-		bgrotation = 45,
+		bgrotation = 90,
 		panelr = 42, panelg = 42, panelb = 42,
 		windowtransparency = 0,
 		paneltransparency = 0,
@@ -646,8 +646,7 @@ local cfg = {
 		skyr = 90, skyg = 170, skyb = 255,
 		skygradient = false,
 		sky2r = 40, sky2g = 100, sky2b = 220,
-		skydensity = 40,
-		skysolid = false,
+		skyclearhaze = true,
 		skyhidebodies = false,
 		skytint = false,
 		skyfog = false,
@@ -4884,7 +4883,7 @@ do
 		rbc = ui.AddTab("RBC", "http://www.roblox.com/asset/?id=113324128574355", true),
 		webhook = ui.AddTab("Webhook", "rbxassetid://10723426722", true),
 		config = ui.AddTab("Config", "rbxassetid://10734950309", true),
-		customization = ui.AddTab("Customization", "rbxassetid://10709782758", true),
+		customization = ui.AddTab("Custom", "rbxassetid://10709782758", true),
 		debug = ui.AddTab("Debug", "rbxassetid://10709782845", true),
 	}
 
@@ -66599,6 +66598,7 @@ more accurate dodging]],
 					local weak = { __mode = "k" }
 					local sliders = {}
 					local switches = {}
+					local pickers = {}
 					local fontDropdown = nil
 
 					local registry = {
@@ -66637,6 +66637,10 @@ more accurate dodging]],
 
 					local function colorKey(color)
 						return math.floor(color.R * 255 + 0.5) * 65536 + math.floor(color.G * 255 + 0.5) * 256 + math.floor(color.B * 255 + 0.5)
+					end
+
+					local function hexOf(color)
+						return string.format("%02X%02X%02X", byte(color.R * 255), byte(color.G * 255), byte(color.B * 255))
 					end
 
 					local function shift(color, dr, dg, db)
@@ -66704,7 +66708,7 @@ more accurate dodging]],
 					end
 
 					----------------------------------------------------------------
-					-- styling
+					-- menu styling
 					----------------------------------------------------------------
 					local function setGradient(inst, enabled, color0, color1, rotation)
 						local gradient = inst:FindFirstChild("AtlasGradient")
@@ -66735,7 +66739,7 @@ more accurate dodging]],
 							-- UIGradient also tints text, so text buttons keep a solid accent color
 							if cust.gradient == true and not isText(inst) then
 								setBackground(inst, Color3.new(1, 1, 1))
-								setGradient(inst, true, pal.accent, pal.accent2, num("gradrotation", 90))
+								setGradient(inst, true, pal.accent, pal.accent2, num("gradrotation", 0))
 							else
 								setBackground(inst, pal.accent)
 								setGradient(inst, false)
@@ -66743,7 +66747,7 @@ more accurate dodging]],
 						elseif role == "bg" then
 							if cust.bggradient == true and not isText(inst) then
 								setBackground(inst, Color3.new(1, 1, 1))
-								setGradient(inst, true, pal.bg, pal.bgend, num("bgrotation", 45))
+								setGradient(inst, true, pal.bg, pal.bgend, num("bgrotation", 90))
 							else
 								setBackground(inst, pal.bg)
 								setGradient(inst, false)
@@ -66810,7 +66814,7 @@ more accurate dodging]],
 					end
 
 					local function classify(inst, pal)
-						if not inst:IsA("GuiObject") then
+						if not inst:IsA("GuiObject") or inst:GetAttribute("AtlasIgnore") then
 							return
 						end
 
@@ -66883,7 +66887,7 @@ more accurate dodging]],
 								ColorSequenceKeypoint.new(1, pal.accent),
 							})
 
-							local rotation = num("gradrotation", 90)
+							local rotation = num("gradrotation", 0)
 							gradient.Rotation = rotation
 							gradients[gradient] = rotation
 						else
@@ -66973,11 +66977,137 @@ more accurate dodging]],
 					end
 
 					----------------------------------------------------------------
-					-- sky
+					-- sky: generated PNG skybox (fallback: Atmosphere)
 					----------------------------------------------------------------
+					local crcTable = nil
+
+					local function crc32(str)
+						if not crcTable then
+							crcTable = {}
+
+							for i = 0, 255 do
+								local c = i
+
+								for _ = 1, 8 do
+									if bit32.band(c, 1) == 1 then
+										c = bit32.bxor(0xEDB88320, bit32.rshift(c, 1))
+									else
+										c = bit32.rshift(c, 1)
+									end
+								end
+
+								crcTable[i] = c
+							end
+						end
+
+						local crc = 0xFFFFFFFF
+
+						for i = 1, #str do
+							crc = bit32.bxor(crcTable[bit32.band(bit32.bxor(crc, string.byte(str, i)), 0xFF)], bit32.rshift(crc, 8))
+						end
+
+						return bit32.bxor(crc, 0xFFFFFFFF)
+					end
+
+					local function adler32(str)
+						local a, b = 1, 0
+
+						for i = 1, #str do
+							a = (a + string.byte(str, i)) % 65521
+							b = (b + a) % 65521
+						end
+
+						return b * 65536 + a
+					end
+
+					local function pngChunk(chunkType, data)
+						return string.pack(">I4", #data) .. chunkType .. data .. string.pack(">I4", crc32(chunkType .. data))
+					end
+
+					local function makePng(width, height, rowColor)
+						local rows = table.create(height)
+
+						for y = 1, height do
+							local r, g, b = rowColor(y, height)
+							rows[y] = "\0" .. string.rep(string.char(r, g, b), width)
+						end
+
+						local raw = table.concat(rows)
+						local blocks = { "\120\1" }
+						local position = 1
+						local total = #raw
+
+						repeat
+							local length = math.min(65535, total - position + 1)
+							local final = (position + length > total) and 1 or 0
+							blocks[#blocks + 1] = string.char(final) .. string.pack("<I2", length) .. string.pack("<I2", 65535 - length) .. string.sub(raw, position, position + length - 1)
+							position += length
+						until position > total
+
+						blocks[#blocks + 1] = string.pack(">I4", adler32(raw))
+
+						return "\137PNG\r\n\26\n"
+							.. pngChunk("IHDR", string.pack(">I4I4BBBBB", width, height, 8, 2, 0, 0, 0))
+							.. pngChunk("IDAT", table.concat(blocks))
+							.. pngChunk("IEND", "")
+					end
+
+					local function mix(a, b, t)
+						return math.floor(a + (b - a) * t + 0.5)
+					end
+
+					local function buildSkyAssets(top, horizon)
+						local assetFn = getcustomasset or getsynasset
+
+						if type(assetFn) ~= "function" or type(writefile) ~= "function" then
+							return nil
+						end
+
+						local base = "atlas/sky_" .. hexOf(top) .. "_" .. hexOf(horizon)
+						local files = { top = base .. "_top.png", bottom = base .. "_bottom.png", side = base .. "_side.png" }
+						local t = { top.R * 255, top.G * 255, top.B * 255 }
+						local h = { horizon.R * 255, horizon.G * 255, horizon.B * 255 }
+
+						if not isfile(files.top) then
+							writefile(files.top, makePng(4, 4, function()
+								return byte(t[1]), byte(t[2]), byte(t[3])
+							end))
+						end
+
+						if not isfile(files.bottom) then
+							writefile(files.bottom, makePng(4, 4, function()
+								return byte(h[1]), byte(h[2]), byte(h[3])
+							end))
+						end
+
+						if not isfile(files.side) then
+							writefile(files.side, makePng(8, 256, function(y, height)
+								local s = math.clamp(((y - 1) / (height - 1)) * 2, 0, 1)
+								s = s * s * (3 - 2 * s)
+								return mix(t[1], h[1], s), mix(t[2], h[2], s), mix(t[3], h[3], s)
+							end))
+						end
+
+						return { top = assetFn(files.top), bottom = assetFn(files.bottom), side = assetFn(files.side) }
+					end
+
+					local SKY_FACES = {
+						SkyboxUp = "top",
+						SkyboxDn = "bottom",
+						SkyboxBk = "side",
+						SkyboxFt = "side",
+						SkyboxLf = "side",
+						SkyboxRt = "side",
+					}
+
 					local skyOrig = nil
 					local createdAtm = nil
-					local applied = { tint = false, fog = false, bodies = false, time = false }
+					local createdSky = nil
+					local boxKey = nil
+					local boxAssets = nil
+					local boxFailed = false
+					local fallbackNotified = false
+					local applied = { tint = false, fog = false, bodies = false, time = false, haze = false }
 
 					local function captureSky()
 						if skyOrig then
@@ -66997,7 +67127,16 @@ more accurate dodging]],
 						}
 
 						if sky then
-							skyOrig.sky = { StarCount = sky.StarCount, CelestialBodiesShown = sky.CelestialBodiesShown }
+							skyOrig.sky = {
+								StarCount = sky.StarCount,
+								CelestialBodiesShown = sky.CelestialBodiesShown,
+								SkyboxBk = sky.SkyboxBk,
+								SkyboxDn = sky.SkyboxDn,
+								SkyboxFt = sky.SkyboxFt,
+								SkyboxLf = sky.SkyboxLf,
+								SkyboxRt = sky.SkyboxRt,
+								SkyboxUp = sky.SkyboxUp,
+							}
 						end
 
 						if atm then
@@ -67021,6 +67160,7 @@ more accurate dodging]],
 
 						local original = skyOrig
 						skyOrig = nil
+						boxKey = nil
 
 						pcall(function()
 							Lighting.Ambient = original.Ambient
@@ -67048,19 +67188,26 @@ more accurate dodging]],
 								end
 							end
 
-							local sky = Lighting:FindFirstChildOfClass("Sky")
+							if createdSky then
+								createdSky:Destroy()
+							else
+								local sky = Lighting:FindFirstChildOfClass("Sky")
 
-							if sky and original.sky then
-								sky.StarCount = original.sky.StarCount
-								sky.CelestialBodiesShown = original.sky.CelestialBodiesShown
+								if sky and original.sky then
+									for property, value in pairs(original.sky) do
+										sky[property] = value
+									end
+								end
 							end
 						end)
 
 						createdAtm = nil
+						createdSky = nil
 						applied.tint = false
 						applied.fog = false
 						applied.bodies = false
 						applied.time = false
+						applied.haze = false
 					end
 
 					local function skyStep()
@@ -67068,37 +67215,78 @@ more accurate dodging]],
 							return
 						end
 
-						local color1 = rgbOf("sky", 90, 170, 255)
-						local color2 = cust.skygradient == true and rgbOf("sky2", 40, 100, 220) or color1
+						local top = rgbOf("sky", 90, 170, 255)
+						local horizon = cust.skygradient == true and rgbOf("sky2", 40, 100, 220) or top
+						local assetFn = getcustomasset or getsynasset
+						local canBox = type(assetFn) == "function" and type(writefile) == "function" and not boxFailed
 						local atm = Lighting:FindFirstChildOfClass("Atmosphere")
+						local sky = Lighting:FindFirstChildOfClass("Sky")
 
-						if not atm then
-							atm = Instance.new("Atmosphere")
-							atm.Name = "AtlasAtmosphere"
-							atm.Parent = Lighting
-							createdAtm = atm
-						end
+						if canBox then
+							if not sky then
+								sky = Instance.new("Sky")
+								sky.Name = "AtlasSky"
+								sky.Parent = Lighting
+								createdSky = sky
+							end
 
-						local ownAtm = atm == createdAtm
-						setIf(atm, "Color", color1)
-						setIf(atm, "Decay", color2)
-						setIf(atm, "Density", math.clamp(num("skydensity", 40), 0, 100) / 100)
+							local key = hexOf(top) .. hexOf(horizon)
 
-						if cust.skysolid == true then
+							if key ~= boxKey then
+								boxKey = key
+								local ok, assets = pcall(buildSkyAssets, top, horizon)
+
+								if ok and assets then
+									boxAssets = assets
+								else
+									boxAssets = nil
+									boxFailed = true
+									warn("Customization: skybox generation failed: " .. tostring(assets))
+								end
+							end
+
+							if boxAssets then
+								for property, face in pairs(SKY_FACES) do
+									setIf(sky, property, boxAssets[face])
+								end
+							end
+
+							-- the game's own atmosphere haze would wash the sky out
+							if atm and atm ~= createdAtm then
+								if cust.skyclearhaze ~= false then
+									setIf(atm, "Density", 0)
+									setIf(atm, "Haze", 0)
+									setIf(atm, "Glare", 0)
+									applied.haze = true
+								elseif applied.haze and skyOrig.atm then
+									atm.Density = skyOrig.atm.Density
+									atm.Haze = skyOrig.atm.Haze
+									atm.Glare = skyOrig.atm.Glare
+									applied.haze = false
+								end
+							end
+						else
+							if not fallbackNotified then
+								fallbackNotified = true
+								ui.Notify("Custom Sky", "Your executor can't load custom images, using a basic atmosphere tint instead")
+							end
+
+							if not atm then
+								atm = Instance.new("Atmosphere")
+								atm.Name = "AtlasAtmosphere"
+								atm.Parent = Lighting
+								createdAtm = atm
+							end
+
+							setIf(atm, "Color", horizon)
+							setIf(atm, "Decay", top)
+							setIf(atm, "Density", 0.8)
 							setIf(atm, "Offset", 1)
 							setIf(atm, "Glare", 0)
 							setIf(atm, "Haze", 0)
-						elseif skyOrig.atm and not ownAtm then
-							setIf(atm, "Offset", skyOrig.atm.Offset)
-							setIf(atm, "Glare", skyOrig.atm.Glare)
-							setIf(atm, "Haze", skyOrig.atm.Haze)
-						else
-							setIf(atm, "Offset", 0.25)
 						end
 
 						-- sun / moon / stars
-						local sky = Lighting:FindFirstChildOfClass("Sky")
-
 						if sky then
 							if cust.skyhidebodies == true then
 								setIf(sky, "StarCount", 0)
@@ -67113,8 +67301,8 @@ more accurate dodging]],
 
 						-- ambient tint
 						if cust.skytint == true then
-							setIf(Lighting, "OutdoorAmbient", skyOrig.OutdoorAmbient:Lerp(color1, 0.5))
-							setIf(Lighting, "Ambient", skyOrig.Ambient:Lerp(color1, 0.35))
+							setIf(Lighting, "OutdoorAmbient", skyOrig.OutdoorAmbient:Lerp(top, 0.5))
+							setIf(Lighting, "Ambient", skyOrig.Ambient:Lerp(top, 0.35))
 							applied.tint = true
 						elseif applied.tint then
 							Lighting.OutdoorAmbient = skyOrig.OutdoorAmbient
@@ -67124,7 +67312,7 @@ more accurate dodging]],
 
 						-- fog (skipped while Anti Lag is controlling the fog)
 						if cust.skyfog == true and not connections:Get("antilag") then
-							setIf(Lighting, "FogColor", color1)
+							setIf(Lighting, "FogColor", horizon)
 							setIf(Lighting, "FogStart", 0)
 							setIf(Lighting, "FogEnd", math.clamp(num("skyfogend", 1500), 100, 10000))
 							applied.fog = true
@@ -67162,6 +67350,200 @@ more accurate dodging]],
 					ScreenGui.Destroying:Connect(restoreSky)
 
 					----------------------------------------------------------------
+					-- color circles + custom color input
+					----------------------------------------------------------------
+					local PALETTE = {
+						{ 220, 50, 50 }, { 240, 130, 40 }, { 245, 210, 60 }, { 140, 215, 70 }, { 40, 170, 90 }, { 30, 175, 165 },
+						{ 50, 200, 230 }, { 70, 150, 240 }, { 45, 90, 200 }, { 85, 70, 190 }, { 150, 70, 200 }, { 210, 70, 170 },
+						{ 250, 130, 180 }, { 200, 50, 100 }, { 130, 85, 55 }, { 110, 25, 35 }, { 20, 35, 90 }, { 20, 70, 45 },
+						{ 245, 245, 245 }, { 190, 190, 195 }, { 120, 120, 125 }, { 60, 60, 65 }, { 30, 30, 34 }, { 10, 10, 12 },
+					}
+
+					local function parseColor(text)
+						local s = string.gsub(tostring(text), "%s", "")
+						s = string.lower(s)
+
+						local hex = string.match(s, "^#?(%x%x%x%x%x%x)$")
+
+						if hex then
+							return tonumber(string.sub(hex, 1, 2), 16), tonumber(string.sub(hex, 3, 4), 16), tonumber(string.sub(hex, 5, 6), 16)
+						end
+
+						local short = string.match(s, "^#(%x%x%x)$")
+
+						if short then
+							local r, g, b = string.sub(short, 1, 1), string.sub(short, 2, 2), string.sub(short, 3, 3)
+							return tonumber(r .. r, 16), tonumber(g .. g, 16), tonumber(b .. b, 16)
+						end
+
+						local r, g, b = string.match(s, "^rgb%((%d+),(%d+),(%d+)%)$")
+
+						if not r then
+							r, g, b = string.match(s, "^(%d+)[,;](%d+)[,;](%d+)$")
+						end
+
+						if r then
+							r, g, b = tonumber(r), tonumber(g), tonumber(b)
+
+							if r <= 255 and g <= 255 and b <= 255 then
+								return r, g, b
+							end
+						end
+
+						return nil
+					end
+
+					local function addCorner(inst, radius)
+						local corner = Instance.new("UICorner")
+						corner.CornerRadius = radius
+						corner.Parent = inst
+					end
+
+					local POPUP_HEIGHT = 130
+
+					local function makeColorPicker(folder, title, prefix, defaults, onChange)
+						local row = folder.AddLabel(title)
+						local box = row.Parent
+						row.Size = UDim2.new(1, -15, 0, 22)
+						row.TextXAlignment = Enum.TextXAlignment.Left
+
+						local hit = Instance.new("TextButton")
+						hit.Name = "PickerHit"
+						hit.AutoButtonColor = false
+						hit.BackgroundTransparency = 1
+						hit.Text = ""
+						hit.Size = UDim2.new(1, 0, 1, 0)
+						hit.ZIndex = 2
+						hit:SetAttribute("AtlasIgnore", true)
+						hit.Parent = row
+
+						local swatch = Instance.new("Frame")
+						swatch.Name = "PickerSwatch"
+						swatch.BorderSizePixel = 0
+						swatch.Size = UDim2.new(0, 18, 0, 18)
+						swatch.Position = UDim2.new(1, -20, 0.5, -9)
+						swatch.ZIndex = 3
+						swatch:SetAttribute("AtlasIgnore", true)
+						addCorner(swatch, UDim.new(1, 0))
+
+						local stroke = Instance.new("UIStroke")
+						stroke.Thickness = 1.5
+						stroke.Color = Color3.new(1, 1, 1)
+						stroke.Transparency = 0.5
+						stroke.Parent = swatch
+						swatch.Parent = row
+
+						local hexLabel = Instance.new("TextLabel")
+						hexLabel.Name = "PickerHex"
+						hexLabel.BackgroundTransparency = 1
+						hexLabel.Font = Enum.Font.GothamMedium
+						hexLabel.TextSize = 10
+						hexLabel.TextColor3 = Color3.fromRGB(150, 150, 155)
+						hexLabel.TextXAlignment = Enum.TextXAlignment.Right
+						hexLabel.Size = UDim2.new(0, 56, 1, 0)
+						hexLabel.Position = UDim2.new(1, -82, 0, 0)
+						hexLabel.ZIndex = 3
+						hexLabel:SetAttribute("AtlasIgnore", true)
+						hexLabel.Parent = row
+
+						local popup = Instance.new("Frame")
+						popup.Name = "PickerPopup"
+						popup.BackgroundColor3 = Color3.fromRGB(52, 53, 56)
+						popup.BorderSizePixel = 0
+						popup.Size = UDim2.new(1, -15, 0, POPUP_HEIGHT)
+						popup.Visible = false
+						addCorner(popup, UDim.new(0, 4))
+						popup.Parent = box
+
+						local input = Instance.new("TextBox")
+						input.Name = "HexInput"
+						input.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+						input.BorderSizePixel = 0
+						input.Font = Enum.Font.Gotham
+						input.TextSize = 12
+						input.TextColor3 = Color3.fromRGB(235, 235, 235)
+						input.PlaceholderText = "Paste #RRGGBB or R,G,B"
+						input.PlaceholderColor3 = Color3.fromRGB(130, 130, 135)
+						input.ClearTextOnFocus = true
+						input.Text = ""
+						input.Position = UDim2.new(0, 8, 0, 100)
+						input.Size = UDim2.new(1, -16, 0, 22)
+						addCorner(input, UDim.new(0, 4))
+						input.Parent = popup
+
+						local function setColor(r, g, b, silent)
+							r, g, b = byte(r), byte(g), byte(b)
+							cust[prefix .. "r"] = r
+							cust[prefix .. "g"] = g
+							cust[prefix .. "b"] = b
+							swatch.BackgroundColor3 = Color3.fromRGB(r, g, b)
+							local hex = string.format("#%02X%02X%02X", r, g, b)
+							hexLabel.Text = hex
+							input.Text = hex
+
+							if not silent then
+								saveConfig()
+
+								if onChange then
+									onChange()
+								end
+							end
+						end
+
+						for index, color in ipairs(PALETTE) do
+							local dot = Instance.new("TextButton")
+							dot.Name = "Dot"
+							dot.AutoButtonColor = false
+							dot.Text = ""
+							dot.BorderSizePixel = 0
+							dot.BackgroundColor3 = Color3.fromRGB(color[1], color[2], color[3])
+							dot.Size = UDim2.new(0, 18, 0, 18)
+							dot.Position = UDim2.new(0, 8 + ((index - 1) % 6) * 22, 0, 8 + math.floor((index - 1) / 6) * 22)
+							dot:SetAttribute("AtlasIgnore", true)
+							addCorner(dot, UDim.new(1, 0))
+							dot.Parent = popup
+
+							dot.MouseButton1Click:Connect(function()
+								setColor(color[1], color[2], color[3])
+							end)
+						end
+
+						input.FocusLost:Connect(function()
+							local r, g, b = parseColor(input.Text)
+
+							if r then
+								setColor(r, g, b)
+							else
+								if input.Text ~= "" then
+									ui.Notify("Customization", "Invalid color. Use #RRGGBB or R,G,B")
+								end
+
+								setColor(num(prefix .. "r", defaults[1]), num(prefix .. "g", defaults[2]), num(prefix .. "b", defaults[3]), true)
+							end
+						end)
+
+						hit.MouseButton1Click:Connect(function()
+							popup.Visible = not popup.Visible
+							folder.Refresh()
+						end)
+
+						setColor(num(prefix .. "r", defaults[1]), num(prefix .. "g", defaults[2]), num(prefix .. "b", defaults[3]), true)
+
+						local api = {}
+
+						api.Set = function(r, g, b)
+							setColor(r, g, b)
+						end
+
+						api.Redraw = function()
+							setColor(num(prefix .. "r", defaults[1]), num(prefix .. "g", defaults[2]), num(prefix .. "b", defaults[3]), true)
+						end
+
+						pickers[prefix] = api
+						return api
+					end
+
+					----------------------------------------------------------------
 					-- presets / import / export
 					----------------------------------------------------------------
 					local function setSlider(key, value)
@@ -67180,10 +67562,12 @@ more accurate dodging]],
 						end
 					end
 
-					local function setRGB(prefix, color)
-						setSlider(prefix .. "r", color[1])
-						setSlider(prefix .. "g", color[2])
-						setSlider(prefix .. "b", color[3])
+					local function setPicker(prefix, color)
+						local picker = pickers[prefix]
+
+						if picker then
+							picker.Set(color[1], color[2], color[3])
+						end
 					end
 
 					local function setFont(name)
@@ -67218,26 +67602,26 @@ more accurate dodging]],
 							return
 						end
 
-						setRGB("accent", preset.accent)
-						setRGB("grad", preset.accent2)
+						setPicker("accent", preset.accent)
+						setPicker("grad", preset.accent2)
 						setSwitch("gradient", preset.gradient)
-						setRGB("bg", preset.bg)
-						setRGB("bgend", preset.bgend)
+						setPicker("bg", preset.bg)
+						setPicker("bgend", preset.bgend)
 						setSwitch("bggradient", preset.bggradient)
-						setRGB("panel", preset.panel)
+						setPicker("panel", preset.panel)
 						requestApply()
 					end
 
 					local SKY_NAMES = { "Clear Blue", "Sunset", "Pink Dream", "Night", "Toxic", "Blood Moon", "Ocean" }
 
 					local SKY_PRESETS = {
-						["Clear Blue"] = { { 90, 170, 255 }, { 40, 100, 220 } },
-						Sunset = { { 255, 120, 60 }, { 120, 50, 140 } },
-						["Pink Dream"] = { { 255, 140, 200 }, { 150, 110, 255 } },
-						Night = { { 15, 20, 50 }, { 5, 5, 20 } },
-						Toxic = { { 110, 230, 70 }, { 20, 90, 40 } },
-						["Blood Moon"] = { { 170, 20, 30 }, { 40, 0, 10 } },
-						Ocean = { { 40, 190, 210 }, { 10, 60, 130 } },
+						["Clear Blue"] = { { 70, 140, 235 }, { 150, 205, 255 } },
+						Sunset = { { 90, 50, 140 }, { 255, 130, 70 } },
+						["Pink Dream"] = { { 150, 110, 255 }, { 255, 160, 210 } },
+						Night = { { 5, 5, 20 }, { 25, 35, 80 } },
+						Toxic = { { 20, 90, 40 }, { 130, 235, 80 } },
+						["Blood Moon"] = { { 40, 0, 10 }, { 190, 30, 40 } },
+						Ocean = { { 10, 60, 130 }, { 70, 200, 215 } },
 					}
 
 					local function applySkyPreset(name)
@@ -67247,8 +67631,8 @@ more accurate dodging]],
 							return
 						end
 
-						setRGB("sky", preset[1])
-						setRGB("sky2", preset[2])
+						setPicker("sky", preset[1])
+						setPicker("sky2", preset[2])
 						setSwitch("skygradient", true)
 						setSwitch("skyenabled", true)
 					end
@@ -67257,16 +67641,16 @@ more accurate dodging]],
 						local hue = math.random()
 						local a = Color3.fromHSV(hue, 0.7, 0.75)
 						local b = Color3.fromHSV((hue + 0.12) % 1, 0.65, 0.95)
-						setRGB("accent", { a.R * 255, a.G * 255, a.B * 255 })
-						setRGB("grad", { b.R * 255, b.G * 255, b.B * 255 })
+						setPicker("accent", { a.R * 255, a.G * 255, a.B * 255 })
+						setPicker("grad", { b.R * 255, b.G * 255, b.B * 255 })
 						setSwitch("gradient", true)
 						requestApply()
 					end
 
 					local function resetTheme()
 						applyPreset("Default")
-						setSlider("gradrotation", 90)
-						setSlider("bgrotation", 45)
+						setSlider("gradrotation", 0)
+						setSlider("bgrotation", 90)
 						setSlider("windowtransparency", 0)
 						setSlider("paneltransparency", 0)
 						setSlider("outlinethickness", 2)
@@ -67330,7 +67714,14 @@ more accurate dodging]],
 							local range = THEME_NUM[key]
 
 							if range and type(value) == "number" then
-								setSlider(key, math.clamp(value, range[1], range[2]))
+								local clamped = math.clamp(value, range[1], range[2])
+
+								if sliders[key] then
+									setSlider(key, clamped)
+								else
+									cust[key] = math.floor(clamped + 0.5)
+								end
+
 								count += 1
 							elseif THEME_FLAG[key] and type(value) == "boolean" then
 								setSwitch(key, value)
@@ -67341,6 +67732,11 @@ more accurate dodging]],
 							end
 						end
 
+						for _, picker in pairs(pickers) do
+							picker.Redraw()
+						end
+
+						saveConfig()
 						requestApply()
 						ui.Notify("Customization", count > 0 and "Theme imported" or "Nothing to import")
 					end
@@ -67348,47 +67744,48 @@ more accurate dodging]],
 					----------------------------------------------------------------
 					-- controls
 					----------------------------------------------------------------
-					local function addRGB(folder, label, prefix)
-						sliders[prefix .. "r"] = folder.AddSlider(label .. " R", requestApply, 0, 255, "customization", prefix .. "r", { Left = true })
-						sliders[prefix .. "g"] = folder.AddSlider(label .. " G", requestApply, 0, 255, "customization", prefix .. "g", { Left = true })
-						sliders[prefix .. "b"] = folder.AddSlider(label .. " B", requestApply, 0, 255, "customization", prefix .. "b", { Left = true })
-					end
-
-					local Presets = tab.AddFolder("Presets")
-					local Accent = tab.AddFolder("Menu Accent")
+					local Presets = tab.AddFolder("Theme Presets")
+					local Accent = tab.AddFolder("Accent Color")
 					local Background = tab.AddFolder("Background")
 					local Window = tab.AddFolder("Window", true)
 					local SkyFolder = tab.AddFolder("Sky", true)
 
-					Presets.AddDropdown("Theme Preset", PRESET_NAMES, nil, function(name)
+					Presets.AddDropdown("Preset", PRESET_NAMES, nil, function(name)
 						applyPreset(name)
 					end)
 
-					Presets.AddButton("Randomize Colors", randomizeTheme)
+					Presets.AddButton("Random Colors", randomizeTheme)
 					Presets.AddButton("Reset Menu Style", resetTheme)
-					Presets.AddButton("Copy Theme", exportTheme)
-					Presets.AddTextBox("Paste theme JSON", importTheme, nil, nil, { Clear = true })
+					Presets.AddButton("Copy Theme To Clipboard", exportTheme)
+					Presets.AddTextBox("Paste theme here", importTheme, nil, nil, { Clear = true })
 					Presets.Toggle(true, true)
 
-					addRGB(Accent, "Accent", "accent")
-					switches.gradient = Accent.AddSwitch("Accent Gradient", requestApply, "customization", "gradient")
-					addRGB(Accent, "Gradient", "grad")
-					sliders.gradrotation = Accent.AddSlider("Gradient Rotation", requestApply, 0, 360, "customization", "gradrotation", { Left = true })
-					switches.gradanimated = Accent.AddSwitch("Animated Gradient", requestApply, "customization", "gradanimated")
+					Accent.AddLabel("Click a circle to choose a color")
+					makeColorPicker(Accent, "Main Color", "accent", { 41, 74, 122 }, requestApply)
+					switches.gradient = Accent.AddSwitch("Use Gradient", requestApply, "customization", "gradient")
+					makeColorPicker(Accent, "Gradient Color", "grad", { 70, 110, 180 }, function()
+						setSwitch("gradient", true)
+						requestApply()
+					end)
+					sliders.gradrotation = Accent.AddSlider("Gradient Angle", requestApply, 0, 360, "customization", "gradrotation", { Left = true })
+					switches.gradanimated = Accent.AddSwitch("Animate Gradient", requestApply, "customization", "gradanimated")
 					switches.rainbow = Accent.AddSwitch("Rainbow Mode", requestApply, "customization", "rainbow")
 					Accent.Toggle(true, true)
 
-					addRGB(Background, "Background", "bg")
-					switches.bggradient = Background.AddSwitch("Background Gradient", requestApply, "customization", "bggradient")
-					addRGB(Background, "Gradient End", "bgend")
-					sliders.bgrotation = Background.AddSlider("Background Rotation", requestApply, 0, 360, "customization", "bgrotation", { Left = true })
-					addRGB(Background, "Panels", "panel")
+					makeColorPicker(Background, "Window Color", "bg", { 21, 22, 23 }, requestApply)
+					switches.bggradient = Background.AddSwitch("Use Gradient", requestApply, "customization", "bggradient")
+					makeColorPicker(Background, "Gradient Color", "bgend", { 30, 34, 48 }, function()
+						setSwitch("bggradient", true)
+						requestApply()
+					end)
+					sliders.bgrotation = Background.AddSlider("Gradient Angle", requestApply, 0, 360, "customization", "bgrotation", { Left = true })
+					makeColorPicker(Background, "Panel Color", "panel", { 42, 42, 42 }, requestApply)
 					Background.Toggle(true, true)
 
-					sliders.windowtransparency = Window.AddSlider("Window Transparency (%)", requestApply, 0, 90, "customization", "windowtransparency", { Left = true })
-					sliders.paneltransparency = Window.AddSlider("Panel Transparency (%)", requestApply, 0, 90, "customization", "paneltransparency", { Left = true })
-					switches.outline = Window.AddSwitch("Window Outline", requestApply, "customization", "outline")
-					sliders.outlinethickness = Window.AddSlider("Outline Thickness", requestApply, 1, 6, "customization", "outlinethickness", { Left = true })
+					sliders.windowtransparency = Window.AddSlider("Window Transparency", requestApply, 0, 90, "customization", "windowtransparency", { Left = true })
+					sliders.paneltransparency = Window.AddSlider("Panel Transparency", requestApply, 0, 90, "customization", "paneltransparency", { Left = true })
+					switches.outline = Window.AddSwitch("Glowing Outline", requestApply, "customization", "outline")
+					sliders.outlinethickness = Window.AddSlider("Outline Size", requestApply, 1, 6, "customization", "outlinethickness", { Left = true })
 
 					fontDropdown = Window.AddDropdown("Font", FONTS, nil, function()
 						requestApply()
@@ -67396,20 +67793,26 @@ more accurate dodging]],
 
 					Window.Toggle(true, true)
 
-					switches.skyenabled = SkyFolder.AddSwitch("Custom Sky", setSky, "customization", "sky", {
-						Tooltip = "Client-side only. Uses an Atmosphere, so the result depends on the game's lighting.",
+					switches.skyenabled = SkyFolder.AddSwitch("Enable Custom Sky", setSky, "customization", "sky", {
+						Tooltip = "Client-side only. Picking a sky color turns this on automatically.",
 					})
 
 					SkyFolder.AddDropdown("Sky Preset", SKY_NAMES, nil, function(name)
 						applySkyPreset(name)
 					end)
 
-					addRGB(SkyFolder, "Sky", "sky")
-					switches.skygradient = SkyFolder.AddSwitch("Sky Gradient", nil, "customization", "skygradient")
-					addRGB(SkyFolder, "Sky Gradient", "sky2")
-					sliders.skydensity = SkyFolder.AddSlider("Atmosphere Density (%)", nil, 0, 100, "customization", "skydensity", { Left = true })
-					switches.skysolid = SkyFolder.AddSwitch("Solid Sky (hide skybox)", nil, "customization", "skysolid")
+					makeColorPicker(SkyFolder, "Sky Top", "sky", { 90, 170, 255 }, function()
+						setSwitch("skyenabled", true)
+					end)
+					switches.skygradient = SkyFolder.AddSwitch("Two-Color Sky", nil, "customization", "skygradient")
+					makeColorPicker(SkyFolder, "Sky Horizon", "sky2", { 40, 100, 220 }, function()
+						setSwitch("skygradient", true)
+						setSwitch("skyenabled", true)
+					end)
 					switches.skyhidebodies = SkyFolder.AddSwitch("Hide Sun/Moon/Stars", nil, "customization", "skyhidebodies")
+					switches.skyclearhaze = SkyFolder.AddSwitch("Remove Game Haze", nil, "customization", "skyclearhaze", {
+						Tooltip = "Turns off the game's atmosphere haze so your sky colors are not washed out.",
+					})
 					switches.skytint = SkyFolder.AddSwitch("Tint World Lighting", nil, "customization", "skytint")
 					switches.skyfog = SkyFolder.AddSwitch("Colored Fog", nil, "customization", "skyfog")
 					sliders.skyfogend = SkyFolder.AddSlider("Fog Distance", nil, 100, 10000, "customization", "skyfogend", { Left = true })
