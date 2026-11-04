@@ -63563,10 +63563,8 @@ do
 				end
 
 				if not (not cfg.planters.enabled or cfg.planters.method ~= "Nectar" or not cfg.planters.nectar.farmfield) then
-					local v136, v137, v138
-
-					for _, v139 in v136, v137, v138 do
-						setField(v139.field)
+					for _, planter in ipairs(tracked.planters) do
+						setField(planter.field)
 						break
 					end
 				end
