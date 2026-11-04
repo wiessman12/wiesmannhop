@@ -66979,6 +66979,8 @@ more accurate dodging]],
 					----------------------------------------------------------------
 					-- sky: generated PNG skybox (fallback: Atmosphere)
 					----------------------------------------------------------------
+					local isDragging = false
+					local lastBuild = 0
 					local crcTable = nil
 
 					local function crc32(str)
@@ -67232,7 +67234,8 @@ more accurate dodging]],
 
 							local key = hexOf(top) .. hexOf(horizon)
 
-							if key ~= boxKey then
+							if key ~= boxKey and (not isDragging or os.clock() - lastBuild > 0.5) then
+								lastBuild = os.clock()
 								boxKey = key
 								local ok, assets = pcall(buildSkyAssets, top, horizon)
 
@@ -67352,13 +67355,6 @@ more accurate dodging]],
 					----------------------------------------------------------------
 					-- color circles + custom color input
 					----------------------------------------------------------------
-					local PALETTE = {
-						{ 220, 50, 50 }, { 240, 130, 40 }, { 245, 210, 60 }, { 140, 215, 70 }, { 40, 170, 90 }, { 30, 175, 165 },
-						{ 50, 200, 230 }, { 70, 150, 240 }, { 45, 90, 200 }, { 85, 70, 190 }, { 150, 70, 200 }, { 210, 70, 170 },
-						{ 250, 130, 180 }, { 200, 50, 100 }, { 130, 85, 55 }, { 110, 25, 35 }, { 20, 35, 90 }, { 20, 70, 45 },
-						{ 245, 245, 245 }, { 190, 190, 195 }, { 120, 120, 125 }, { 60, 60, 65 }, { 30, 30, 34 }, { 10, 10, 12 },
-					}
-
 					local function parseColor(text)
 						local s = string.gsub(tostring(text), "%s", "")
 						s = string.lower(s)
@@ -67399,7 +67395,14 @@ more accurate dodging]],
 						corner.Parent = inst
 					end
 
-					local POPUP_HEIGHT = 130
+					local WHEEL = 120
+					local OUTER = 60
+					local THICK = 13
+					local INNER = OUTER - THICK
+					local MID = OUTER - THICK / 2
+					local SQUARE = math.floor((INNER - 5) * math.sqrt(2))
+					local COS45 = 0.70710678
+					local POPUP_HEIGHT = WHEEL + 46
 
 					local function makeColorPicker(folder, title, prefix, defaults, onChange)
 						local row = folder.AddLabel(title)
@@ -67426,11 +67429,11 @@ more accurate dodging]],
 						swatch:SetAttribute("AtlasIgnore", true)
 						addCorner(swatch, UDim.new(1, 0))
 
-						local stroke = Instance.new("UIStroke")
-						stroke.Thickness = 1.5
-						stroke.Color = Color3.new(1, 1, 1)
-						stroke.Transparency = 0.5
-						stroke.Parent = swatch
+						local swatchStroke = Instance.new("UIStroke")
+						swatchStroke.Thickness = 1.5
+						swatchStroke.Color = Color3.new(1, 1, 1)
+						swatchStroke.Transparency = 0.5
+						swatchStroke.Parent = swatch
 						swatch.Parent = row
 
 						local hexLabel = Instance.new("TextLabel")
@@ -67466,12 +67469,32 @@ more accurate dodging]],
 						input.PlaceholderColor3 = Color3.fromRGB(130, 130, 135)
 						input.ClearTextOnFocus = true
 						input.Text = ""
-						input.Position = UDim2.new(0, 8, 0, 100)
+						input.Position = UDim2.new(0, 8, 0, WHEEL + 16)
 						input.Size = UDim2.new(1, -16, 0, 22)
 						addCorner(input, UDim.new(0, 4))
 						input.Parent = popup
 
-						local function setColor(r, g, b, silent)
+						-- current color as hue / saturation / value (kept so the wheel does not jump on grays)
+						local state = { h = 0, s = 1, v = 1 }
+						local wheelBuilt = false
+						local satGradient, hueHandle, svHandle = nil, nil, nil
+
+						local function refreshWheel()
+							if not wheelBuilt then
+								return
+							end
+
+							satGradient.Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromHSV(state.h, 1, 1))
+
+							local angle = state.h * 2 * math.pi
+							hueHandle.Position = UDim2.new(0.5, math.cos(angle) * MID, 0.5, -math.sin(angle) * MID)
+
+							local lx = (state.s - 0.5) * SQUARE
+							local ly = ((1 - state.v) - 0.5) * SQUARE
+							svHandle.Position = UDim2.new(0.5, (lx - ly) * COS45, 0.5, (lx + ly) * COS45)
+						end
+
+						local function applyRGB(r, g, b, silent, noSave)
 							r, g, b = byte(r), byte(g), byte(b)
 							cust[prefix .. "r"] = r
 							cust[prefix .. "g"] = g
@@ -67480,9 +67503,12 @@ more accurate dodging]],
 							local hex = string.format("#%02X%02X%02X", r, g, b)
 							hexLabel.Text = hex
 							input.Text = hex
+							refreshWheel()
 
 							if not silent then
-								saveConfig()
+								if not noSave then
+									saveConfig()
+								end
 
 								if onChange then
 									onChange()
@@ -67490,22 +67516,198 @@ more accurate dodging]],
 							end
 						end
 
-						for index, color in ipairs(PALETTE) do
-							local dot = Instance.new("TextButton")
-							dot.Name = "Dot"
-							dot.AutoButtonColor = false
-							dot.Text = ""
-							dot.BorderSizePixel = 0
-							dot.BackgroundColor3 = Color3.fromRGB(color[1], color[2], color[3])
-							dot.Size = UDim2.new(0, 18, 0, 18)
-							dot.Position = UDim2.new(0, 8 + ((index - 1) % 6) * 22, 0, 8 + math.floor((index - 1) / 6) * 22)
-							dot:SetAttribute("AtlasIgnore", true)
-							addCorner(dot, UDim.new(1, 0))
-							dot.Parent = popup
+						local function setColor(r, g, b, silent)
+							r, g, b = byte(r), byte(g), byte(b)
+							local h, s, v = Color3.fromRGB(r, g, b):ToHSV()
 
-							dot.MouseButton1Click:Connect(function()
-								setColor(color[1], color[2], color[3])
+							if s > 0.01 and v > 0.01 then
+								state.h = h
+							end
+
+							state.s = s
+							state.v = v
+							applyRGB(r, g, b, silent)
+						end
+
+						local function fromState()
+							local color = Color3.fromHSV(state.h, state.s, state.v)
+							applyRGB(color.R * 255, color.G * 255, color.B * 255, false, true)
+						end
+
+						local function buildWheel()
+							wheelBuilt = true
+
+							local wheel = Instance.new("Frame")
+							wheel.Name = "Wheel"
+							wheel.BackgroundTransparency = 1
+							wheel.BorderSizePixel = 0
+							wheel.AnchorPoint = Vector2.new(0.5, 0)
+							wheel.Position = UDim2.new(0.5, 0, 0, 8)
+							wheel.Size = UDim2.new(0, WHEEL, 0, WHEEL)
+							wheel:SetAttribute("AtlasIgnore", true)
+							wheel.Parent = popup
+
+							-- hue ring
+							local count = 90
+							local segmentLength = math.ceil(2 * math.pi * MID / count) + 2
+
+							for i = 0, count - 1 do
+								local hue = i / count
+								local angle = hue * 2 * math.pi
+								local segment = Instance.new("Frame")
+								segment.BorderSizePixel = 0
+								segment.BackgroundColor3 = Color3.fromHSV(hue, 1, 1)
+								segment.AnchorPoint = Vector2.new(0.5, 0.5)
+								segment.Size = UDim2.new(0, segmentLength, 0, THICK)
+								segment.Position = UDim2.new(0.5, math.floor(math.cos(angle) * MID + 0.5), 0.5, math.floor(-math.sin(angle) * MID + 0.5))
+								segment.Rotation = 90 - hue * 360
+								segment.ZIndex = 1
+								segment:SetAttribute("AtlasIgnore", true)
+								segment.Parent = wheel
+							end
+
+							-- saturation / value diamond
+							local square = Instance.new("Frame")
+							square.Name = "SV"
+							square.BorderSizePixel = 0
+							square.BackgroundColor3 = Color3.new(1, 1, 1)
+							square.AnchorPoint = Vector2.new(0.5, 0.5)
+							square.Position = UDim2.new(0.5, 0, 0.5, 0)
+							square.Size = UDim2.new(0, SQUARE, 0, SQUARE)
+							square.Rotation = 45
+							square.ZIndex = 2
+							square:SetAttribute("AtlasIgnore", true)
+
+							satGradient = Instance.new("UIGradient")
+							satGradient.Name = "WheelGradient"
+							satGradient.Parent = square
+
+							local dark = Instance.new("Frame")
+							dark.Name = "Dark"
+							dark.BorderSizePixel = 0
+							dark.BackgroundColor3 = Color3.new(0, 0, 0)
+							dark.Size = UDim2.new(1, 0, 1, 0)
+							dark.ZIndex = 3
+							dark:SetAttribute("AtlasIgnore", true)
+
+							local darkGradient = Instance.new("UIGradient")
+							darkGradient.Name = "WheelGradient"
+							darkGradient.Rotation = 90
+							darkGradient.Transparency = NumberSequence.new(1, 0)
+							darkGradient.Parent = dark
+							dark.Parent = square
+							square.Parent = wheel
+
+							local function makeHandle(size)
+								local handle = Instance.new("Frame")
+								handle.Name = "Handle"
+								handle.AnchorPoint = Vector2.new(0.5, 0.5)
+								handle.BackgroundTransparency = 1
+								handle.BorderSizePixel = 0
+								handle.Size = UDim2.new(0, size, 0, size)
+								handle.ZIndex = 5
+								handle:SetAttribute("AtlasIgnore", true)
+								addCorner(handle, UDim.new(1, 0))
+
+								local ring = Instance.new("UIStroke")
+								ring.Thickness = 2.5
+								ring.Color = Color3.fromRGB(225, 225, 235)
+								ring.Parent = handle
+								handle.Parent = wheel
+								return handle
+							end
+
+							hueHandle = makeHandle(THICK + 3)
+							svHandle = makeHandle(12)
+
+							local wheelHit = Instance.new("TextButton")
+							wheelHit.Name = "WheelHit"
+							wheelHit.AutoButtonColor = false
+							wheelHit.BackgroundTransparency = 1
+							wheelHit.Text = ""
+							wheelHit.Size = UDim2.new(1, 0, 1, 0)
+							wheelHit.ZIndex = 6
+							wheelHit:SetAttribute("AtlasIgnore", true)
+							wheelHit.Parent = wheel
+
+							local mode = nil
+							local dragging = false
+							local scroller = nil
+
+							local function offsetOf(position)
+								local center = wheel.AbsolutePosition + wheel.AbsoluteSize / 2
+								return position.X - center.X, position.Y - center.Y
+							end
+
+							local function pick(position)
+								local dx, dy = offsetOf(position)
+
+								if mode == "hue" then
+									state.h = (math.atan2(-dy, dx) / (2 * math.pi)) % 1
+								elseif mode == "sv" then
+									local lx = (dx + dy) * COS45
+									local ly = (dy - dx) * COS45
+									state.s = math.clamp(lx / SQUARE + 0.5, 0, 1)
+									state.v = 1 - math.clamp(ly / SQUARE + 0.5, 0, 1)
+								end
+
+								fromState()
+							end
+
+							wheelHit.InputBegan:Connect(function(inputObject)
+								if inputObject.UserInputType ~= Enum.UserInputType.MouseButton1 and inputObject.UserInputType ~= Enum.UserInputType.Touch then
+									return
+								end
+
+								local dx, dy = offsetOf(inputObject.Position)
+								local distance = math.sqrt(dx * dx + dy * dy)
+								mode = nil
+
+								if distance >= INNER - 3 and distance <= OUTER + 4 then
+									mode = "hue"
+								else
+									local lx = (dx + dy) * COS45
+									local ly = (dy - dx) * COS45
+
+									if math.abs(lx) <= SQUARE / 2 + 4 and math.abs(ly) <= SQUARE / 2 + 4 then
+										mode = "sv"
+									end
+								end
+
+								if mode then
+									dragging = true
+									isDragging = true
+									scroller = popup:FindFirstAncestorOfClass("ScrollingFrame")
+
+									if scroller then
+										scroller.ScrollingEnabled = false
+									end
+
+									pick(inputObject.Position)
+								end
 							end)
+
+							connections:Add("colorwheelmove_" .. prefix, UserInputService.InputChanged:Connect(function(inputObject)
+								if dragging and (inputObject.UserInputType == Enum.UserInputType.MouseMovement or inputObject.UserInputType == Enum.UserInputType.Touch) then
+									pick(inputObject.Position)
+								end
+							end))
+
+							connections:Add("colorwheelend_" .. prefix, UserInputService.InputEnded:Connect(function(inputObject)
+								if dragging and (inputObject.UserInputType == Enum.UserInputType.MouseButton1 or inputObject.UserInputType == Enum.UserInputType.Touch) then
+									dragging = false
+									isDragging = false
+									mode = nil
+
+									if scroller then
+										scroller.ScrollingEnabled = true
+									end
+
+									saveConfig()
+								end
+							end))
+
+							refreshWheel()
 						end
 
 						input.FocusLost:Connect(function()
@@ -67524,6 +67726,11 @@ more accurate dodging]],
 
 						hit.MouseButton1Click:Connect(function()
 							popup.Visible = not popup.Visible
+
+							if popup.Visible and not wheelBuilt then
+								buildWheel()
+							end
+
 							folder.Refresh()
 						end)
 
@@ -67764,7 +67971,10 @@ more accurate dodging]],
 					makeColorPicker(Accent, "Main Color", "accent", { 41, 74, 122 }, requestApply)
 					switches.gradient = Accent.AddSwitch("Use Gradient", requestApply, "customization", "gradient")
 					makeColorPicker(Accent, "Gradient Color", "grad", { 70, 110, 180 }, function()
-						setSwitch("gradient", true)
+						if cust.gradient ~= true then
+							setSwitch("gradient", true)
+						end
+
 						requestApply()
 					end)
 					sliders.gradrotation = Accent.AddSlider("Gradient Angle", requestApply, 0, 360, "customization", "gradrotation", { Left = true })
@@ -67775,7 +67985,10 @@ more accurate dodging]],
 					makeColorPicker(Background, "Window Color", "bg", { 21, 22, 23 }, requestApply)
 					switches.bggradient = Background.AddSwitch("Use Gradient", requestApply, "customization", "bggradient")
 					makeColorPicker(Background, "Gradient Color", "bgend", { 30, 34, 48 }, function()
-						setSwitch("bggradient", true)
+						if cust.bggradient ~= true then
+							setSwitch("bggradient", true)
+						end
+
 						requestApply()
 					end)
 					sliders.bgrotation = Background.AddSlider("Gradient Angle", requestApply, 0, 360, "customization", "bgrotation", { Left = true })
@@ -67802,12 +68015,19 @@ more accurate dodging]],
 					end)
 
 					makeColorPicker(SkyFolder, "Sky Top", "sky", { 90, 170, 255 }, function()
-						setSwitch("skyenabled", true)
+						if cust.sky ~= true then
+							setSwitch("skyenabled", true)
+						end
 					end)
 					switches.skygradient = SkyFolder.AddSwitch("Two-Color Sky", nil, "customization", "skygradient")
 					makeColorPicker(SkyFolder, "Sky Horizon", "sky2", { 40, 100, 220 }, function()
-						setSwitch("skygradient", true)
-						setSwitch("skyenabled", true)
+						if cust.skygradient ~= true then
+							setSwitch("skygradient", true)
+						end
+
+						if cust.sky ~= true then
+							setSwitch("skyenabled", true)
+						end
 					end)
 					switches.skyhidebodies = SkyFolder.AddSwitch("Hide Sun/Moon/Stars", nil, "customization", "skyhidebodies")
 					switches.skyclearhaze = SkyFolder.AddSwitch("Remove Game Haze", nil, "customization", "skyclearhaze", {
