@@ -300,6 +300,7 @@ local cfg = {
 		fastprecisemethod = "Tween",
 		fastprecisemark = false,
 		fastprecisemarkmethod = "Tween",
+		precisetweenspeed = 150,
 		rares = false,
 	},
 	dispensers = {
@@ -50805,6 +50806,96 @@ do
 			end
 		end
 
+		-- ===== Precise helper: accurate tween + speed hack pause =====
+		local PT = { depth = 0, HOLD = 0.3 }
+
+		function PT.speed()
+			return math.clamp(tonumber(cfg.detected.precisetweenspeed) or 150, 40, 400)
+		end
+
+		function PT.pause()
+			PT.depth += 1
+			state.speedPausedUntil = os.clock() + 15 -- failsafe
+
+			local humanoid = getHumanoid()
+			local modifiers = gameApi:Cache({ "ModifierCaches", "Value" })
+			local legit = (modifiers and modifiers.PlayerMovespeed and modifiers.PlayerMovespeed._) or state.baseWalkSpeed
+
+			if legit and humanoid.WalkSpeed > legit then
+				humanoid.WalkSpeed = legit
+			end
+		end
+
+		function PT.resume()
+			PT.depth = math.max(PT.depth - 1, 0)
+
+			if PT.depth == 0 then
+				state.speedPausedUntil = os.clock() + 0.25
+			end
+		end
+
+		-- Moves the root part every Heartbeat, lands exactly on the target, then holds
+		-- position for holdFor seconds (or until alive() is false) so the touch registers.
+		-- getTarget: Vector3 or function (nil = target gone). flat: keep current height.
+		function PT.moveTo(getTarget, reach, flat, holdFor, alive)
+			local rootPart = getRootPart()
+			local humanoid = getHumanoid()
+			local startedAt = os.clock()
+			local speed = PT.speed()
+			local dt = 1 / 60
+			local lastTarget
+
+			PT.pause()
+			humanoid:MoveTo(rootPart.Position)
+
+			while true do
+				local target = type(getTarget) == "function" and getTarget() or getTarget
+
+				if not target or humanoid.Health <= 0 or not rootPart.Parent then
+					break
+				end
+
+				local current = rootPart.Position
+
+				if flat then
+					target = Vector3.new(target.X, current.Y, target.Z)
+				end
+
+				lastTarget = target
+				local delta = target - current
+				local dist = delta.Magnitude
+
+				if dist <= (reach or 0.5) or os.clock() - startedAt > 6 then
+					break
+				end
+
+				local step = speed * dt
+				local nextPos = dist <= step and target or current + delta.Unit * step
+				rootPart.CFrame = CFrame.new(nextPos) * rootPart.CFrame.Rotation
+				rootPart.AssemblyLinearVelocity = Vector3.zero
+
+				if dist <= step then
+					break
+				end
+
+				dt = math.min(RunService.Heartbeat:Wait(), 0.1)
+				state.speedPausedUntil = os.clock() + 15
+			end
+
+			if lastTarget and holdFor and holdFor > 0 then
+				local holdUntil = os.clock() + holdFor
+
+				while os.clock() < holdUntil and rootPart.Parent and humanoid.Health > 0 and (not alive or alive()) do
+					rootPart.CFrame = CFrame.new(lastTarget) * rootPart.CFrame.Rotation
+					rootPart.AssemblyLinearVelocity = Vector3.zero
+					RunService.Heartbeat:Wait()
+				end
+			end
+
+			PT.resume()
+			return true
+		end
+
 		collectObject = function(object, trackedKey, reachDistance, longTimeout, keepMoving, useTween, cloudMode, hasId)
 			if not useTween then
 				if (reachDistance or 5) < distanceTo(object.Position, true) then
@@ -50814,8 +50905,26 @@ do
 
 			local now = os.clock()
 
-			if useTween == "Teleport" then
+			if useTween == "Precise" then
+				PT.moveTo(function()
+					if object.Name == true then
+						return (not hasId or (tracked.precise2[object.ID] and not object.Touched)) and object.Position
+					end
+
+					return object.Parent and object.Position
+				end, 0.5, false, PT.HOLD, function()
+					if object.Name == true then
+						return not hasId or (tracked.precise2[object.ID] and not object.Touched)
+					end
+
+					return object.Parent
+				end)
+
+				now = os.clock()
+			elseif useTween == "Teleport" then
+				PT.pause()
 				getRootPart().CFrame = CFrame.new(object.Position)
+				PT.resume()
 			elseif useTween then
 				local linear = Enum.EasingStyle.Linear
 				local out = Enum.EasingDirection.Out
@@ -51069,52 +51178,27 @@ do
 			return nodePositions, nodeEdges
 		end
 
-		-- Speed hack pause while collecting precise (anti-kick 267)
-		local PT = { depth = 0 }
-
-		function PT.pause()
-			PT.depth += 1
-			state.speedPausedUntil = os.clock() + 15 -- failsafe
-			if not cfg.vars.walkspeedenabled then
-				return
-			end
-
-			local modifiers = gameApi:Cache({ "ModifierCaches", "Value" })
-			local legit = modifiers and modifiers.PlayerMovespeed and modifiers.PlayerMovespeed._
-			local humanoid = getHumanoid()
-
-			if legit and humanoid.WalkSpeed > legit then
-				humanoid.WalkSpeed = legit
-			end
-		end
-
-		function PT.resume()
-			PT.depth = math.max(PT.depth - 1, 0)
-
-			if PT.depth == 0 then
-				state.speedPausedUntil = os.clock() + 0.25
-			end
-		end
-
 		-- Fast movement helper for Fast Precise / Fast Precise Mark.
 		-- Returns nil when the feature is off, "Teleport" or true (tween) otherwise.
 		local function fastMode(enabled, method)
-			if not enabled then
-				return nil
+			if enabled and method == "Teleport" then
+				return "Teleport"
 			end
 
-			return method == "Teleport" and "Teleport" or true
+			return "Precise"
 		end
 
 		local function fastMoveTo(targetPosition, mode)
 			local rootPart = getRootPart()
 
 			if mode == "Teleport" then
+				PT.pause()
 				rootPart.CFrame = CFrame.new(targetPosition)
+				PT.resume()
 				return
 			end
 
-			TweenService:Create(rootPart, TweenInfo.new(distanceTo(targetPosition) / 400, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), { CFrame = CFrame.new(targetPosition) }):Play()
+			PT.moveTo(targetPosition, 0.5)
 		end
 
 		local function dodgePrecise(preciseMark, options, fastMovement)
@@ -51182,6 +51266,12 @@ do
 				end
 			end
 
+			if fastMovement == "Precise" and preciseMark.Parent then
+				PT.moveTo(preciseMark.Position, 0.5, false, PT.HOLD, function()
+					return preciseMark.Parent
+				end)
+			end
+
 			touchedMarks[preciseMark] = true
 
 			task.delay(3, function()
@@ -51206,7 +51296,10 @@ do
 					now2 = os.clock()
 
 					if distanceTo(v132.v.Position, true) > 6 then
-						getHumanoid():MoveTo(v132.v.Position)
+						local cur = v132.v
+						PT.moveTo(function()
+							return cur.Parent and cur.Position
+						end, 2, true)
 					end
 
 					while not (not v132.v.Parent or not (not not (distanceTo(v132.v.Position, true) > 6) and os.clock() - now2 < 4)) do
@@ -51313,6 +51406,12 @@ do
 				end
 			end
 
+			if fastMovement == "Precise" and tracked.precise2[mark.ID] then
+				PT.moveTo(mark.Position, 0.5, false, PT.HOLD, function()
+					return tracked.precise2[mark.ID] and not mark.Touched
+				end)
+			end
+
 			touchedMarks[mark] = true
 
 			task.delay(3, function()
@@ -51337,7 +51436,10 @@ do
 					now2 = os.clock()
 
 					if distanceTo(v134.v.Position, true) > 6 then
-						getHumanoid():MoveTo(v134.v.Position)
+						local cur = v134.v
+						PT.moveTo(function()
+							return tracked.precise2[cur.ID] and cur.Position
+						end, 2, true)
 					end
 
 					while not (not tracked.precise2[v134.v.ID] or not (not not (distanceTo(v134.v.Position, true) > 6) and os.clock() - now2 < 4)) do
@@ -66462,7 +66564,21 @@ more accurate dodging]],
 					else
 						threads:Add("walkspeed", function()
 							while task.wait(0.1) do
-								if os.clock() < (state.speedPausedUntil or 0) then
+								local humanoid = getHumanoid()
+								local holdSpeed = os.clock() < (state.speedPausedUntil or 0) or (tracked and (next(tracked.precise) ~= nil or next(tracked.precise2) ~= nil))
+
+								if not holdSpeed and humanoid.WalkSpeed < cfg.vars.walkspeed then
+									state.baseWalkSpeed = humanoid.WalkSpeed
+								end
+
+								if holdSpeed then
+									local modifiers = gameApi:Cache({ "ModifierCaches", "Value" })
+									local legit = (modifiers and modifiers.PlayerMovespeed and modifiers.PlayerMovespeed._) or state.baseWalkSpeed
+
+									if legit and humanoid.WalkSpeed > legit then
+										humanoid.WalkSpeed = legit
+									end
+
 									continue
 								end
 
@@ -69242,6 +69358,8 @@ Are you sure you want to enable it?]])
 				end, "detected", "fastprecisemark")
 
 				detectedFolder.AddDropdown("Fast Precise Mark Method", { "Tween", "Teleport" }, nil, nil, "detected", "fastprecisemarkmethod", { Width = 250 })
+
+				detectedFolder.AddSlider("Precise Tween Speed", nil, 40, 400, "detected", "precisetweenspeed", { Left = true })
 
 				local eggIconIds = {
 					Sticker = "Sticker",
