@@ -626,33 +626,41 @@ local cfg = {
 		key = "",
 	},
 	customization = {
-		accentr = 41, accentg = 74, accentb = 122,
-		gradient = false,
-		gradr = 70, gradg = 110, gradb = 180,
-		gradrotation = 0,
-		gradanimated = false,
+		menutheme = "Hub",
+		themeapplied = false,
+		accentr = 66, accentg = 133, accentb = 244,
+		buttonr = 31, buttong = 36, buttonb = 48,
+		barr = 20, barg = 23, barb = 29,
+		accentlink = false,
+		cards = true,
+		pill = true,
 		rainbow = false,
-		bgr = 21, bgg = 22, bgb = 23,
-		bggradient = false,
-		bgendr = 30, bgendg = 34, bgendb = 48,
-		bgrotation = 90,
-		panelr = 42, panelg = 42, panelb = 42,
-		windowtransparency = 0,
-		paneltransparency = 0,
-		outline = false,
-		outlinethickness = 2,
+		rainbowspeed = 30,
+		bgr = 7, bgg = 8, bgb = 10,
+		panelr = 25, panelg = 29, panelb = 38,
+		menukey = "Insert",
 		font = "Default",
+		textscale = 100,
+		roundness = 100,
 		sky = false,
+		skypreset = "Custom",
 		skyr = 90, skyg = 170, skyb = 255,
-		skygradient = false,
-		sky2r = 40, sky2g = 100, sky2b = 220,
-		skyclearhaze = true,
-		skyhidebodies = false,
-		skytint = false,
-		skyfog = false,
-		skyfogend = 1500,
-		skylocktime = false,
-		skytime = 12,
+		sky2r = 150, sky2g = 205, sky2b = 255,
+		skystars = 0,
+		skymoon = false,
+		skybodies = true,
+		skycloud = 0,
+		cloudr = 255, cloudg = 255, cloudb = 255,
+		skyhaze = false,
+		worldon = false,
+		worldlock = false,
+		worldtime = 12,
+		worldtint = 0,
+		fogamount = 0,
+		fogr = 170, fogg = 200, fogb = 235,
+		bright = 50, satur = 50, contr = 50,
+		screenr = 255, screeng = 255, screenb = 255,
+		bloom = 0, sunrays = 0,
 		recent = "5E5E5E,8A8A88,5D4079,457A78,5E7A43,FF0000",
 	},
 }
@@ -2486,6 +2494,7 @@ do
 			local clone4 = uiParts.folder:Clone()
 			local textButton = clone4.TextButton
 			local box = clone4.Box
+			folderApi.Box = box
 
 			if _G.background then
 				clone4.BackgroundColor3 = color_2
@@ -2552,6 +2561,8 @@ do
 
 					callback()
 				end)
+
+				return clone5
 			end
 
 			folderApi.AddSwitch = function(text, callback, configSource, configKey, options)
@@ -4875,7 +4886,7 @@ do
 	end
 
 	controls = {
-		home = ui.AddTab("Home", "rbxassetid://10723415903", nil, true),
+		home = ui.AddTab("Home", "rbxassetid://10723415903", true, true),
 		farming = ui.AddTab("Farming", "rbxassetid://10723407389", true),
 		combat = ui.AddTab("Combat", "rbxassetid://10734975692", true),
 		quests = ui.AddTab("Quests", "rbxassetid://10709781824", true),
@@ -63764,26 +63775,228 @@ threads:Add("antistuck", function()
 end)
 
 do
-	local Home = controls.home.AddFolder("Home")
-	local uptimeLabel = Home.AddLabel("Uptime: 00:00:00")
-	local serverUptimeLabel = Home.AddLabel("Server Uptime: " .. formatTime(workspace.ServerTime.Value))
-	Home.AddHorizontalAlignment()
-	local sessionHoneyLabel = Home.AddLabel("Session Honey: 0?")
-	local honeyPerHourLabel = Home.AddLabel("Honey per Hour: 0?")
+	local HUB_VERSION = "v2 CUSTOM"
+	local GRAY = Color3.fromRGB(176, 182, 196)
+	local DIM = Color3.fromRGB(120, 126, 140)
+	local BLUE = Color3.fromRGB(66, 133, 244)
+	local Players = getService("Players")
 
-	threads:Add("Stats", function()
-		while task.wait(1) do
-			local n = os.clock() - state.start
-			local P = localPlayer.CoreStats.Honey.Value - state.honeyatstart
-			local H = P / n * 3600
-			uptimeLabel.Text = "Uptime: " .. formatTime(n)
-			serverUptimeLabel.Text = "Server Uptime: " .. formatTime(workspace.ServerTime.Value)
-			sessionHoneyLabel.Text = "Session Honey: " .. formatNumber(P)
-			honeyPerHourLabel.Text = "Honey per Hour: " .. formatNumber(H)
+	-- radius is the Hub (roundness 100) look; the theme scales it down for Atlas
+	local function corner(parent, radius)
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0, radius)
+		c:SetAttribute("AtlasCR0", radius / 2)
+		c.Parent = parent
+		return c
+	end
+
+	local function circle(parent)
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(1, 0)
+		c.Parent = parent
+		return c
+	end
+
+	local function textLabel(parent, text, font, size, color, position, labelSize, alignment)
+		local label = Instance.new("TextLabel")
+		label.BackgroundTransparency = 1
+		label.Font = font
+		label.Text = text
+		label.TextSize = size
+		label.TextColor3 = color
+		label.TextXAlignment = alignment or Enum.TextXAlignment.Left
+		label.Position = position
+		label.Size = labelSize
+		label.Parent = parent
+		return label
+	end
+
+	-- a dark strip with a small bold title ("System", "Session")
+	local function sectionStrip(folder, title)
+		local strip = folder.AddLabel("  " .. title)
+		strip.Font = Enum.Font.GothamBold
+		strip.TextSize = 12
+		strip.Size = UDim2.new(1, -10, 0, 20)
+		strip.BackgroundTransparency = 0
+		strip:SetAttribute("AtlasRole", "inset")
+		corner(strip, 5)
+		return strip
+	end
+
+	local function infoLabel(folder, text)
+		local label = folder.AddLabel(text)
+		label.Font = Enum.Font.GothamMedium
+		label.TextSize = 12
+		label.TextColor3 = GRAY
+		return label
+	end
+
+	-- wide row button (Quick Controls / Dashboard)
+	local function rowButton(folder, text, callback, centered)
+		local button = folder.AddButton(text, callback)
+		button.Size = UDim2.new(1, -10, 0, 26)
+		button.Font = Enum.Font.GothamMedium
+		button.TextSize = 12
+		button.TextXAlignment = centered and Enum.TextXAlignment.Center or Enum.TextXAlignment.Left
+
+		if not centered then
+			local padding = Instance.new("UIPadding")
+			padding.PaddingLeft = UDim.new(0, 10)
+			padding.Parent = button
 		end
+
+		return button
+	end
+
+	----------------------------------------------------------------
+	-- User Profile (left column)
+	----------------------------------------------------------------
+	local Profile = controls.home.AddFolder("User Profile")
+	local profileBox = Profile.Box
+
+	local row = Instance.new("Frame")
+	row.Name = "ProfileRow"
+	row.BorderSizePixel = 0
+	row.BackgroundColor3 = Color3.fromRGB(24, 26, 31)
+	row.Size = UDim2.new(1, -10, 0, 58)
+	row:SetAttribute("AtlasRole", "inset")
+	corner(row, 8)
+	row.Parent = profileBox
+
+	local avatar = Instance.new("ImageLabel")
+	avatar.BackgroundColor3 = Color3.fromRGB(40, 44, 54)
+	avatar.BorderSizePixel = 0
+	avatar.Position = UDim2.new(0, 10, 0.5, -20)
+	avatar.Size = UDim2.new(0, 40, 0, 40)
+	avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. localPlayer.UserId .. "&w=150&h=150"
+	avatar:SetAttribute("AtlasIgnore", true)
+	circle(avatar)
+	avatar.Parent = row
+
+	local ring = Instance.new("UIStroke")
+	ring.Color = BLUE
+	ring.Thickness = 2
+	ring.Parent = avatar
+
+	local dot = Instance.new("Frame")
+	dot.BackgroundColor3 = Color3.fromRGB(34, 197, 94)
+	dot.BorderSizePixel = 0
+	dot.Position = UDim2.new(0, 38, 0.5, 8)
+	dot.Size = UDim2.new(0, 11, 0, 11)
+	dot:SetAttribute("AtlasIgnore", true)
+	circle(dot)
+	dot.Parent = row
+
+	local dotRing = Instance.new("UIStroke")
+	dotRing.Color = Color3.fromRGB(24, 26, 31)
+	dotRing.Thickness = 2
+	dotRing.Parent = dot
+
+	local nameLabel = textLabel(row, localPlayer.DisplayName, Enum.Font.GothamBold, 14, Color3.new(1, 1, 1), UDim2.new(0, 62, 0, 11), UDim2.new(1, -92, 0, 18))
+	local handleLabel = textLabel(row, "@" .. localPlayer.Name, Enum.Font.GothamMedium, 11, DIM, UDim2.new(0, 62, 0, 31), UDim2.new(1, -92, 0, 14))
+	local arrowLabel = textLabel(row, utf8.char(8599), Enum.Font.GothamBold, 13, GRAY, UDim2.new(1, -26, 0, 8), UDim2.new(0, 18, 0, 18), Enum.TextXAlignment.Center)
+	nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	handleLabel.TextTruncate = Enum.TextTruncate.AtEnd
+
+	sectionStrip(Profile, "System")
+	infoLabel(Profile, "Hub Version:  " .. HUB_VERSION)
+
+	-- menu keybind row with a clickable badge
+	local keyRow = Instance.new("Frame")
+	keyRow.Name = "KeybindRow"
+	keyRow.BackgroundTransparency = 1
+	keyRow.BorderSizePixel = 0
+	keyRow.Size = UDim2.new(1, -10, 0, 22)
+	keyRow.Parent = profileBox
+
+	textLabel(keyRow, "Menu Keybind:", Enum.Font.GothamMedium, 12, GRAY, UDim2.new(0, 0, 0, 0), UDim2.new(0, 84, 1, 0))
+
+	local badge = Instance.new("TextButton")
+	badge.AutoButtonColor = false
+	badge.BackgroundColor3 = Color3.fromRGB(24, 27, 34)
+	badge.BorderSizePixel = 0
+	badge.Font = Enum.Font.GothamBold
+	badge.TextSize = 10
+	badge.TextColor3 = BLUE
+	badge.Position = UDim2.new(0, 88, 0, 2)
+	badge.Size = UDim2.new(0, 64, 0, 18)
+	badge:SetAttribute("AtlasIgnore", true)
+	corner(badge, 4)
+	badge.Parent = keyRow
+
+	local badgeStroke = Instance.new("UIStroke")
+	badgeStroke.Color = Color3.fromRGB(37, 59, 97)
+	badgeStroke.Thickness = 1
+	badgeStroke.Parent = badge
+
+	local serverTimeLabel = infoLabel(Profile, "Server time:  00:00:00")
+	local clientTimeLabel = infoLabel(Profile, "Client time:  00:00:00")
+	local dateLabel = infoLabel(Profile, "Date:  " .. os.date("%d.%m.%Y"))
+
+	local listening = false
+
+	local function keyName()
+		local name = cfg.customization and cfg.customization.menukey
+
+		if type(name) ~= "string" or name == "" then
+			name = "Insert"
+		end
+
+		return name
+	end
+
+	local function refreshBadge()
+		if not listening then
+			badge.Text = "[ " .. keyName() .. " ]"
+		end
+	end
+
+	refreshBadge()
+
+	badge.MouseButton1Click:Connect(function()
+		if listening then
+			return
+		end
+
+		listening = true
+		badge.Text = "[ press a key ]"
+
+		local connection
+		connection = UserInputService.InputBegan:Connect(function(input)
+			if input.UserInputType ~= Enum.UserInputType.Keyboard then
+				return
+			end
+
+			connection:Disconnect()
+			listening = false
+
+			if input.KeyCode ~= Enum.KeyCode.Escape and cfg.customization then
+				cfg.customization.menukey = input.KeyCode.Name
+				saveConfig()
+			end
+
+			refreshBadge()
+		end)
 	end)
 
-	controls["Stop Everything"] = Home.AddSwitch("Stop Everything", function(stop)
+	connections:Add("menukey", UserInputService.InputBegan:Connect(function(input, processed)
+		if processed or listening or input.UserInputType ~= Enum.UserInputType.Keyboard then
+			return
+		end
+
+		if input.KeyCode.Name == keyName() and mobileToggleButton then
+			mobileToggleButton.Visible = not mobileToggleButton.Visible
+		end
+	end))
+
+	Profile.Toggle(true)
+
+	----------------------------------------------------------------
+	-- Quick Controls (right column)
+	----------------------------------------------------------------
+	local Quick = controls.home.AddFolder("Quick Controls", true)
+
+	controls["Stop Everything"] = Quick.AddSwitch("Stop All", function(stop)
 		if not stop or not threads:Get("Autofarm") then
 			if not stop then
 				for _, amuletName in ipairs({ "Moon Amulet", "Star Amulet", "Mutations", "Royal Jelly", "Gifted Basic" }) do
@@ -63807,776 +64020,133 @@ do
 		state.stop = stop or nil
 	end)
 
-	-- ==================== MAP TELEPORT (Home tab) ====================
-	-- Opens a top-down view of the whole map. Drag = pan, wheel / pinch = zoom,
-	-- click = pick a point, Teleport button (or Enter) = go there.
-	controls.maptp = (function()
-		local GuiService = getService("GuiService")
-		local ContextActionService = getService("ContextActionService")
+	local fieldButton = rowButton(Quick, "Field: " .. tostring(cfg.autofarm.field1), function()
+		local fields = availableFields
 
-		local mapCfg = { speed = 12, instant = false }
-
-		local PLANE_Y = 60       -- reference ground height for pan / zoom maths
-		local MIN_SPAN = 60      -- closest zoom (studs visible vertically)
-		local MAX_SPAN = 2400    -- farthest zoom
-		local MIN_CAM_Y = 450    -- camera never goes lower than this (above the mountain)
-		local WIDE_FOV = 70
-		local ACCENT = Color3.fromRGB(66, 135, 245)
-		local GREY = Color3.fromRGB(60, 60, 68)
-		local PANEL = Color3.fromRGB(18, 18, 24)
-		local HINT = "Drag: move   Wheel / pinch: zoom   Click: pick   Enter: teleport   M: close"
-
-		local M = {
-			isOpen = false,
-			cx = 0,
-			cz = 0,
-			span = 1500,
-			target = nil,
-			moveId = 0,
-			points = {},
-			markers = {},
-			conns = {},
-		}
-		local saved = {}
-		local drag = { active = false, moved = false, dist = 0, input = nil, start = Vector2.new(0, 0), pinching = false }
-		local gui, cover, markerLayer, targetLabel, statusLabel, tpButton, youDot, pin
-		local statusToken = 0
-		local close
-
-		local function new(class, props, parent)
-			local inst = Instance.new(class)
-			for key, value in pairs(props) do
-				inst[key] = value
-			end
-			inst.Parent = parent
-			return inst
+		if type(fields) ~= "table" or #fields == 0 then
+			ui.Notify("Field", "Fields are not loaded yet")
+			return
 		end
 
-		local function makeButton(parent, text, width, color)
-			local button = new("TextButton", {
-				Text = text,
-				Size = UDim2.new(0, width, 0, 30),
-				BackgroundColor3 = color or Color3.fromRGB(44, 44, 54),
-				TextColor3 = Color3.new(1, 1, 1),
-				Font = Enum.Font.GothamSemibold,
-				TextSize = 14,
-				BorderSizePixel = 0,
-				AutoButtonColor = true,
-			}, parent)
-			new("UICorner", { CornerRadius = UDim.new(0, 6) }, button)
-			return button
+		local index = table.find(fields, cfg.autofarm.field1) or 0
+		local nextField = fields[index % #fields + 1]
+		cfg.autofarm.field1 = nextField
+		saveConfig()
+
+		if controls.Field then
+			controls.Field.SetValue(nextField)
 		end
 
-		local function setStatus(text)
-			statusToken = statusToken + 1
-			local token = statusToken
-			if statusLabel then
-				statusLabel.Text = text
-			end
-			task.delay(5, function()
-				if token == statusToken and statusLabel then
-					statusLabel.Text = HINT
-				end
-			end)
+		if threads:Get("Autofarm") then
+			threads:Cancel("Autofarm")
+			stopMovement()
+			threads:Add("Autofarm", autofarmLoop)
+		end
+	end)
+
+	local autofarmButton = rowButton(Quick, "Autofarm", function()
+		if controls.Autofarm then
+			controls.Autofarm.Set(not cfg.autofarm.enabled)
+		else
+			ui.Notify("Autofarm", "Not ready yet, wait for the script to finish loading")
+		end
+	end)
+
+	rowButton(Quick, "Return to Hive", function()
+		if threads:Get("Autofarm") then
+			ui.Notify("Return to Hive", "Turn Autofarm off first")
+			return
 		end
 
-		local function fieldNameAt(pos)
-			local zones = workspace:FindFirstChild("FlowerZones")
-			if not zones then
-				return nil
-			end
-			for _, zone in ipairs(zones:GetChildren()) do
-				if zone:IsA("BasePart") then
-					local rel = zone.CFrame:PointToObjectSpace(pos)
-					local half = zone.Size / 2
-					if math.abs(rel.X) <= half.X and math.abs(rel.Z) <= half.Z then
-						return zone.Name
-					end
-				end
-			end
-			return nil
+		if threads:Get("ReturnHive") then
+			return
 		end
 
-		local function updateTargetUi()
-			if not targetLabel then
-				return
-			end
-			if M.target then
-				targetLabel.Text = string.format(
-					"Target: %s  (%.0f, %.0f, %.0f)",
-					fieldNameAt(M.target) or "open world",
-					M.target.X,
-					M.target.Y,
-					M.target.Z
-				)
-				tpButton.BackgroundColor3 = ACCENT
-			else
-				targetLabel.Text = "Target: none - click anywhere on the map"
-				tpButton.BackgroundColor3 = GREY
-			end
-		end
-
-		local function setTarget(pos)
-			M.target = pos
-			updateTargetUi()
-		end
-
-		-- what is under the cursor: first solid, visible surface below the camera ray
-		local function pickGround(p)
-			local cam = workspace.CurrentCamera
-			local ray = cam:ViewportPointToRay(p.X, p.Y)
-			local excluded = {}
-			if localPlayer.Character then
-				excluded[1] = localPlayer.Character
-			end
-			local params = RaycastParams.new()
-			params.FilterType = Enum.RaycastFilterType.Exclude
-			params.RespectCanCollide = true
-			params.FilterDescendantsInstances = excluded
-			for _ = 1, 10 do
-				local result = workspace:Raycast(ray.Origin, ray.Direction * 6000, params)
-				if not result then
-					return nil
-				end
-				local inst = result.Instance
-				if inst == workspace.Terrain or inst.Transparency < 0.95 then
-					return result.Position
-				end
-				excluded[#excluded + 1] = inst -- invisible wall / barrier: look through it
-				params.FilterDescendantsInstances = excluded
-			end
-			return nil
-		end
-
-		-- zoom is defined by `span` = studs visible vertically at PLANE_Y.
-		-- Far away we move the camera up (fov 70); close up we keep the camera high and narrow the fov.
-		local function camParams()
-			local fov = WIDE_FOV
-			local dist = M.span / (2 * math.tan(math.rad(fov / 2)))
-			local camY = dist + PLANE_Y
-			if camY < MIN_CAM_Y then
-				camY = MIN_CAM_Y
-				dist = camY - PLANE_Y
-				fov = math.max(1, math.deg(2 * math.atan(M.span / (2 * dist))))
-			end
-			return camY, fov
-		end
-
-		local function applyCamera()
-			local cam = workspace.CurrentCamera
-			local camY, fov = camParams()
-			cam.CameraType = Enum.CameraType.Scriptable
-			cam.FieldOfView = fov
-			-- looking straight down: screen right = +X, screen down = +Z
-			cam.CFrame = CFrame.new(M.cx, camY, M.cz) * CFrame.Angles(-math.pi / 2, 0, 0)
-		end
-
-		local function clampView()
-			M.cx = math.clamp(M.cx, -1800, 1800)
-			M.cz = math.clamp(M.cz, -1800, 1800)
-		end
-
-		local function zoomAt(p, factor)
-			local vp = workspace.CurrentCamera.ViewportSize
-			local k = M.span / vp.Y
-			local wx = M.cx + (p.X - vp.X / 2) * k
-			local wz = M.cz + (p.Y - vp.Y / 2) * k
-			M.span = math.clamp(M.span * factor, MIN_SPAN, MAX_SPAN)
-			k = M.span / vp.Y
-			M.cx = wx - (p.X - vp.X / 2) * k
-			M.cz = wz - (p.Y - vp.Y / 2) * k
-			clampView()
-		end
-
-		local function buildPoints()
-			local list = {}
-			local zones = workspace:FindFirstChild("FlowerZones")
-			if zones then
-				for _, zone in ipairs(zones:GetChildren()) do
-					if zone:IsA("BasePart") then
-						list[#list + 1] = { name = zone.Name, pos = zone.Position, kind = "field" }
-					end
-				end
-			end
-			for name, pos in pairs(locations) do
-				if typeof(pos) == "Vector3" and math.abs(pos.Y) < 2000 then
-					local pretty = string.gsub(name, "(%l)(%u)", "%1 %2")
-					list[#list + 1] = { name = pretty, pos = pos, kind = "place" }
-				end
-			end
-			M.points = list
-		end
-
-		local function fitView()
-			local minX, maxX, minZ, maxZ = math.huge, -math.huge, math.huge, -math.huge
-			for _, point in ipairs(M.points) do
-				minX = math.min(minX, point.pos.X)
-				maxX = math.max(maxX, point.pos.X)
-				minZ = math.min(minZ, point.pos.Z)
-				maxZ = math.max(maxZ, point.pos.Z)
-			end
-			if minX == math.huge then
-				M.cx, M.cz, M.span = 0, 0, 1500
-				return
-			end
-			M.cx = (minX + maxX) / 2
-			M.cz = (minZ + maxZ) / 2
-			local vp = workspace.CurrentCamera.ViewportSize
-			local needZ = ((maxZ - minZ) + 260) * 1.15
-			local needX = ((maxX - minX) + 260) * vp.Y / vp.X * 1.15
-			M.span = math.clamp(math.max(needZ, needX), MIN_SPAN, MAX_SPAN)
-		end
-
-		local function updateMarkers()
-			local cam = workspace.CurrentCamera
-			for _, marker in ipairs(M.markers) do
-				local visible = false
-				if marker.kind == "field" or M.span <= 1100 then
-					local v, onScreen = cam:WorldToViewportPoint(marker.pos)
-					if onScreen and v.Z > 0 then
-						marker.button.Position = UDim2.fromOffset(v.X, v.Y)
-						visible = true
-					end
-				end
-				marker.button.Visible = visible
-			end
-
-			local char = localPlayer.Character
-			local root = char and char:FindFirstChild("HumanoidRootPart")
-			if root then
-				local v, onScreen = cam:WorldToViewportPoint(root.Position)
-				youDot.Visible = onScreen
-				youDot.Position = UDim2.fromOffset(v.X, v.Y)
-			else
-				youDot.Visible = false
-			end
-
-			if M.target then
-				local v, onScreen = cam:WorldToViewportPoint(M.target)
-				pin.Visible = onScreen
-				pin.Position = UDim2.fromOffset(v.X, v.Y)
-			else
-				pin.Visible = false
-			end
-		end
-
-		-- ---------------------------------------------------------------- movement
-		local function teleport(pos)
-			local char = localPlayer.Character
-			local root = char and char:FindFirstChild("HumanoidRootPart")
-			local hum = char and char:FindFirstChildOfClass("Humanoid")
-			if not root or not hum or hum.Health <= 0 then
-				ui.Notify("Map Teleport", "Character is not available")
-				return
-			end
-
-			-- pause the autofarm, otherwise it would walk us straight back to the field
-			if cfg.autofarm.enabled and not state.stop then
-				pcall(function()
-					controls["Stop Everything"].Set(true)
-				end)
-				ui.Notify("Map Teleport", "Autofarm paused (Stop Everything). Turn it off to resume.")
-			end
-
-			M.moveId = M.moveId + 1
-			local myId = M.moveId
-			local dest = pos + Vector3.new(0, 5, 0)
-
-			if mapCfg.instant then
-				root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-				root.CFrame = CFrame.new(dest)
-				return
-			end
-
-			task.spawn(function()
-				for _, child in ipairs(root:GetChildren()) do
-					if child:IsA("AlignPosition") or child:IsA("AlignOrientation") then
-						child:Destroy()
-					end
-				end
-
-				local speed = mapCfg.speed
-				if speed > 12 and _G.unlocktween ~= true then
-					speed = 12
-				end
-				speed = math.max(speed, 1) * 10 -- studs per second
-				local travelTime = (root.Position - dest).Magnitude / speed
-
-				local alignPosition = Instance.new("AlignPosition")
-				alignPosition.Mode = Enum.PositionAlignmentMode.OneAttachment
-				alignPosition.Attachment0 = root.RootAttachment
-				alignPosition.Responsiveness = 20
-				alignPosition.MaxForce = math.huge
-				alignPosition.MaxVelocity = speed
-				alignPosition.Position = dest
-				alignPosition.Parent = root
-
-				local alignOrientation = Instance.new("AlignOrientation")
-				alignOrientation.Attachment0 = root.RootAttachment
-				alignOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
-				alignOrientation.RigidityEnabled = true
-				alignOrientation.CFrame = root.CFrame
-				alignOrientation.Parent = root
-
-				hum:ChangeState(Enum.HumanoidStateType.Physics)
-
-				local noclip = RunService.PreSimulation:Connect(function()
-					for _, part in ipairs(char:GetDescendants()) do
-						if part:IsA("BasePart") and part.CanCollide then
-							part.CanCollide = false
-						end
-					end
-				end)
-
-				local started = os.clock()
-				while M.moveId == myId and hum.Health > 0 and root.Parent do
-					if (root.Position - dest).Magnitude <= 4 then
-						break
-					end
-					if os.clock() - started > travelTime + 3 then
-						break
-					end
-					RunService.Heartbeat:Wait()
-				end
-
-				alignPosition:Destroy()
-				alignOrientation:Destroy()
-				noclip:Disconnect()
-				if M.moveId == myId and hum.Health > 0 then
-					hum:ChangeState(Enum.HumanoidStateType.Freefall)
-				end
-			end)
-		end
-
-		-- ------------------------------------------------------------------ input
-		local function vpPos(input)
-			if input.UserInputType == Enum.UserInputType.Touch then
-				return Vector2.new(input.Position.X, input.Position.Y) + GuiService:GetGuiInset()
-			end
-			return UserInputService:GetMouseLocation()
-		end
-
-		local function onInputChanged(input)
-			local t = input.UserInputType
-			if t == Enum.UserInputType.MouseWheel then
-				zoomAt(UserInputService:GetMouseLocation(), input.Position.Z > 0 and 0.8 or 1.25)
-				return
-			end
-			if not drag.active or drag.pinching or not drag.input then
-				return
-			end
-			local isMove = (drag.input.UserInputType == Enum.UserInputType.MouseButton1 and t == Enum.UserInputType.MouseMovement)
-				or (t == Enum.UserInputType.Touch and input == drag.input)
-			if not isMove then
-				return
-			end
-			local delta = Vector2.new(input.Delta.X, input.Delta.Y)
-			drag.dist = drag.dist + delta.Magnitude
-			if drag.dist > 6 then
-				drag.moved = true
-			end
-			if drag.moved then
-				local k = M.span / workspace.CurrentCamera.ViewportSize.Y
-				M.cx = M.cx - delta.X * k
-				M.cz = M.cz - delta.Y * k
-				clampView()
-			end
-		end
-
-		local function onInputEnded(input)
-			if not drag.active or not drag.input then
-				return
-			end
-			local t = input.UserInputType
-			local ends = (drag.input.UserInputType == Enum.UserInputType.MouseButton1 and t == Enum.UserInputType.MouseButton1)
-				or (t == Enum.UserInputType.Touch and input == drag.input)
-			if not ends then
-				return
-			end
-			local wasTap = not drag.moved and not drag.pinching
-			drag.active = false
-			drag.input = nil
-			if wasTap then
-				local ground = pickGround(drag.start)
-				if ground then
-					setTarget(ground)
-				else
-					setStatus("Nothing to land on there, try another spot")
-				end
-			end
-		end
-
-		local function onPinch(positions, scale, _, pinchState)
-			if pinchState == Enum.UserInputState.Begin then
-				drag.pinching = true
-				drag.moved = true
-				M.pinchSpan = M.span
-			elseif pinchState == Enum.UserInputState.Change then
-				if M.pinchSpan and positions[1] and positions[2] then
-					local center = (positions[1] + positions[2]) / 2 + GuiService:GetGuiInset()
-					zoomAt(center, (M.pinchSpan / scale) / M.span)
-				end
-			else
-				drag.pinching = false
-				M.pinchSpan = nil
-			end
-		end
-
-		local function doTeleport()
-			if not M.target then
-				setStatus("Pick a point on the map first")
-				return
-			end
-			local dest = M.target
-			local name = fieldNameAt(dest) or "selected point"
-			close()
-			ui.Notify("Map Teleport", "Going to " .. name)
-			teleport(dest)
-		end
-
-		local function onKey(input)
-			if input.KeyCode == Enum.KeyCode.Return or input.KeyCode == Enum.KeyCode.KeypadEnter then
-				doTeleport()
-			elseif input.KeyCode == Enum.KeyCode.M or input.KeyCode == Enum.KeyCode.Escape then
-				close()
-			end
-		end
-
-		local function onRender(dt)
-			local dx, dz = 0, 0
-			if UserInputService:IsKeyDown(Enum.KeyCode.A) or UserInputService:IsKeyDown(Enum.KeyCode.Left) then
-				dx = dx - 1
-			end
-			if UserInputService:IsKeyDown(Enum.KeyCode.D) or UserInputService:IsKeyDown(Enum.KeyCode.Right) then
-				dx = dx + 1
-			end
-			if UserInputService:IsKeyDown(Enum.KeyCode.W) or UserInputService:IsKeyDown(Enum.KeyCode.Up) then
-				dz = dz - 1
-			end
-			if UserInputService:IsKeyDown(Enum.KeyCode.S) or UserInputService:IsKeyDown(Enum.KeyCode.Down) then
-				dz = dz + 1
-			end
-			if dx ~= 0 or dz ~= 0 then
-				M.cx = M.cx + dx * M.span * 0.6 * dt
-				M.cz = M.cz + dz * M.span * 0.6 * dt
-				clampView()
-			end
-			local vp = workspace.CurrentCamera.ViewportSize
-			if UserInputService:IsKeyDown(Enum.KeyCode.E) then
-				zoomAt(vp / 2, 0.3 ^ dt)
-			elseif UserInputService:IsKeyDown(Enum.KeyCode.Q) then
-				zoomAt(vp / 2, (1 / 0.3) ^ dt)
-			end
-			applyCamera()
-			updateMarkers()
-		end
-
-		-- --------------------------------------------------------------------- UI
-		local function build()
-			if gui then
-				return
-			end
-			buildPoints()
-
-			gui = new("ScreenGui", {
-				Name = "AtlasMapTeleport",
-				ResetOnSpawn = false,
-				DisplayOrder = 1000,
-				ScreenInsets = Enum.ScreenInsets.None,
-				ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-				Enabled = false,
-			}, gethui and gethui() or getService("CoreGui"))
-
-			cover = new("Frame", { Name = "Cover", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Active = true, ZIndex = 1 }, gui)
-			markerLayer = new("Frame", { Name = "Markers", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 2 }, gui)
-
-			cover.InputBegan:Connect(function(input)
-				local t = input.UserInputType
-				if t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch then
-					if drag.active then
-						return
-					end
-					drag.active = true
-					drag.moved = false
-					drag.dist = 0
-					drag.input = input
-					drag.start = vpPos(input)
+		threads:Add("ReturnHive", function()
+			local ok, err = pcall(function()
+				if distanceTo(localPlayer.SpawnPos.Value.Position, true) > 9 then
+					goTo(localPlayer.SpawnPos.Value.Position, "Hive")
 				end
 			end)
 
-			for _, point in ipairs(M.points) do
-				local isField = point.kind == "field"
-				local button = new("TextButton", {
-					Text = point.name,
-					AnchorPoint = Vector2.new(0.5, 0.5),
-					Size = UDim2.fromOffset(0, 20),
-					AutomaticSize = Enum.AutomaticSize.X,
-					BackgroundColor3 = isField and Color3.fromRGB(26, 52, 96) or Color3.fromRGB(110, 62, 20),
-					BackgroundTransparency = 0.15,
-					TextColor3 = Color3.new(1, 1, 1),
-					Font = Enum.Font.GothamSemibold,
-					TextSize = 12,
-					BorderSizePixel = 0,
-					Visible = false,
-					ZIndex = 5,
-				}, markerLayer)
-				new("UICorner", { CornerRadius = UDim.new(0, 5) }, button)
-				new("UIPadding", { PaddingLeft = UDim.new(0, 7), PaddingRight = UDim.new(0, 7) }, button)
-				button.MouseButton1Click:Connect(function()
-					setTarget(point.pos)
-				end)
-				M.markers[#M.markers + 1] = { button = button, pos = point.pos, kind = point.kind }
+			if not ok then
+				warn("Return to Hive: " .. tostring(err))
 			end
 
-			youDot = new("Frame", {
-				Name = "You",
-				AnchorPoint = Vector2.new(0.5, 0.5),
-				Size = UDim2.fromOffset(14, 14),
-				BackgroundColor3 = Color3.fromRGB(60, 220, 120),
-				BorderSizePixel = 0,
-				ZIndex = 6,
-				Visible = false,
-			}, markerLayer)
-			new("UICorner", { CornerRadius = UDim.new(1, 0) }, youDot)
-			new("UIStroke", { Color = Color3.new(1, 1, 1), Thickness = 2 }, youDot)
+			threads:Cancel("ReturnHive")
+		end)
+	end, true)
 
-			pin = new("Frame", {
-				Name = "Pin",
-				AnchorPoint = Vector2.new(0.5, 0.5),
-				Size = UDim2.fromOffset(18, 18),
-				BackgroundColor3 = Color3.fromRGB(235, 64, 52),
-				BorderSizePixel = 0,
-				ZIndex = 7,
-				Visible = false,
-			}, markerLayer)
-			new("UICorner", { CornerRadius = UDim.new(1, 0) }, pin)
-			new("UIStroke", { Color = Color3.new(1, 1, 1), Thickness = 2 }, pin)
+	Quick.Toggle(true)
 
-			-- top bar
-			local topBar = new("Frame", {
-				Name = "Top",
-				Size = UDim2.new(1, 0, 0, 46),
-				BackgroundColor3 = PANEL,
-				BackgroundTransparency = 0.1,
-				BorderSizePixel = 0,
-				ZIndex = 10,
-			}, gui)
-			new("TextLabel", {
-				BackgroundTransparency = 1,
-				Position = UDim2.fromOffset(14, 0),
-				Size = UDim2.new(0, 180, 1, 0),
-				Text = "Map Teleport",
-				TextColor3 = Color3.new(1, 1, 1),
-				Font = Enum.Font.GothamBold,
-				TextSize = 16,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				ZIndex = 11,
-			}, topBar)
-			local buttons = new("Frame", {
-				BackgroundTransparency = 1,
-				Size = UDim2.new(1, 0, 1, 0),
-				ZIndex = 11,
-			}, topBar)
-			new("UIListLayout", {
-				FillDirection = Enum.FillDirection.Horizontal,
-				HorizontalAlignment = Enum.HorizontalAlignment.Right,
-				VerticalAlignment = Enum.VerticalAlignment.Center,
-				Padding = UDim.new(0, 6),
-			}, buttons)
-			new("UIPadding", { PaddingRight = UDim.new(0, 10) }, buttons)
+	----------------------------------------------------------------
+	-- Session Dashboard
+	----------------------------------------------------------------
+	local Dashboard = controls.home.AddFolder("Session Dashboard", true)
+	sectionStrip(Dashboard, "Session")
+	local honeyLabel = infoLabel(Dashboard, "Honey: 0")
+	local hourLabel = infoLabel(Dashboard, "Honey/Hour: 0")
+	local dayLabel = infoLabel(Dashboard, "Honey/Day: 0")
+	local backpackLabel = infoLabel(Dashboard, "Backpack: 0%")
 
-			local overviewButton = makeButton(buttons, "Overview", 78)
-			local meButton = makeButton(buttons, "Me", 46)
-			local zoomOutButton = makeButton(buttons, "-", 34)
-			local zoomInButton = makeButton(buttons, "+", 34)
-			local closeButton = makeButton(buttons, "X", 34, Color3.fromRGB(150, 50, 50))
-			for _, b in ipairs({ overviewButton, meButton, zoomOutButton, zoomInButton, closeButton }) do
-				b.ZIndex = 12
+	rowButton(Dashboard, "Leaderboards", function()
+		local entries = {}
+
+		for _, player in ipairs(Players:GetPlayers()) do
+			local stats = player:FindFirstChild("CoreStats")
+			local honey = stats and stats:FindFirstChild("Honey")
+
+			if honey then
+				entries[#entries + 1] = { name = player.DisplayName, honey = honey.Value }
 			end
-
-			overviewButton.MouseButton1Click:Connect(fitView)
-			meButton.MouseButton1Click:Connect(function()
-				local char = localPlayer.Character
-				local root = char and char:FindFirstChild("HumanoidRootPart")
-				if root then
-					M.cx = root.Position.X
-					M.cz = root.Position.Z
-					M.span = math.min(M.span, 450)
-					clampView()
-				end
-			end)
-			zoomInButton.MouseButton1Click:Connect(function()
-				zoomAt(workspace.CurrentCamera.ViewportSize / 2, 0.6)
-			end)
-			zoomOutButton.MouseButton1Click:Connect(function()
-				zoomAt(workspace.CurrentCamera.ViewportSize / 2, 1 / 0.6)
-			end)
-			closeButton.MouseButton1Click:Connect(function()
-				close()
-			end)
-
-			-- bottom bar
-			local bottomBar = new("Frame", {
-				Name = "Bottom",
-				AnchorPoint = Vector2.new(0.5, 1),
-				Position = UDim2.new(0.5, 0, 1, -14),
-				Size = UDim2.new(1, -24, 0, 72),
-				BackgroundColor3 = PANEL,
-				BackgroundTransparency = 0.1,
-				BorderSizePixel = 0,
-				ZIndex = 10,
-			}, gui)
-			new("UICorner", { CornerRadius = UDim.new(0, 10) }, bottomBar)
-			new("UISizeConstraint", { MaxSize = Vector2.new(620, 72) }, bottomBar)
-
-			targetLabel = new("TextLabel", {
-				BackgroundTransparency = 1,
-				Position = UDim2.fromOffset(14, 8),
-				Size = UDim2.new(1, -176, 0, 24),
-				Text = "",
-				TextColor3 = Color3.new(1, 1, 1),
-				Font = Enum.Font.GothamBold,
-				TextSize = 14,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				TextTruncate = Enum.TextTruncate.AtEnd,
-				ZIndex = 11,
-			}, bottomBar)
-			statusLabel = new("TextLabel", {
-				BackgroundTransparency = 1,
-				Position = UDim2.fromOffset(14, 34),
-				Size = UDim2.new(1, -176, 0, 30),
-				Text = HINT,
-				TextColor3 = Color3.fromRGB(170, 170, 180),
-				Font = Enum.Font.Gotham,
-				TextSize = 12,
-				TextWrapped = true,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				TextYAlignment = Enum.TextYAlignment.Top,
-				ZIndex = 11,
-			}, bottomBar)
-			tpButton = makeButton(bottomBar, "Teleport", 150, GREY)
-			tpButton.AnchorPoint = Vector2.new(1, 0.5)
-			tpButton.Position = UDim2.new(1, -12, 0.5, 0)
-			tpButton.Size = UDim2.new(0, 150, 0, 44)
-			tpButton.TextSize = 16
-			tpButton.ZIndex = 12
-			tpButton.MouseButton1Click:Connect(doTeleport)
-
-			updateTargetUi()
 		end
 
-		local function open()
-			if M.isOpen then
-				return
-			end
-			build()
-			M.isOpen = true
-
-			local cam = workspace.CurrentCamera
-			saved.fov = cam.FieldOfView
-			saved.scriptGui = ScreenGui.Enabled
-			ScreenGui.Enabled = false
-
-			-- make the whole map visible from high up
-			saved.fog = Lighting.FogEnd
-			Lighting.FogEnd = 1000000
-			saved.atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
-			if saved.atmosphere then
-				saved.density = saved.atmosphere.Density
-				saved.atmosphere.Density = 0
-			end
-			saved.clouds = workspace.Terrain:FindFirstChildOfClass("Clouds")
-			if saved.clouds then
-				saved.cloudsEnabled = saved.clouds.Enabled
-				saved.clouds.Enabled = false
-			end
-
-			-- keep the character still while we browse the map
-			ContextActionService:BindActionAtPriority("AtlasMapSink", function()
-				return Enum.ContextActionResult.Sink
-			end, false, 3000, Enum.KeyCode.W, Enum.KeyCode.A, Enum.KeyCode.S, Enum.KeyCode.D, Enum.KeyCode.Up, Enum.KeyCode.Down, Enum.KeyCode.Left, Enum.KeyCode.Right, Enum.KeyCode.Space, Enum.KeyCode.Q, Enum.KeyCode.E)
-
-			M.conns[#M.conns + 1] = UserInputService.InputChanged:Connect(onInputChanged)
-			M.conns[#M.conns + 1] = UserInputService.InputEnded:Connect(onInputEnded)
-			M.conns[#M.conns + 1] = UserInputService.InputBegan:Connect(onKey)
-			M.conns[#M.conns + 1] = UserInputService.TouchPinch:Connect(onPinch)
-
-			drag.active = false
-			drag.pinching = false
-			statusLabel.Text = HINT
-			updateTargetUi()
-			fitView()
-			applyCamera()
-			gui.Enabled = true
-			RunService:BindToRenderStep("AtlasMapTeleport", Enum.RenderPriority.Camera.Value + 1, onRender)
+		if #entries == 0 then
+			ui.Notify("Leaderboards", "No data for this server")
+			return
 		end
 
-		close = function()
-			if not M.isOpen then
-				return
-			end
-			M.isOpen = false
-			for _, connection in ipairs(M.conns) do
-				connection:Disconnect()
-			end
-			M.conns = {}
+		table.sort(entries, function(a, b)
+			return a.honey > b.honey
+		end)
+
+		local lines = {}
+
+		for index = 1, math.min(5, #entries) do
+			lines[#lines + 1] = index .. ". " .. entries[index].name .. " - " .. formatNumber(entries[index].honey)
+		end
+
+		ui.Notify("Server Leaderboard (honey)", table.concat(lines, "\n"))
+	end, true)
+
+	Dashboard.Toggle(true)
+
+	----------------------------------------------------------------
+	-- live updates
+	----------------------------------------------------------------
+	threads:Add("Stats", function()
+		while task.wait(1) do
 			pcall(function()
-				RunService:UnbindFromRenderStep("AtlasMapTeleport")
+				local elapsed = os.clock() - state.start
+				local gained = localPlayer.CoreStats.Honey.Value - state.honeyatstart
+				local perHour = gained / math.max(elapsed, 1) * 3600
+				local pollen = localPlayer.CoreStats.Pollen.Value
+				local capacity = localPlayer.CoreStats.Capacity.Value
+				local percent = capacity > 0 and math.floor(pollen / capacity * 100) or 0
+
+				serverTimeLabel.Text = "Server time:  " .. formatTime(workspace.ServerTime.Value)
+				clientTimeLabel.Text = "Client time:  " .. formatTime(elapsed)
+				dateLabel.Text = "Date:  " .. os.date("%d.%m.%Y")
+				honeyLabel.Text = "Honey: " .. formatNumber(gained)
+				hourLabel.Text = "Honey/Hour: " .. formatNumber(perHour)
+				dayLabel.Text = "Honey/Day: " .. formatNumber(perHour * 24)
+				backpackLabel.Text = "Backpack: " .. percent .. "% (" .. formatNumber(pollen) .. " / " .. formatNumber(capacity) .. ")"
+				fieldButton.Text = "Field: " .. tostring(cfg.autofarm.field1)
+				autofarmButton.Text = "Autofarm: " .. (cfg.autofarm.enabled and "ON" or "OFF")
+				refreshBadge()
 			end)
-			pcall(function()
-				ContextActionService:UnbindAction("AtlasMapSink")
-			end)
-			drag.active = false
-			drag.pinching = false
-			gui.Enabled = false
-
-			Lighting.FogEnd = saved.fog or Lighting.FogEnd
-			if saved.atmosphere and saved.density then
-				saved.atmosphere.Density = saved.density
-			end
-			if saved.clouds and saved.cloudsEnabled ~= nil then
-				saved.clouds.Enabled = saved.cloudsEnabled
-			end
-
-			local cam = workspace.CurrentCamera
-			cam.CameraType = Enum.CameraType.Custom
-			cam.FieldOfView = saved.fov or 70
-			local hum = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid")
-			if hum then
-				cam.CameraSubject = hum
-			end
-			ScreenGui.Enabled = saved.scriptGui ~= false
 		end
-
-		return {
-			Cfg = mapCfg,
-			Open = open,
-			Close = close,
-			Toggle = function()
-				if M.isOpen then
-					close()
-				else
-					open()
-				end
-			end,
-			Cancel = function()
-				M.moveId = M.moveId + 1
-			end,
-		}
-	end)()
-
-	Home.AddHorizontalAlignment()
-	Home.AddButton("Open Map Teleport", controls.maptp.Toggle)
-	Home.AddButton("Cancel Map Teleport", controls.maptp.Cancel)
-	Home.AddSlider("Map Teleport Speed", nil, 1, 12, controls.maptp.Cfg, "speed", { Left = true })
-	Home.AddSwitch("Instant Map Teleport (risky)", function(enabled)
-		if enabled then
-			ui.Notify("Instant Teleport", "Instant movement can get detected and reset you.")
-		end
-	end, controls.maptp.Cfg, "instant")
-	-- ==================== END MAP TELEPORT ====================
-
-	Home.Toggle(true)
+	end)
 end
 
 logger.log("Started")
@@ -64733,7 +64303,7 @@ do
 				controls["Field Interval"] = fieldIntervalSlider
 				fieldIntervalSlider.SetVisible(false)
 
-				Farming.AddSwitch("Autofarm", function(n)
+				controls.Autofarm = Farming.AddSwitch("Autofarm", function(n)
 					if n and not state.stop and not threads:Get("Autofarm") then
 						threads:Add("Autofarm", autofarmLoop)
 					elseif not n and threads:Get("Autofarm") then
@@ -67369,7 +66939,10 @@ more accurate dodging]],
 					local sliders = {}
 					local switches = {}
 					local pickers = {}
+					local dropdowns = {}
 					local fontDropdown = nil
+					local previewLabel = nil
+					local applyingPreset = false
 
 					local registry = {
 						accent = setmetatable({}, weak),
@@ -67378,11 +66951,68 @@ more accurate dodging]],
 						panel = setmetatable({}, weak),
 						input = setmetatable({}, weak),
 						track = setmetatable({}, weak),
+						button = setmetatable({}, weak),
+						bar = setmetatable({}, weak),
+						switch = setmetatable({}, weak),
+						box = setmetatable({}, weak),
+						inset = setmetatable({}, weak),
 					}
 
+					local pills = setmetatable({}, weak)
+
+					-- first launch of this version: switch everybody to the Hub theme once
+					if cust.themeapplied ~= true then
+						local hub = {
+							accentr = 66, accentg = 133, accentb = 244,
+							bgr = 7, bgg = 8, bgb = 10,
+							panelr = 25, panelg = 29, panelb = 38,
+							buttonr = 31, buttong = 36, buttonb = 48,
+							barr = 20, barg = 23, barb = 29,
+							cards = true, pill = true, accentlink = false, roundness = 100,
+						}
+
+						for key, value in pairs(hub) do
+							cust[key] = value
+						end
+
+						cust.menutheme = "Hub"
+						cust.themeapplied = true
+						saveConfig()
+					end
+
 					local texts = setmetatable({}, weak)
-					local gradients = setmetatable({}, weak)
-					local FONTS = { "Default", "Gotham", "Ubuntu", "Code", "Arcade", "Nunito", "Highway", "SciFi" }
+					local corners = setmetatable({}, weak)
+
+					-- every font that exists in this Roblox version (checked at runtime)
+					local FONT_CANDIDATES = {
+						"Default", "Gotham", "GothamMedium", "GothamBlack", "BuilderSans", "BuilderSansMedium",
+						"SourceSans", "SourceSansLight", "Ubuntu", "Roboto", "RobotoCondensed", "RobotoMono",
+						"Nunito", "Oswald", "TitilliumWeb", "JosefinSans", "Jura", "Michroma", "Sarpanch",
+						"Code", "SciFi", "Arcade", "Highway", "Arial", "Legacy", "Merriweather", "Garamond",
+						"Bodoni", "Antique", "Fondamento", "SpecialElite", "Cartoon", "FredokaOne", "Bangers",
+						"LuckiestGuy", "DenkOne", "IndieFlower", "Kalam", "PatrickHand", "PermanentMarker",
+						"AmaticSC", "Fantasy", "Creepster", "GrenzeGotisch",
+					}
+
+					local FONTS = {}
+
+					for _, name in ipairs(FONT_CANDIDATES) do
+						if name == "Default" or pcall(function()
+							return Enum.Font[name]
+						end) then
+							FONTS[#FONTS + 1] = name
+						end
+					end
+
+					-- families that have a bold twin (the menu uses bold text for titles)
+					local BOLD_TWIN = {
+						Gotham = "GothamBold",
+						GothamMedium = "GothamBold",
+						SourceSans = "SourceSansBold",
+						Arial = "ArialBold",
+						BuilderSans = "BuilderSansBold",
+						BuilderSansMedium = "BuilderSansBold",
+					}
 
 					----------------------------------------------------------------
 					-- helpers
@@ -67438,6 +67068,9 @@ more accurate dodging]],
 						return inst:IsA("TextButton") or inst:IsA("TextLabel") or inst:IsA("TextBox")
 					end
 
+					----------------------------------------------------------------
+					-- menu styling (colors, font, text size, corners)
+					----------------------------------------------------------------
 					-- original palette of the menu -> role
 					local ROLE_BY_KEY = {
 						[colorKey(Color3.fromRGB(41, 74, 122))] = "accent",
@@ -67454,94 +67087,177 @@ more accurate dodging]],
 
 					local function palette()
 						local accent = rgbOf("accent", 41, 74, 122)
-						local accent2 = rgbOf("grad", 70, 110, 180)
 
 						if cust.rainbow == true then
-							local hue = (os.clock() * 0.08) % 1
-							accent = Color3.fromHSV(hue, 0.7, 0.9)
-							accent2 = Color3.fromHSV((hue + 0.18) % 1, 0.7, 0.9)
+							local speed = math.clamp(num("rainbowspeed", 30), 1, 100) / 100 * 0.3
+							accent = Color3.fromHSV((os.clock() * speed) % 1, 0.7, 0.9)
 						end
 
-						local bg = rgbOf("bg", 21, 22, 23)
-						local panel = rgbOf("panel", 42, 42, 42)
+						local bg = rgbOf("bg", 7, 8, 10)
+						local panel = rgbOf("panel", 25, 29, 38)
+						local linked = cust.accentlink == true
+						local button = linked and accent or rgbOf("button", 31, 36, 48)
+						local bar = linked and accent or rgbOf("bar", 20, 23, 29)
 
 						return {
 							accent = accent,
-							accent2 = accent2,
 							bg = bg,
 							bg2 = shift(bg, 9, 8, 7),
-							bgend = rgbOf("bgend", 30, 34, 48),
 							panel = panel,
 							input = shift(panel, 10, 11, 14),
 							track = shift(panel, 23, 25, 29),
+							button = button,
+							bar = bar,
+							switch = accent,
+							box = panel,
+							inset = shift(panel, -1, -3, -7),
+							off = shift(panel, 30, 34, 44),
 						}
 					end
 
-					----------------------------------------------------------------
-					-- menu styling
-					----------------------------------------------------------------
-					local function setGradient(inst, enabled, color0, color1, rotation)
-						local gradient = inst:FindFirstChild("AtlasGradient")
+					local function styleInstance(inst, role, pal)
+						local color = pal[role]
 
-						if enabled then
-							if not gradient then
-								gradient = Instance.new("UIGradient")
-								gradient.Name = "AtlasGradient"
-								gradient.Parent = inst
+						if role == "box" then
+							-- folder body: filled card (Hub) or see-through (Atlas)
+							if cust.cards == true then
+								if inst.BackgroundTransparency ~= 0 then
+									inst.BackgroundTransparency = 0
+								end
+
+								color = pal.panel
+							else
+								if inst.BackgroundTransparency ~= 1 then
+									inst.BackgroundTransparency = 1
+								end
+
+								return
 							end
+						elseif role == "switch" then
+							if inst:GetAttribute("AtlasPill") then
+								color = (inst.Text ~= "") and pal.accent or pal.off
 
-							gradient.Color = ColorSequence.new(color0, color1)
-							gradient.Rotation = rotation
-							gradients[gradient] = rotation
-						elseif gradient then
-							gradient:Destroy()
+								if inst.BackgroundTransparency ~= 0 then
+									inst.BackgroundTransparency = 0
+								end
+							else
+								color = pal.accent
+
+								if inst.BackgroundTransparency ~= 0.4 then
+									inst.BackgroundTransparency = 0.4
+								end
+							end
 						end
-					end
 
-					local function setBackground(inst, color)
 						if inst.BackgroundColor3 ~= color then
 							inst.BackgroundColor3 = color
 						end
 					end
 
-					local function styleInstance(inst, role, pal)
-						if role == "accent" then
-							-- UIGradient also tints text, so text buttons keep a solid accent color
-							if cust.gradient == true and not isText(inst) then
-								setBackground(inst, Color3.new(1, 1, 1))
-								setGradient(inst, true, pal.accent, pal.accent2, num("gradrotation", 0))
-							else
-								setBackground(inst, pal.accent)
-								setGradient(inst, false)
-							end
-						elseif role == "bg" then
-							if cust.bggradient == true and not isText(inst) then
-								setBackground(inst, Color3.new(1, 1, 1))
-								setGradient(inst, true, pal.bg, pal.bgend, num("bgrotation", 90))
-							else
-								setBackground(inst, pal.bg)
-								setGradient(inst, false)
-							end
-						else
-							setBackground(inst, pal[role])
+					-- round "on/off" switch instead of the check box
+					local function stylePill(btn, animate)
+						local want = cust.pill == true
+						local knob = btn:FindFirstChild("AtlasKnob")
+						local corner = btn:FindFirstChildOfClass("UICorner")
+						local title = btn:FindFirstChild("Title")
 
-							if role == "panel" then
-								local value = math.clamp(num("paneltransparency", 0), 0, 90) / 100
+						if want then
+							btn:SetAttribute("AtlasPill", true)
+							btn.Size = UDim2.new(0, 34, 0, 18)
+							btn.Position = UDim2.new(0, 0, 0, 1)
+							btn.TextTransparency = 1
 
-								if value > 0 then
-									inst.BackgroundTransparency = value
-									inst:SetAttribute("AtlasPT", true)
-								elseif inst:GetAttribute("AtlasPT") then
-									inst.BackgroundTransparency = 0
-									inst:SetAttribute("AtlasPT", nil)
-								end
+							if corner then
+								corner.CornerRadius = UDim.new(1, 0)
+							end
+
+							if title then
+								title.Position = UDim2.new(1, 10, 0, -1)
+							end
+
+							if not knob then
+								knob = Instance.new("Frame")
+								knob.Name = "AtlasKnob"
+								knob.BackgroundColor3 = Color3.new(1, 1, 1)
+								knob.BorderSizePixel = 0
+								knob.AnchorPoint = Vector2.new(0, 0.5)
+								knob.Size = UDim2.new(0, 12, 0, 12)
+								knob.Position = UDim2.new(0, 3, 0.5, 0)
+								knob:SetAttribute("AtlasIgnore", true)
+								knob.Active = false
+
+								local knobCorner = Instance.new("UICorner")
+								knobCorner.CornerRadius = UDim.new(1, 0)
+								knobCorner.Parent = knob
+								knob.Parent = btn
+							end
+
+							knob.Visible = true
+
+							local target = (btn.Text ~= "") and UDim2.new(1, -15, 0.5, 0) or UDim2.new(0, 3, 0.5, 0)
+
+							if animate then
+								TweenService:Create(knob, TweenInfo.new(0.12, Enum.EasingStyle.Quad), { Position = target }):Play()
+							else
+								knob.Position = target
+							end
+						elseif btn:GetAttribute("AtlasPill") then
+							btn:SetAttribute("AtlasPill", nil)
+							btn.Size = UDim2.new(0, 20, 0, 20)
+							btn.Position = UDim2.new(0, 0, 0, 0)
+							btn.TextTransparency = 0
+
+							if corner then
+								corner.CornerRadius = UDim.new(0, 4)
+							end
+
+							if title then
+								title.Position = UDim2.new(1.2, 0, 0, 0)
+							end
+
+							if knob then
+								knob.Visible = false
 							end
 						end
 					end
 
+					local function detectRole(inst)
+						local role = inst:GetAttribute("AtlasRole")
+
+						if role then
+							return role
+						end
+
+						local parent = inst.Parent
+
+						if inst.Name == "Box" and inst:IsA("Frame") and parent and parent.Name == "Folder" then
+							role = "box"
+						else
+							role = ROLE_BY_KEY[colorKey(inst.BackgroundColor3)]
+
+							if role == "accent" then
+								if inst.Name == "Bar" then
+									role = "bar"
+								elseif inst.Name == "Button" and inst:IsA("TextButton") and parent and parent.Name == "Box" then
+									role = "button"
+								elseif inst.Name == "Switch" and inst:IsA("TextButton") and parent and parent.Name == "Switch" then
+									role = "switch"
+								end
+							end
+						end
+
+						if role then
+							inst:SetAttribute("AtlasRole", role)
+						end
+
+						return role
+					end
+
 					local function fontFor(originalName, choice)
-						if choice == "Gotham" and string.find(originalName, "Bold") then
-							return Enum.Font.GothamBold
+						local twin = BOLD_TWIN[choice]
+
+						if twin and (string.find(originalName, "Bold") or string.find(originalName, "Semibold")) then
+							choice = twin
 						end
 
 						local ok, font = pcall(function()
@@ -67556,6 +67272,7 @@ more accurate dodging]],
 					end
 
 					local function styleText(inst)
+						-- font
 						local choice = cust.font
 						local original = inst:GetAttribute("AtlasFont0")
 
@@ -67567,105 +67284,102 @@ more accurate dodging]],
 
 								inst:SetAttribute("AtlasFont0", nil)
 							end
+						else
+							if not original then
+								original = inst.Font.Name
+								inst:SetAttribute("AtlasFont0", original)
+							end
 
+							local font = fontFor(original, choice)
+
+							if font and inst.Font ~= font then
+								inst.Font = font
+							end
+						end
+
+						-- size
+						local scale = math.clamp(num("textscale", 100), 80, 130)
+						local base = inst:GetAttribute("AtlasTS0")
+
+						if scale == 100 then
+							if base then
+								inst.TextSize = base
+								inst:SetAttribute("AtlasTS0", nil)
+							end
+						elseif not inst.TextScaled then
+							if not base then
+								base = inst.TextSize
+								inst:SetAttribute("AtlasTS0", base)
+							end
+
+							local want = math.max(8, math.floor(base * scale / 100 + 0.5))
+
+							if inst.TextSize ~= want then
+								inst.TextSize = want
+							end
+						end
+					end
+
+					local function styleCorner(corner)
+						if corner.Parent and corner.Parent:GetAttribute("AtlasPill") then
 							return
 						end
 
-						if not original then
-							original = inst.Font.Name
-							inst:SetAttribute("AtlasFont0", original)
+						local factor = math.clamp(num("roundness", 50), 0, 100) / 50
+						local base = corner:GetAttribute("AtlasCR0")
+
+						if not base then
+							-- skip circles (scale based) and square corners
+							if corner.CornerRadius.Scale ~= 0 or corner.CornerRadius.Offset <= 0 then
+								return
+							end
+
+							base = corner.CornerRadius.Offset
+							corner:SetAttribute("AtlasCR0", base)
 						end
 
-						local font = fontFor(original, choice)
+						local want = math.floor(base * factor + 0.5)
 
-						if font then
-							inst.Font = font
+						if corner.CornerRadius.Offset ~= want then
+							corner.CornerRadius = UDim.new(0, want)
 						end
 					end
 
 					local function classify(inst, pal)
+						if inst:IsA("UICorner") then
+							corners[inst] = true
+							styleCorner(inst)
+							return
+						end
+
 						if not inst:IsA("GuiObject") or inst:GetAttribute("AtlasIgnore") then
 							return
 						end
 
-						local role = inst:GetAttribute("AtlasRole")
+						local role = detectRole(inst)
+						local palNow = pal or palette()
 
-						if not role then
-							role = ROLE_BY_KEY[colorKey(inst.BackgroundColor3)]
-
-							if role then
-								inst:SetAttribute("AtlasRole", role)
+						if role == "switch" and inst:IsA("TextButton") then
+							if not pills[inst] then
+								pills[inst] = inst:GetPropertyChangedSignal("Text"):Connect(function()
+									if inst:GetAttribute("AtlasPill") then
+										stylePill(inst, true)
+										styleInstance(inst, "switch", palette())
+									end
+								end)
 							end
+
+							stylePill(inst, false)
 						end
 
 						if role and registry[role] then
 							registry[role][inst] = true
-							styleInstance(inst, role, pal or palette())
+							styleInstance(inst, role, palNow)
 						end
 
 						if isText(inst) then
 							texts[inst] = true
 							styleText(inst)
-						end
-					end
-
-					local function applyWindow()
-						local value = math.clamp(num("windowtransparency", 0), 0, 90) / 100
-
-						if value > 0 then
-							mobileToggleButton.BackgroundTransparency = value
-							mobileToggleButton:SetAttribute("AtlasWT", true)
-						elseif mobileToggleButton:GetAttribute("AtlasWT") then
-							mobileToggleButton.BackgroundTransparency = 0
-							mobileToggleButton:SetAttribute("AtlasWT", nil)
-						end
-					end
-
-					local function applyOutline(pal)
-						local stroke = mobileToggleButton:FindFirstChild("AtlasOutline")
-
-						if cust.outline ~= true then
-							if stroke then
-								stroke:Destroy()
-							end
-
-							return
-						end
-
-						if not stroke then
-							stroke = Instance.new("UIStroke")
-							stroke.Name = "AtlasOutline"
-							stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-							stroke.Parent = mobileToggleButton
-						end
-
-						stroke.Thickness = math.clamp(num("outlinethickness", 2), 1, 6)
-						local gradient = stroke:FindFirstChild("AtlasGradient")
-
-						if cust.gradient == true then
-							stroke.Color = Color3.new(1, 1, 1)
-
-							if not gradient then
-								gradient = Instance.new("UIGradient")
-								gradient.Name = "AtlasGradient"
-								gradient.Parent = stroke
-							end
-
-							gradient.Color = ColorSequence.new({
-								ColorSequenceKeypoint.new(0, pal.accent),
-								ColorSequenceKeypoint.new(0.5, pal.accent2),
-								ColorSequenceKeypoint.new(1, pal.accent),
-							})
-
-							local rotation = num("gradrotation", 0)
-							gradient.Rotation = rotation
-							gradients[gradient] = rotation
-						else
-							stroke.Color = pal.accent
-
-							if gradient then
-								gradient:Destroy()
-							end
 						end
 					end
 
@@ -67681,23 +67395,11 @@ more accurate dodging]],
 							for inst in pairs(registry.accent) do
 								styleInstance(inst, "accent", pal)
 							end
-
-							applyOutline(pal)
-						end
-
-						if cust.gradanimated == true then
-							local rotation = (os.clock() * 40) % 360
-
-							for gradient, base in pairs(gradients) do
-								if gradient.Parent then
-									gradient.Rotation = base + rotation
-								end
-							end
 						end
 					end
 
 					local function updateLoop()
-						local needed = cust.rainbow == true or (cust.gradanimated == true and (cust.gradient == true or cust.bggradient == true or cust.outline == true))
+						local needed = cust.rainbow == true
 						local running = connections:Get("customthemeloop")
 
 						if needed and not running then
@@ -67712,6 +67414,10 @@ more accurate dodging]],
 					local function applyTheme()
 						local pal = palette()
 
+						for inst in pairs(registry.switch) do
+							stylePill(inst, false)
+						end
+
 						for role, set in pairs(registry) do
 							for inst in pairs(set) do
 								styleInstance(inst, role, pal)
@@ -67722,8 +67428,10 @@ more accurate dodging]],
 							styleText(inst)
 						end
 
-						applyWindow()
-						applyOutline(pal)
+						for corner in pairs(corners) do
+							styleCorner(corner)
+						end
+
 						updateLoop()
 					end
 
@@ -67747,10 +67455,10 @@ more accurate dodging]],
 					end
 
 					----------------------------------------------------------------
-					-- sky: generated PNG skybox (fallback: Atmosphere)
+					-- sky engine
+					-- (runs right before every frame is drawn, so the game cannot undo it)
 					----------------------------------------------------------------
 					local isDragging = false
-					local lastBuild = 0
 					local crcTable = nil
 
 					local function crc32(str)
@@ -67776,6 +67484,10 @@ more accurate dodging]],
 
 						for i = 1, #str do
 							crc = bit32.bxor(crcTable[bit32.band(bit32.bxor(crc, string.byte(str, i)), 0xFF)], bit32.rshift(crc, 8))
+
+							if i % 60000 == 0 then
+								task.wait()
+							end
 						end
 
 						return bit32.bxor(crc, 0xFFFFFFFF)
@@ -67787,6 +67499,10 @@ more accurate dodging]],
 						for i = 1, #str do
 							a = (a + string.byte(str, i)) % 65521
 							b = (b + a) % 65521
+
+							if i % 60000 == 0 then
+								task.wait()
+							end
 						end
 
 						return b * 65536 + a
@@ -67796,12 +67512,12 @@ more accurate dodging]],
 						return string.pack(">I4", #data) .. chunkType .. data .. string.pack(">I4", crc32(chunkType .. data))
 					end
 
-					local function makePng(width, height, rowColor)
+					-- getRow(y) must return width * 3 bytes (RGB) for that row
+					local function makePng(width, height, getRow)
 						local rows = table.create(height)
 
 						for y = 1, height do
-							local r, g, b = rowColor(y, height)
-							rows[y] = "\0" .. string.rep(string.char(r, g, b), width)
+							rows[y] = "\0" .. getRow(y)
 						end
 
 						local raw = table.concat(rows)
@@ -67828,299 +67544,668 @@ more accurate dodging]],
 						return math.floor(a + (b - a) * t + 0.5)
 					end
 
-					local function buildSkyAssets(top, horizon)
+					local TEX = 256
+
+					-- vertical sky gradient for the 4 side faces: top color -> horizon in the middle
+					local function sideBase(y, height, t, h)
+						local s = math.clamp(((y - 1) / (height - 1)) * 2, 0, 1)
+						s = s * s * (3 - 2 * s)
+						return mix(t[1], h[1], s), mix(t[2], h[2], s), mix(t[3], h[3], s)
+					end
+
+					-- a canvas only stores the pixels that differ from the plain background
+					local function newCanvas(baseAt)
+						return { rows = {}, baseAt = baseAt }
+					end
+
+					local function put(canvas, x, y, r, g, b, a)
+						if a <= 0 or x < 1 or x > TEX or y < 1 or y > TEX then
+							return
+						end
+
+						local row = canvas.rows[y]
+
+						if not row then
+							row = {}
+							canvas.rows[y] = row
+						end
+
+						local cur = row[x]
+						local cr, cg, cb
+
+						if cur then
+							cr, cg, cb = cur[1], cur[2], cur[3]
+						else
+							cr, cg, cb = canvas.baseAt(y)
+						end
+
+						row[x] = { cr + (r - cr) * a, cg + (g - cg) * a, cb + (b - cb) * a }
+					end
+
+					local function canvasRow(canvas, y)
+						local br, bgc, bb = canvas.baseAt(y)
+						local baseStr = string.char(byte(br), byte(bgc), byte(bb))
+						local row = canvas.rows[y]
+
+						if not row then
+							return string.rep(baseStr, TEX)
+						end
+
+						local parts, run = {}, 0
+
+						for x = 1, TEX do
+							local c = row[x]
+
+							if c then
+								if run > 0 then
+									parts[#parts + 1] = string.rep(baseStr, run)
+									run = 0
+								end
+
+								parts[#parts + 1] = string.char(byte(c[1]), byte(c[2]), byte(c[3]))
+							else
+								run += 1
+							end
+						end
+
+						if run > 0 then
+							parts[#parts + 1] = string.rep(baseStr, run)
+						end
+
+						return table.concat(parts)
+					end
+
+					local function paintStars(canvas, count, seed, isTop)
+						local rng = Random.new(seed)
+
+						for _ = 1, count do
+							local x = rng:NextInteger(3, TEX - 2)
+							local y
+
+							if isTop then
+								y = rng:NextInteger(3, TEX - 2)
+							else
+								y = rng:NextInteger(3, math.floor(TEX * 0.5) - 2)
+							end
+
+							local fade = 1
+
+							if not isTop then
+								fade = math.clamp(1 - (y / (TEX * 0.5)) ^ 3, 0.15, 1)
+							end
+
+							local power = (0.35 + 0.65 * rng:NextNumber()) * fade
+							local tint = rng:NextNumber()
+							local r, g, b = 255, 250 - math.floor(tint * 20), 235 + math.floor(tint * 20)
+
+							if rng:NextNumber() < 0.14 then
+								put(canvas, x, y, r, g, b, math.min(1, power + 0.2))
+								local arm = power * 0.5
+								put(canvas, x - 1, y, r, g, b, arm)
+								put(canvas, x + 1, y, r, g, b, arm)
+								put(canvas, x, y - 1, r, g, b, arm)
+								put(canvas, x, y + 1, r, g, b, arm)
+							else
+								put(canvas, x, y, r, g, b, power)
+								put(canvas, x + 1, y, r, g, b, power * 0.25)
+							end
+						end
+					end
+
+					local CRATERS = { { -5, -4, 4 }, { 6, 3, 3 }, { -2, 7, 3 }, { 3, -8, 2.5 } }
+
+					local function paintMoon(canvas, cx, cy, color)
+						local R, G = 15, 44
+						local mr, mg, mb = color.R * 255, color.G * 255, color.B * 255
+
+						-- soft glow
+						for dy = -G, G do
+							for dx = -G, G do
+								local d = math.sqrt(dx * dx + dy * dy)
+
+								if d <= G then
+									local k = 1 - math.max(0, d - R) / (G - R)
+									put(canvas, cx + dx, cy + dy, mr, mg, mb, k * k * 0.3)
+								end
+							end
+						end
+
+						-- disc with a few craters
+						for dy = -(R + 1), R + 1 do
+							for dx = -(R + 1), R + 1 do
+								local d = math.sqrt(dx * dx + dy * dy)
+
+								if d <= R + 1 then
+									local shade = 1 - 0.1 * (d / R) ^ 2
+
+									for _, crater in ipairs(CRATERS) do
+										local cd = math.sqrt((dx - crater[1]) ^ 2 + (dy - crater[2]) ^ 2)
+										shade -= 0.14 * math.clamp(1 - cd / crater[3], 0, 1)
+									end
+
+									put(canvas, cx + dx, cy + dy, mr * shade, mg * shade, mb * shade, math.clamp(R + 1 - d, 0, 1))
+								end
+							end
+						end
+					end
+
+					local purged = false
+
+					local function purgeOldSkyFiles()
+						if purged then
+							return
+						end
+
+						purged = true
+
+						pcall(function()
+							if type(listfiles) == "function" and type(delfile) == "function" then
+								for _, path in ipairs(listfiles("atlas")) do
+									local name = string.match(path, "[^/\\]+$") or ""
+
+									if string.find(name, "^sky_") or string.find(name, "^sky2_") then
+										pcall(delfile, path)
+									end
+								end
+							end
+						end)
+					end
+
+					local function buildSkyAssets(top, horizon, stars, moon, key)
 						local assetFn = getcustomasset or getsynasset
 
 						if type(assetFn) ~= "function" or type(writefile) ~= "function" then
 							return nil
 						end
 
-						local base = "atlas/sky_" .. hexOf(top) .. "_" .. hexOf(horizon)
-						local files = { top = base .. "_top.png", bottom = base .. "_bottom.png", side = base .. "_side.png" }
-						local t = { top.R * 255, top.G * 255, top.B * 255 }
-						local h = { horizon.R * 255, horizon.G * 255, horizon.B * 255 }
+						purgeOldSkyFiles()
 
-						if not isfile(files.top) then
-							writefile(files.top, makePng(4, 4, function()
-								return byte(t[1]), byte(t[2]), byte(t[3])
-							end))
+						local t = { byte(top.R * 255), byte(top.G * 255), byte(top.B * 255) }
+						local h = { byte(horizon.R * 255), byte(horizon.G * 255), byte(horizon.B * 255) }
+						local base = "atlas/sky2_" .. key
+						local fancy = stars > 0 or moon
+						local files = {}
+
+						local function write(name, width, height, getRow)
+							local path = base .. "_" .. name .. ".png"
+
+							if not isfile(path) then
+								writefile(path, makePng(width, height, getRow))
+							end
+
+							files[name] = path
 						end
 
-						if not isfile(files.bottom) then
-							writefile(files.bottom, makePng(4, 4, function()
-								return byte(h[1]), byte(h[2]), byte(h[3])
-							end))
+						local function solid(color)
+							local str = string.char(color[1], color[2], color[3])
+
+							return function()
+								return string.rep(str, 4)
+							end
 						end
 
-						if not isfile(files.side) then
-							writefile(files.side, makePng(8, 256, function(y, height)
-								local s = math.clamp(((y - 1) / (height - 1)) * 2, 0, 1)
-								s = s * s * (3 - 2 * s)
-								return mix(t[1], h[1], s), mix(t[2], h[2], s), mix(t[3], h[3], s)
-							end))
+						write("bottom", 4, 4, solid(h))
+
+						if not fancy then
+							write("top", 4, 4, solid(t))
+
+							write("side", 8, 256, function(y)
+								local r, g, b = sideBase(y, 256, t, h)
+								return string.rep(string.char(r, g, b), 8)
+							end)
+
+							files.bk, files.ft, files.lf, files.rt = files.side, files.side, files.side, files.side
+						else
+							local topCanvas = newCanvas(function()
+								return t[1], t[2], t[3]
+							end)
+
+							paintStars(topCanvas, math.floor(stars * 2.4), 9001, true)
+
+							write("top", TEX, TEX, function(y)
+								return canvasRow(topCanvas, y)
+							end)
+
+							local moonColor = Color3.new(1, 1, 1):Lerp(horizon, 0.3)
+
+							for index, face in ipairs({ "bk", "ft", "lf", "rt" }) do
+								local canvas = newCanvas(function(y)
+									return sideBase(y, TEX, t, h)
+								end)
+
+								paintStars(canvas, math.floor(stars * 1.3), 100 + index * 37, false)
+
+								if moon and face == "ft" then
+									paintMoon(canvas, math.floor(TEX * 0.5) + 20, math.floor(TEX * 0.3), moonColor)
+								end
+
+								write(face, TEX, TEX, function(y)
+									return canvasRow(canvas, y)
+								end)
+							end
 						end
 
-						return { top = assetFn(files.top), bottom = assetFn(files.bottom), side = assetFn(files.side) }
+						local assets = {}
+
+						for name, path in pairs(files) do
+							assets[name] = assetFn(path)
+						end
+
+						return assets
 					end
 
 					local SKY_FACES = {
 						SkyboxUp = "top",
 						SkyboxDn = "bottom",
-						SkyboxBk = "side",
-						SkyboxFt = "side",
-						SkyboxLf = "side",
-						SkyboxRt = "side",
+						SkyboxBk = "bk",
+						SkyboxFt = "ft",
+						SkyboxLf = "lf",
+						SkyboxRt = "rt",
 					}
 
-					local skyOrig = nil
-					local createdAtm = nil
-					local createdSky = nil
+					-- "drive" keeps a property at our value, remembers what the game wanted
+					-- before we touched it, and puts that back on release
+					local drvBase = setmetatable({}, weak)
+					local drvWritten = setmetatable({}, weak)
+
+					local function same(a, b)
+						if a == b then
+							return true
+						end
+
+						local ta = typeof(a)
+
+						if ta == "Color3" then
+							return typeof(b) == "Color3" and colorKey(a) == colorKey(b)
+						end
+
+						if ta == "number" and type(b) == "number" then
+							return math.abs(a - b) <= 0.0005 + math.abs(b) * 0.000001
+						end
+
+						return false
+					end
+
+					local function drive(obj, prop, value)
+						local bag = drvBase[obj]
+
+						if not bag then
+							bag = {}
+							drvBase[obj] = bag
+							drvWritten[obj] = {}
+						end
+
+						local wr = drvWritten[obj]
+						local cur = obj[prop]
+
+						if wr[prop] == nil or not same(cur, wr[prop]) then
+							bag[prop] = cur
+						end
+
+						if not same(cur, value) then
+							obj[prop] = value
+						end
+
+						wr[prop] = value
+					end
+
+					local function release(obj, prop)
+						local wr = drvWritten[obj]
+
+						if not wr or wr[prop] == nil then
+							return
+						end
+
+						local bag = drvBase[obj]
+
+						if bag[prop] ~= nil and same(obj[prop], wr[prop]) then
+							obj[prop] = bag[prop]
+						end
+
+						wr[prop] = nil
+						bag[prop] = nil
+					end
+
+					-- what the game currently wants (ignoring our own writes)
+					local function baseValue(obj, prop)
+						local wr = drvWritten[obj]
+
+						if wr and wr[prop] ~= nil and same(obj[prop], wr[prop]) then
+							return drvBase[obj][prop]
+						end
+
+						return obj[prop]
+					end
+
 					local boxKey = nil
 					local boxAssets = nil
 					local boxFailed = false
+					local building = false
+					local pendingKey = nil
+					local pendingSince = 0
 					local fallbackNotified = false
-					local applied = { tint = false, fog = false, bodies = false, time = false, haze = false }
+					local forceOff = false
+					local createdSky, createdAtm, createdClouds = nil, nil, nil
+					local ATM_PROPS = { "Density", "Haze", "Glare", "Offset", "Color", "Decay" }
 
-					local function captureSky()
-						if skyOrig then
-							return
-						end
+					local function startBuild(top, horizon, stars, moon, key)
+						building = true
 
-						local sky = Lighting:FindFirstChildOfClass("Sky")
-						local atm = Lighting:FindFirstChildOfClass("Atmosphere")
+						task.spawn(function()
+							local ok, assets = pcall(buildSkyAssets, top, horizon, stars, moon, key)
+							building = false
 
-						skyOrig = {
-							Ambient = Lighting.Ambient,
-							OutdoorAmbient = Lighting.OutdoorAmbient,
-							ClockTime = Lighting.ClockTime,
-							FogColor = Lighting.FogColor,
-							FogStart = Lighting.FogStart,
-							FogEnd = Lighting.FogEnd,
-						}
-
-						if sky then
-							skyOrig.sky = {
-								StarCount = sky.StarCount,
-								CelestialBodiesShown = sky.CelestialBodiesShown,
-								SkyboxBk = sky.SkyboxBk,
-								SkyboxDn = sky.SkyboxDn,
-								SkyboxFt = sky.SkyboxFt,
-								SkyboxLf = sky.SkyboxLf,
-								SkyboxRt = sky.SkyboxRt,
-								SkyboxUp = sky.SkyboxUp,
-							}
-						end
-
-						if atm then
-							skyOrig.atm = {
-								Color = atm.Color,
-								Decay = atm.Decay,
-								Density = atm.Density,
-								Offset = atm.Offset,
-								Glare = atm.Glare,
-								Haze = atm.Haze,
-							}
-						end
-					end
-
-					local function restoreSky()
-						connections:Cancel("customsky")
-
-						if not skyOrig then
-							return
-						end
-
-						local original = skyOrig
-						skyOrig = nil
-						boxKey = nil
-
-						pcall(function()
-							Lighting.Ambient = original.Ambient
-							Lighting.OutdoorAmbient = original.OutdoorAmbient
-
-							if not connections:Get("antilag") then
-								Lighting.FogColor = original.FogColor
-								Lighting.FogStart = original.FogStart
-								Lighting.FogEnd = original.FogEnd
-							end
-
-							if applied.time then
-								Lighting.ClockTime = original.ClockTime
-							end
-
-							if createdAtm then
-								createdAtm:Destroy()
+							if ok and assets then
+								boxAssets = assets
+								boxKey = key
 							else
-								local atm = Lighting:FindFirstChildOfClass("Atmosphere")
-
-								if atm and original.atm then
-									for property, value in pairs(original.atm) do
-										atm[property] = value
-									end
-								end
-							end
-
-							if createdSky then
-								createdSky:Destroy()
-							else
-								local sky = Lighting:FindFirstChildOfClass("Sky")
-
-								if sky and original.sky then
-									for property, value in pairs(original.sky) do
-										sky[property] = value
-									end
-								end
+								boxAssets = nil
+								boxFailed = true
+								warn("Customization: skybox generation failed: " .. tostring(assets))
 							end
 						end)
-
-						createdAtm = nil
-						createdSky = nil
-						applied.tint = false
-						applied.fog = false
-						applied.bodies = false
-						applied.time = false
-						applied.haze = false
 					end
 
-					local function skyStep()
-						if not skyOrig then
-							return
-						end
+					local function ensureEffect(name, class, want, props)
+						local inst = Lighting:FindFirstChild(name)
 
-						local top = rgbOf("sky", 90, 170, 255)
-						local horizon = cust.skygradient == true and rgbOf("sky2", 40, 100, 220) or top
-						local assetFn = getcustomasset or getsynasset
-						local canBox = type(assetFn) == "function" and type(writefile) == "function" and not boxFailed
-						local atm = Lighting:FindFirstChildOfClass("Atmosphere")
-						local sky = Lighting:FindFirstChildOfClass("Sky")
+						if want then
+							if not inst or not inst:IsA(class) then
+								if inst then
+									inst:Destroy()
+								end
 
-						if canBox then
-							if not sky then
-								sky = Instance.new("Sky")
-								sky.Name = "AtlasSky"
-								sky.Parent = Lighting
-								createdSky = sky
+								inst = Instance.new(class)
+								inst.Name = name
+								inst.Parent = Lighting
 							end
 
-							local key = hexOf(top) .. hexOf(horizon)
+							for property, value in pairs(props) do
+								setIf(inst, property, value)
+							end
 
-							if key ~= boxKey and (not isDragging or os.clock() - lastBuild > 0.5) then
-								lastBuild = os.clock()
-								boxKey = key
-								local ok, assets = pcall(buildSkyAssets, top, horizon)
+							setIf(inst, "Enabled", true)
+						elseif inst then
+							inst:Destroy()
+						end
+					end
 
-								if ok and assets then
-									boxAssets = assets
-								else
-									boxAssets = nil
-									boxFailed = true
-									warn("Customization: skybox generation failed: " .. tostring(assets))
+					local function engineStep()
+						local off = forceOff
+						local skyOn = cust.sky == true and not off
+						local worldOn = cust.worldon == true and not off
+						local top = rgbOf("sky", 90, 170, 255)
+						local horizon = rgbOf("sky2", 150, 205, 255)
+						local stars = math.clamp(num("skystars", 0), 0, 100)
+						local moon = cust.skymoon == true
+						local assetFn = getcustomasset or getsynasset
+						local canBox = type(assetFn) == "function" and type(writefile) == "function" and not boxFailed
+						local useBox = skyOn and canBox
+
+						----------------------------------------------------------
+						-- SKY (visual only: skybox, stars, moon, sun/moon, clouds)
+						----------------------------------------------------------
+						local sky = Lighting:FindFirstChildOfClass("Sky")
+
+						if useBox and not sky then
+							sky = Instance.new("Sky")
+							sky.Name = "AtlasSky"
+							sky.Parent = Lighting
+							createdSky = sky
+						end
+
+						if useBox then
+							local key = hexOf(top) .. "_" .. hexOf(horizon) .. "_" .. stars .. "_" .. (moon and 1 or 0)
+
+							if key ~= boxKey then
+								if key ~= pendingKey then
+									pendingKey = key
+									pendingSince = os.clock()
+								end
+
+								local settle = (stars > 0 or moon) and 0.6 or 0.12
+
+								if not building and not isDragging and os.clock() - pendingSince >= settle then
+									startBuild(top, horizon, stars, moon, key)
 								end
 							end
 
 							if boxAssets then
 								for property, face in pairs(SKY_FACES) do
-									setIf(sky, property, boxAssets[face])
+									drive(sky, property, boxAssets[face])
 								end
+							end
+						elseif sky then
+							for property in pairs(SKY_FACES) do
+								release(sky, property)
 							end
 
-							-- the game's own atmosphere haze would wash the sky out
-							if atm and atm ~= createdAtm then
-								if cust.skyclearhaze ~= false then
-									setIf(atm, "Density", 0)
-									setIf(atm, "Haze", 0)
-									setIf(atm, "Glare", 0)
-									applied.haze = true
-								elseif applied.haze and skyOrig.atm then
-									atm.Density = skyOrig.atm.Density
-									atm.Haze = skyOrig.atm.Haze
-									atm.Glare = skyOrig.atm.Glare
-									applied.haze = false
+							if createdSky == sky then
+								sky:Destroy()
+								createdSky = nil
+								sky = nil
+							end
+						end
+
+						if sky then
+							if skyOn and cust.skybodies == false then
+								drive(sky, "CelestialBodiesShown", false)
+							else
+								release(sky, "CelestialBodiesShown")
+							end
+
+							if skyOn then
+								if useBox and boxAssets then
+									drive(sky, "StarCount", 0)
+								elseif not useBox then
+									-- executor cannot load custom images: use the game's own stars
+									drive(sky, "StarCount", math.floor(stars / 100 * 5000))
+								end
+							else
+								release(sky, "StarCount")
+							end
+						end
+
+						local terrain = workspace:FindFirstChildOfClass("Terrain")
+						local clouds = terrain and terrain:FindFirstChildOfClass("Clouds")
+						local cloudAmount = skyOn and math.clamp(num("skycloud", 0), 0, 100) or 0
+
+						if terrain then
+							if cloudAmount > 0 then
+								if not clouds then
+									clouds = Instance.new("Clouds")
+									clouds.Name = "AtlasClouds"
+									clouds.Parent = terrain
+									createdClouds = clouds
+								end
+
+								drive(clouds, "Enabled", true)
+								drive(clouds, "Cover", cloudAmount / 100)
+								drive(clouds, "Density", 0.25 + 0.55 * cloudAmount / 100)
+								drive(clouds, "Color", rgbOf("cloud", 255, 255, 255))
+							elseif clouds then
+								for _, property in ipairs({ "Enabled", "Cover", "Density", "Color" }) do
+									release(clouds, property)
+								end
+
+								if createdClouds == clouds then
+									clouds:Destroy()
+									createdClouds = nil
 								end
 							end
+						end
+
+						----------------------------------------------------------
+						-- WORLD (changes the real picture: time, light, fog, colors)
+						----------------------------------------------------------
+						-- time of day (also moves shadows)
+						if worldOn and cust.worldlock == true then
+							drive(Lighting, "ClockTime", math.clamp(num("worldtime", 12), 0, 24))
 						else
+							release(Lighting, "ClockTime")
+						end
+
+						-- tint the world's light with the sky colors
+						local tint = worldOn and math.clamp(num("worldtint", 0), 0, 100) / 100 or 0
+
+						if tint > 0 then
+							local mid = top:Lerp(horizon, 0.5)
+							drive(Lighting, "OutdoorAmbient", baseValue(Lighting, "OutdoorAmbient"):Lerp(mid, tint * 0.6))
+							drive(Lighting, "Ambient", baseValue(Lighting, "Ambient"):Lerp(top, tint * 0.45))
+						else
+							release(Lighting, "OutdoorAmbient")
+							release(Lighting, "Ambient")
+						end
+
+						-- fog: the normal Lighting fog is ignored by Roblox when an Atmosphere exists,
+						-- so the Atmosphere is driven too
+						local fog = worldOn and math.clamp(num("fogamount", 0), 0, 100) or 0
+						local fogColor = rgbOf("fog", 170, 200, 235)
+						local desired = {}
+						local needAtm = false
+
+						if skyOn and cust.skyhaze == true then
+							desired.Density = 0
+							desired.Haze = 0
+							desired.Glare = 0
+						end
+
+						if skyOn and not canBox then
+							-- fallback sky: only a tint through the atmosphere
+							desired.Color = horizon
+							desired.Decay = top
+							desired.Density = 0.5
+							desired.Offset = 1
+							desired.Glare = 0
+							desired.Haze = 0
+							needAtm = true
+
 							if not fallbackNotified then
 								fallbackNotified = true
-								ui.Notify("Custom Sky", "Your executor can't load custom images, using a basic atmosphere tint instead")
-							end
-
-							if not atm then
-								atm = Instance.new("Atmosphere")
-								atm.Name = "AtlasAtmosphere"
-								atm.Parent = Lighting
-								createdAtm = atm
-							end
-
-							setIf(atm, "Color", horizon)
-							setIf(atm, "Decay", top)
-							setIf(atm, "Density", 0.8)
-							setIf(atm, "Offset", 1)
-							setIf(atm, "Glare", 0)
-							setIf(atm, "Haze", 0)
-						end
-
-						-- sun / moon / stars
-						if sky then
-							if cust.skyhidebodies == true then
-								setIf(sky, "StarCount", 0)
-								setIf(sky, "CelestialBodiesShown", false)
-								applied.bodies = true
-							elseif applied.bodies and skyOrig.sky then
-								sky.StarCount = skyOrig.sky.StarCount
-								sky.CelestialBodiesShown = skyOrig.sky.CelestialBodiesShown
-								applied.bodies = false
+								ui.Notify("Custom Sky", "Your executor can't load custom images. Using a basic atmosphere tint instead.")
 							end
 						end
 
-						-- ambient tint
-						if cust.skytint == true then
-							setIf(Lighting, "OutdoorAmbient", skyOrig.OutdoorAmbient:Lerp(top, 0.5))
-							setIf(Lighting, "Ambient", skyOrig.Ambient:Lerp(top, 0.35))
-							applied.tint = true
-						elseif applied.tint then
-							Lighting.OutdoorAmbient = skyOrig.OutdoorAmbient
-							Lighting.Ambient = skyOrig.Ambient
-							applied.tint = false
+						if fog > 0 then
+							local f = fog / 100
+							desired.Density = 0.05 + 0.85 * f ^ 1.5
+							desired.Offset = 0
+							desired.Haze = f * 2
+							desired.Glare = 0
+							desired.Color = fogColor
+							desired.Decay = fogColor
+							needAtm = true
 						end
 
-						-- fog (skipped while Anti Lag is controlling the fog)
-						if cust.skyfog == true and not connections:Get("antilag") then
-							setIf(Lighting, "FogColor", horizon)
-							setIf(Lighting, "FogStart", 0)
-							setIf(Lighting, "FogEnd", math.clamp(num("skyfogend", 1500), 100, 10000))
-							applied.fog = true
-						elseif applied.fog then
-							if not connections:Get("antilag") then
-								Lighting.FogColor = skyOrig.FogColor
-								Lighting.FogStart = skyOrig.FogStart
-								Lighting.FogEnd = skyOrig.FogEnd
+						local atm = Lighting:FindFirstChildOfClass("Atmosphere")
+
+						if needAtm and not atm then
+							atm = Instance.new("Atmosphere")
+							atm.Name = "AtlasAtmosphere"
+							atm.Parent = Lighting
+							createdAtm = atm
+						end
+
+						if atm then
+							for _, property in ipairs(ATM_PROPS) do
+								local value = desired[property]
+
+								if value ~= nil then
+									drive(atm, property, value)
+								else
+									release(atm, property)
+								end
 							end
 
-							applied.fog = false
-						end
-
-						-- time of day
-						if cust.skylocktime == true then
-							setIf(Lighting, "ClockTime", math.clamp(num("skytime", 12), 0, 24))
-							applied.time = true
-						end
-					end
-
-					local function setSky(enabled)
-						if enabled then
-							captureSky()
-
-							if not connections:Get("customsky") then
-								connections:Add("customsky", RunService.Heartbeat:Connect(function()
-									pcall(skyStep)
-								end))
+							if createdAtm == atm and not needAtm then
+								atm:Destroy()
+								createdAtm = nil
 							end
+						end
+
+						if fog > 0 and not connections:Get("antilag") then
+							local fogEnd = 40 + 3000 * (1 - fog / 100) ^ 2
+							drive(Lighting, "FogColor", fogColor)
+							drive(Lighting, "FogStart", fogEnd * 0.1)
+							drive(Lighting, "FogEnd", fogEnd)
 						else
-							restoreSky()
+							release(Lighting, "FogColor")
+							release(Lighting, "FogStart")
+							release(Lighting, "FogEnd")
+						end
+
+						-- color grading, glow, sun rays
+						local bright = num("bright", 50)
+						local satur = num("satur", 50)
+						local contr = num("contr", 50)
+						local screen = rgbOf("screen", 255, 255, 255)
+						local wantGrade = worldOn and (bright ~= 50 or satur ~= 50 or contr ~= 50 or colorKey(screen) ~= 16777215)
+
+						ensureEffect("AtlasColor", "ColorCorrectionEffect", wantGrade, {
+							Brightness = (bright - 50) / 50 * 0.4,
+							Contrast = (contr - 50) / 50 * 0.6,
+							Saturation = (satur - 50) / 50,
+							TintColor = screen,
+						})
+
+						local bloom = worldOn and math.clamp(num("bloom", 0), 0, 100) or 0
+
+						ensureEffect("AtlasBloom", "BloomEffect", bloom > 0, {
+							Intensity = bloom / 100 * 1.2,
+							Size = 24,
+							Threshold = 0.8,
+						})
+
+						local rays = worldOn and math.clamp(num("sunrays", 0), 0, 100) or 0
+
+						ensureEffect("AtlasRays", "SunRaysEffect", rays > 0, {
+							Intensity = rays / 100 * 0.35,
+							Spread = 0.8,
+						})
+					end
+
+					local RS_NAME = "AtlasSkyEngine"
+
+					local function startEngine()
+						if connections:Get("customsky") then
+							return
+						end
+
+						RunService:BindToRenderStep(RS_NAME, Enum.RenderPriority.Last.Value, function()
+							pcall(engineStep)
+						end)
+
+						connections:Add("customsky", {
+							Disconnect = function()
+								pcall(function()
+									RunService:UnbindFromRenderStep(RS_NAME)
+								end)
+							end,
+						})
+					end
+
+					local function stopEngine()
+						if not connections:Get("customsky") then
+							return
+						end
+
+						forceOff = true
+						pcall(engineStep)
+						forceOff = false
+						connections:Cancel("customsky")
+						boxKey = nil
+						pendingKey = nil
+					end
+
+					local function refreshEngine()
+						if cust.sky == true or cust.worldon == true then
+							startEngine()
+						else
+							stopEngine()
 						end
 					end
 
-					ScreenGui.Destroying:Connect(restoreSky)
+					ScreenGui.Destroying:Connect(stopEngine)
 
 					----------------------------------------------------------------
 					-- color circles + custom color input
@@ -68614,6 +68699,7 @@ more accurate dodging]],
 						return api
 					end
 
+
 					----------------------------------------------------------------
 					-- presets / import / export
 					----------------------------------------------------------------
@@ -68641,6 +68727,27 @@ more accurate dodging]],
 						end
 					end
 
+					local function updatePreview()
+						if not previewLabel then
+							return
+						end
+
+						local choice = cust.font
+
+						if type(choice) ~= "string" or choice == "Default" then
+							previewLabel.Text = "Preview: original menu font"
+							pcall(function()
+								previewLabel.Font = Enum.Font.GothamMedium
+							end)
+						else
+							previewLabel.Text = "Preview: The quick fox 0123"
+
+							pcall(function()
+								previewLabel.Font = Enum.Font[choice]
+							end)
+						end
+					end
+
 					local function setFont(name)
 						cust.font = name
 						saveConfig()
@@ -68649,125 +68756,359 @@ more accurate dodging]],
 							fontDropdown.SetValue(name)
 						end
 
+						updatePreview()
 						requestApply()
 					end
 
-					local PRESET_NAMES = { "Default", "Crimson", "Emerald", "Violet", "Sunset", "Ocean", "Rose", "Mono", "Midnight" }
-
-					local PRESETS = {
-						Default = { accent = { 41, 74, 122 }, accent2 = { 70, 110, 180 }, gradient = false, bg = { 21, 22, 23 }, bgend = { 30, 34, 48 }, bggradient = false, panel = { 42, 42, 42 } },
-						Crimson = { accent = { 160, 30, 45 }, accent2 = { 255, 90, 70 }, gradient = true, bg = { 22, 18, 19 }, bgend = { 40, 16, 22 }, bggradient = true, panel = { 44, 36, 38 } },
-						Emerald = { accent = { 20, 130, 85 }, accent2 = { 70, 210, 140 }, gradient = true, bg = { 16, 22, 20 }, bgend = { 14, 40, 32 }, bggradient = true, panel = { 34, 44, 40 } },
-						Violet = { accent = { 100, 50, 175 }, accent2 = { 210, 90, 230 }, gradient = true, bg = { 20, 17, 26 }, bgend = { 38, 20, 60 }, bggradient = true, panel = { 40, 36, 52 } },
-						Sunset = { accent = { 230, 80, 60 }, accent2 = { 250, 175, 60 }, gradient = true, bg = { 24, 19, 20 }, bgend = { 60, 28, 30 }, bggradient = true, panel = { 48, 38, 38 } },
-						Ocean = { accent = { 15, 105, 165 }, accent2 = { 40, 210, 205 }, gradient = true, bg = { 15, 20, 26 }, bgend = { 12, 40, 56 }, bggradient = true, panel = { 32, 42, 52 } },
-						Rose = { accent = { 200, 60, 115 }, accent2 = { 255, 150, 180 }, gradient = true, bg = { 24, 18, 22 }, bgend = { 50, 22, 40 }, bggradient = true, panel = { 48, 36, 44 } },
-						Mono = { accent = { 85, 85, 90 }, accent2 = { 170, 170, 180 }, gradient = true, bg = { 18, 18, 18 }, bgend = { 30, 30, 30 }, bggradient = false, panel = { 36, 36, 36 } },
-						Midnight = { accent = { 55, 60, 170 }, accent2 = { 125, 80, 230 }, gradient = true, bg = { 8, 8, 14 }, bgend = { 18, 12, 36 }, bggradient = true, panel = { 22, 22, 32 } },
-					}
-
-					local function applyPreset(name)
-						local preset = PRESETS[name]
-
-						if not preset then
+					local function markCustom()
+						if applyingPreset then
 							return
 						end
 
-						setPicker("accent", preset.accent)
-						setPicker("grad", preset.accent2)
-						setSwitch("gradient", preset.gradient)
-						setPicker("bg", preset.bg)
-						setPicker("bgend", preset.bgend)
-						setSwitch("bggradient", preset.bggradient)
-						setPicker("panel", preset.panel)
+						if cust.skypreset ~= "Custom" then
+							cust.skypreset = "Custom"
+
+							if dropdowns.skypreset then
+								dropdowns.skypreset.SetValue("Custom")
+							end
+						end
+					end
+
+					-- touching any sky control turns the sky on, touching any world control turns the world on
+					local function skyTouch()
+						if applyingPreset then
+							return
+						end
+
+						markCustom()
+
+						if cust.sky ~= true then
+							setSwitch("sky", true)
+						end
+					end
+
+					local function worldTouch()
+						if applyingPreset then
+							return
+						end
+
+						markCustom()
+
+						if cust.worldon ~= true then
+							setSwitch("worldon", true)
+						end
+					end
+
+					-- menu themes: Hub (new look, default) and Atlas (the old look) + color variants of Hub
+					local applyingMenu = false
+
+					local function mixc(a, b, k)
+						return { mix(a[1], b[1], k), mix(a[2], b[2], k), mix(a[3], b[3], k) }
+					end
+
+					local function variant(accent, bg, panel)
+						return {
+							accent = accent, bg = bg, panel = panel,
+							button = mixc(panel, accent, 0.22), bar = mixc(bg, panel, 0.6),
+							cards = true, pill = true, link = false, round = 100,
+						}
+					end
+
+					local THEMES = {
+						Hub = {
+							accent = { 66, 133, 244 }, bg = { 7, 8, 10 }, panel = { 25, 29, 38 },
+							button = { 31, 36, 48 }, bar = { 20, 23, 29 },
+							cards = true, pill = true, link = false, round = 100,
+						},
+						Atlas = {
+							accent = { 41, 74, 122 }, bg = { 21, 22, 23 }, panel = { 42, 42, 42 },
+							button = { 41, 74, 122 }, bar = { 41, 74, 122 },
+							cards = false, pill = false, link = true, round = 50,
+						},
+						Crimson = variant({ 200, 50, 70 }, { 10, 7, 8 }, { 36, 24, 27 }),
+						Emerald = variant({ 30, 170, 110 }, { 6, 10, 9 }, { 22, 34, 31 }),
+						Violet = variant({ 130, 80, 220 }, { 9, 7, 13 }, { 31, 26, 44 }),
+						Sunset = variant({ 240, 105, 70 }, { 11, 8, 8 }, { 38, 28, 28 }),
+						Ocean = variant({ 20, 150, 220 }, { 6, 9, 12 }, { 22, 33, 43 }),
+						Rose = variant({ 225, 80, 140 }, { 11, 7, 9 }, { 40, 27, 34 }),
+						Mono = variant({ 140, 140, 150 }, { 8, 8, 8 }, { 28, 28, 30 }),
+						Midnight = variant({ 90, 100, 230 }, { 5, 5, 10 }, { 20, 20, 33 }),
+						Gold = variant({ 220, 165, 40 }, { 10, 9, 6 }, { 36, 33, 24 }),
+						Cyber = variant({ 0, 220, 190 }, { 5, 9, 11 }, { 18, 30, 34 }),
+					}
+
+					local MENU_NAMES = { "Hub", "Atlas", "Crimson", "Emerald", "Violet", "Sunset", "Ocean", "Rose", "Mono", "Midnight", "Gold", "Cyber" }
+
+					local function applyMenuPreset(name)
+						local theme = THEMES[name]
+
+						if not theme then
+							return
+						end
+
+						applyingMenu = true
+						setPicker("accent", theme.accent)
+						setPicker("bg", theme.bg)
+						setPicker("panel", theme.panel)
+						setPicker("button", theme.button)
+						setPicker("bar", theme.bar)
+						setSwitch("cards", theme.cards)
+						setSwitch("pill", theme.pill)
+						setSwitch("accentlink", theme.link)
+						setSlider("roundness", theme.round)
+						applyingMenu = false
+
+						cust.menutheme = name
+						saveConfig()
+
+						if dropdowns.menutheme then
+							dropdowns.menutheme.SetValue(name)
+						end
+
 						requestApply()
 					end
 
-					local SKY_NAMES = { "Clear Blue", "Sunset", "Pink Dream", "Night", "Toxic", "Blood Moon", "Ocean" }
+					local function randomizeTheme()
+						local hue = math.random()
+						local a = Color3.fromHSV(hue, 0.7, 0.9)
+						local b = Color3.fromHSV(hue, 0.3, 0.05)
+						local c = Color3.fromHSV(hue, 0.25, 0.16)
+						local accent = { a.R * 255, a.G * 255, a.B * 255 }
+						local bg = { b.R * 255, b.G * 255, b.B * 255 }
+						local panel = { c.R * 255, c.G * 255, c.B * 255 }
+						local theme = variant(accent, bg, panel)
+						applyingMenu = true
+						setPicker("accent", accent)
+						setPicker("bg", bg)
+						setPicker("panel", panel)
+						setPicker("button", theme.button)
+						setPicker("bar", theme.bar)
+						applyingMenu = false
+						cust.menutheme = "Custom"
+
+						if dropdowns.menutheme then
+							dropdowns.menutheme.SetValue("Custom")
+						end
+
+						requestApply()
+					end
+
+					local function resetTheme()
+						applyMenuPreset("Hub")
+						setSwitch("rainbow", false)
+						setSlider("rainbowspeed", 30)
+						setSlider("textscale", 100)
+						setFont("Default")
+						requestApply()
+					end
+
+					-- sky configs. Every config = sky look + (optional) world look
+					local SKY_NAMES = { "Game Default", "Summer", "Winter", "Autumn", "Spring", "Night (BSS)", "Starry Night", "Sunset", "Pink Dream", "Toxic", "Blood Moon", "Ocean" }
 
 					local SKY_PRESETS = {
-						["Clear Blue"] = { { 70, 140, 235 }, { 150, 205, 255 } },
-						Sunset = { { 90, 50, 140 }, { 255, 130, 70 } },
-						["Pink Dream"] = { { 150, 110, 255 }, { 255, 160, 210 } },
-						Night = { { 5, 5, 20 }, { 25, 35, 80 } },
-						Toxic = { { 20, 90, 40 }, { 130, 235, 80 } },
-						["Blood Moon"] = { { 40, 0, 10 }, { 190, 30, 40 } },
-						Ocean = { { 10, 60, 130 }, { 70, 200, 215 } },
+						Summer = {
+							top = { 32, 118, 235 }, horizon = { 165, 215, 255 }, stars = 0, moon = false, bodies = true,
+							clouds = 35, cloud = { 255, 255, 255 },
+							world = { lock = true, time = 14, tint = 20, fog = 6, fogc = { 190, 220, 255 }, bright = 54, sat = 62, contrast = 52, screen = { 255, 248, 235 }, bloom = 22, rays = 30 },
+						},
+						Winter = {
+							top = { 105, 135, 175 }, horizon = { 222, 232, 244 }, stars = 0, moon = false, bodies = true,
+							clouds = 75, cloud = { 235, 240, 248 },
+							world = { lock = true, time = 12, tint = 30, fog = 30, fogc = { 226, 234, 243 }, bright = 53, sat = 34, contrast = 50, screen = { 236, 244, 255 }, bloom = 15, rays = 0 },
+						},
+						Autumn = {
+							top = { 70, 100, 150 }, horizon = { 255, 190, 120 }, stars = 0, moon = false, bodies = true,
+							clouds = 45, cloud = { 255, 225, 195 },
+							world = { lock = true, time = 16.5, tint = 28, fog = 14, fogc = { 255, 205, 150 }, bright = 50, sat = 58, contrast = 55, screen = { 255, 236, 212 }, bloom = 18, rays = 35 },
+						},
+						Spring = {
+							top = { 90, 170, 255 }, horizon = { 255, 215, 235 }, stars = 0, moon = false, bodies = true,
+							clouds = 40, cloud = { 255, 245, 250 },
+							world = { lock = true, time = 13, tint = 18, fog = 8, fogc = { 255, 228, 240 }, bright = 54, sat = 66, contrast = 50, screen = { 255, 244, 250 }, bloom = 25, rays = 20 },
+						},
+						["Night (BSS)"] = {
+							top = { 8, 10, 34 }, horizon = { 34, 30, 84 }, stars = 70, moon = true, bodies = false,
+							clouds = 18, cloud = { 52, 56, 110 },
+							world = { lock = true, time = 0, tint = 65, fog = 22, fogc = { 20, 22, 58 }, bright = 44, sat = 55, contrast = 54, screen = { 200, 210, 255 }, bloom = 30, rays = 0 },
+						},
+						["Starry Night"] = {
+							top = { 2, 3, 14 }, horizon = { 14, 18, 48 }, stars = 100, moon = true, bodies = false,
+							clouds = 0, cloud = { 40, 46, 90 },
+							world = { lock = true, time = 0, tint = 55, fog = 8, fogc = { 10, 14, 40 }, bright = 42, sat = 48, contrast = 52, screen = { 215, 225, 255 }, bloom = 20, rays = 0 },
+						},
+						Sunset = {
+							top = { 80, 45, 135 }, horizon = { 255, 125, 65 }, stars = 8, moon = false, bodies = true,
+							clouds = 40, cloud = { 255, 170, 130 },
+							world = { lock = true, time = 18, tint = 40, fog = 16, fogc = { 255, 150, 90 }, bright = 48, sat = 64, contrast = 56, screen = { 255, 225, 200 }, bloom = 28, rays = 45 },
+						},
+						["Pink Dream"] = {
+							top = { 140, 105, 255 }, horizon = { 255, 165, 215 }, stars = 15, moon = false, bodies = true,
+							clouds = 50, cloud = { 255, 210, 235 },
+							world = { lock = true, time = 17, tint = 35, fog = 14, fogc = { 255, 190, 225 }, bright = 52, sat = 66, contrast = 48, screen = { 255, 235, 250 }, bloom = 35, rays = 20 },
+						},
+						Toxic = {
+							top = { 20, 90, 40 }, horizon = { 130, 235, 80 }, stars = 0, moon = false, bodies = false,
+							clouds = 30, cloud = { 150, 230, 110 },
+							world = { lock = true, time = 15, tint = 45, fog = 22, fogc = { 110, 200, 70 }, bright = 48, sat = 62, contrast = 55, screen = { 225, 255, 215 }, bloom = 25, rays = 0 },
+						},
+						["Blood Moon"] = {
+							top = { 30, 0, 8 }, horizon = { 170, 25, 35 }, stars = 30, moon = true, bodies = false,
+							clouds = 25, cloud = { 120, 30, 35 },
+							world = { lock = true, time = 0, tint = 60, fog = 20, fogc = { 90, 12, 20 }, bright = 44, sat = 58, contrast = 58, screen = { 255, 215, 215 }, bloom = 30, rays = 0 },
+						},
+						Ocean = {
+							top = { 10, 60, 130 }, horizon = { 70, 200, 215 }, stars = 0, moon = false, bodies = true,
+							clouds = 30, cloud = { 225, 245, 250 },
+							world = { lock = true, time = 13, tint = 28, fog = 12, fogc = { 120, 205, 220 }, bright = 52, sat = 60, contrast = 52, screen = { 230, 250, 255 }, bloom = 22, rays = 25 },
+						},
 					}
 
 					local function applySkyPreset(name)
+						if name == "Game Default" then
+							applyingPreset = true
+							setSwitch("sky", false)
+							setSwitch("worldon", false)
+							applyingPreset = false
+							cust.skypreset = name
+							saveConfig()
+							return
+						end
+
 						local preset = SKY_PRESETS[name]
 
 						if not preset then
 							return
 						end
 
-						setPicker("sky", preset[1])
-						setPicker("sky2", preset[2])
-						setSwitch("skygradient", true)
-						setSwitch("skyenabled", true)
+						local world = preset.world
+						applyingPreset = true
+
+						setPicker("sky", preset.top)
+						setPicker("sky2", preset.horizon)
+						setSlider("skystars", preset.stars)
+						setSwitch("skymoon", preset.moon)
+						setSwitch("skybodies", preset.bodies)
+						setSlider("skycloud", preset.clouds)
+						setPicker("cloud", preset.cloud)
+
+						setSwitch("worldlock", world.lock)
+						setSlider("worldtime", world.time)
+						setSlider("worldtint", world.tint)
+						setSlider("fogamount", world.fog)
+						setPicker("fog", world.fogc)
+						setSlider("bright", world.bright)
+						setSlider("satur", world.sat)
+						setSlider("contr", world.contrast)
+						setPicker("screen", world.screen)
+						setSlider("bloom", world.bloom)
+						setSlider("sunrays", world.rays)
+
+						setSwitch("sky", true)
+						applyingPreset = false
+
+						cust.skypreset = name
+						saveConfig()
+
+						if dropdowns.skypreset then
+							dropdowns.skypreset.SetValue(name)
+						end
+
+						if cust.worldon == true then
+							ui.Notify("Sky", name .. " applied (sky + world lighting)")
+						else
+							ui.Notify("Sky", name .. " applied. Turn on \"Sky Affects World\" to also change lighting, fog and colors.")
+						end
 					end
 
-					local function randomizeTheme()
-						local hue = math.random()
-						local a = Color3.fromHSV(hue, 0.7, 0.75)
-						local b = Color3.fromHSV((hue + 0.12) % 1, 0.65, 0.95)
-						setPicker("accent", { a.R * 255, a.G * 255, a.B * 255 })
-						setPicker("grad", { b.R * 255, b.G * 255, b.B * 255 })
-						setSwitch("gradient", true)
-						requestApply()
+					local function resetSky()
+						applyingPreset = true
+						setSwitch("sky", false)
+						setPicker("sky", { 90, 170, 255 })
+						setPicker("sky2", { 150, 205, 255 })
+						setSlider("skystars", 0)
+						setSwitch("skymoon", false)
+						setSwitch("skybodies", true)
+						setSlider("skycloud", 0)
+						setPicker("cloud", { 255, 255, 255 })
+						setSwitch("skyhaze", false)
+						applyingPreset = false
+						cust.skypreset = "Custom"
+						saveConfig()
+
+						if dropdowns.skypreset then
+							dropdowns.skypreset.SetValue("Custom")
+						end
 					end
 
-					local function resetTheme()
-						applyPreset("Default")
-						setSlider("gradrotation", 0)
-						setSlider("bgrotation", 90)
-						setSlider("windowtransparency", 0)
-						setSlider("paneltransparency", 0)
-						setSlider("outlinethickness", 2)
-						setSwitch("gradanimated", false)
-						setSwitch("rainbow", false)
-						setSwitch("outline", false)
-						setFont("Default")
-						requestApply()
+					local function resetWorld()
+						applyingPreset = true
+						setSwitch("worldon", false)
+						setSwitch("worldlock", false)
+						setSlider("worldtime", 12)
+						setSlider("worldtint", 0)
+						setSlider("fogamount", 0)
+						setPicker("fog", { 170, 200, 235 })
+						setSlider("bright", 50)
+						setSlider("satur", 50)
+						setSlider("contr", 50)
+						setPicker("screen", { 255, 255, 255 })
+						setSlider("bloom", 0)
+						setSlider("sunrays", 0)
+						applyingPreset = false
+						saveConfig()
 					end
 
-					-- only these keys are accepted when importing a theme
-					local THEME_NUM = {
+					-- import / export (only these keys are accepted)
+					local MENU_NUM = {
 						accentr = { 0, 255 }, accentg = { 0, 255 }, accentb = { 0, 255 },
-						gradr = { 0, 255 }, gradg = { 0, 255 }, gradb = { 0, 255 },
 						bgr = { 0, 255 }, bgg = { 0, 255 }, bgb = { 0, 255 },
-						bgendr = { 0, 255 }, bgendg = { 0, 255 }, bgendb = { 0, 255 },
 						panelr = { 0, 255 }, panelg = { 0, 255 }, panelb = { 0, 255 },
-						gradrotation = { 0, 360 }, bgrotation = { 0, 360 },
-						windowtransparency = { 0, 90 }, paneltransparency = { 0, 90 },
-						outlinethickness = { 1, 6 },
+						buttonr = { 0, 255 }, buttong = { 0, 255 }, buttonb = { 0, 255 },
+						barr = { 0, 255 }, barg = { 0, 255 }, barb = { 0, 255 },
+						rainbowspeed = { 1, 100 }, textscale = { 80, 130 }, roundness = { 0, 100 },
 					}
 
-					local THEME_FLAG = { gradient = true, bggradient = true, gradanimated = true, outline = true, rainbow = true }
+					local MENU_FLAG = { rainbow = true, cards = true, pill = true, accentlink = true }
 
-					local function exportTheme()
+					local SKY_NUM = {
+						skyr = { 0, 255 }, skyg = { 0, 255 }, skyb = { 0, 255 },
+						sky2r = { 0, 255 }, sky2g = { 0, 255 }, sky2b = { 0, 255 },
+						skystars = { 0, 100 }, skycloud = { 0, 100 },
+						cloudr = { 0, 255 }, cloudg = { 0, 255 }, cloudb = { 0, 255 },
+						worldtime = { 0, 24 }, worldtint = { 0, 100 }, fogamount = { 0, 100 },
+						fogr = { 0, 255 }, fogg = { 0, 255 }, fogb = { 0, 255 },
+						bright = { 0, 100 }, satur = { 0, 100 }, contr = { 0, 100 },
+						screenr = { 0, 255 }, screeng = { 0, 255 }, screenb = { 0, 255 },
+						bloom = { 0, 100 }, sunrays = { 0, 100 },
+					}
+
+					local SKY_FLAG = { sky = true, skymoon = true, skybodies = true, skyhaze = true, worldon = true, worldlock = true }
+
+					local function exportConfig(numKeys, flagKeys, withFont, label)
 						local out = {}
 
-						for key in pairs(THEME_NUM) do
+						for key in pairs(numKeys) do
 							out[key] = num(key, 0)
 						end
 
-						for key in pairs(THEME_FLAG) do
+						for key in pairs(flagKeys) do
 							out[key] = cust[key] == true
 						end
 
-						out.font = type(cust.font) == "string" and cust.font or "Default"
+						if withFont then
+							out.font = type(cust.font) == "string" and cust.font or "Default"
+						end
+
 						local ok = false
 
 						if setclipboard then
 							ok = pcall(setclipboard, HttpService:JSONEncode(out))
 						end
 
-						ui.Notify("Customization", ok and "Theme copied to clipboard" or "Clipboard is not supported")
+						ui.Notify("Customization", ok and (label .. " copied to clipboard") or "Clipboard is not supported")
 					end
 
-					local function importTheme(text)
+					local function importConfig(text, numKeys, flagKeys, withFont, label)
 						if type(text) ~= "string" or text == "" then
 							return
 						end
@@ -68775,14 +69116,15 @@ more accurate dodging]],
 						local ok, data = pcall(HttpService.JSONDecode, HttpService, text)
 
 						if not ok or type(data) ~= "table" then
-							ui.Notify("Customization", "Invalid theme data")
+							ui.Notify("Customization", "Invalid data")
 							return
 						end
 
 						local count = 0
+						applyingPreset = true
 
 						for key, value in pairs(data) do
-							local range = THEME_NUM[key]
+							local range = numKeys[key]
 
 							if range and type(value) == "number" then
 								local clamped = math.clamp(value, range[1], range[2])
@@ -68794,124 +69136,174 @@ more accurate dodging]],
 								end
 
 								count += 1
-							elseif THEME_FLAG[key] and type(value) == "boolean" then
+							elseif flagKeys[key] and type(value) == "boolean" then
 								setSwitch(key, value)
 								count += 1
-							elseif key == "font" and type(value) == "string" and table.find(FONTS, value) then
+							elseif withFont and key == "font" and type(value) == "string" and table.find(FONTS, value) then
 								setFont(value)
 								count += 1
 							end
 						end
 
+						applyingPreset = false
+
 						for _, picker in pairs(pickers) do
 							picker.Redraw()
 						end
 
+						cust.skypreset = "Custom"
+
+						if dropdowns.skypreset then
+							dropdowns.skypreset.SetValue("Custom")
+						end
+
 						saveConfig()
 						requestApply()
-						ui.Notify("Customization", count > 0 and "Theme imported" or "Nothing to import")
+						refreshEngine()
+						ui.Notify("Customization", count > 0 and (label .. " imported") or "Nothing to import")
 					end
 
 					----------------------------------------------------------------
 					-- controls
 					----------------------------------------------------------------
-					local Presets = tab.AddFolder("Theme Presets")
-					local Accent = tab.AddFolder("Accent Color")
-					local Background = tab.AddFolder("Background")
-					local Window = tab.AddFolder("Window", true)
+					local function addSlider(folder, title, key, min, max, callback, decimal)
+						sliders[key] = folder.AddSlider(title, callback, min, max, "customization", key, { Left = true, Decimal = decimal })
+						return sliders[key]
+					end
+
+					local function addSwitch(folder, title, key, callback, tooltip)
+						switches[key] = folder.AddSwitch(title, callback, "customization", key, tooltip and { Tooltip = tooltip } or nil)
+						return switches[key]
+					end
+
+					local function menuChanged()
+						if not applyingMenu and cust.menutheme ~= "Custom" then
+							cust.menutheme = "Custom"
+
+							if dropdowns.menutheme then
+								dropdowns.menutheme.SetValue("Custom")
+							end
+						end
+
+						requestApply()
+					end
+
+					local MenuFolder = tab.AddFolder("Menu Theme")
+					local ColorsFolder = tab.AddFolder("Menu Colors")
+					local FontFolder = tab.AddFolder("Font & Shape")
 					local SkyFolder = tab.AddFolder("Sky", true)
+					local WorldFolder = tab.AddFolder("World Look", true)
 
-					Presets.AddDropdown("Preset", PRESET_NAMES, nil, function(name)
-						applyPreset(name)
+					-- menu theme
+					dropdowns.menutheme = MenuFolder.AddDropdown("Menu Theme", MENU_NAMES, nil, function(name)
+						applyMenuPreset(name)
 					end)
 
-					Presets.AddButton("Random Colors", randomizeTheme)
-					Presets.AddButton("Reset Menu Style", resetTheme)
-					Presets.AddButton("Copy Theme To Clipboard", exportTheme)
-					Presets.AddTextBox("Paste theme here", importTheme, nil, nil, { Clear = true })
-					Presets.Toggle(true, true)
+					dropdowns.menutheme.SetValue(type(cust.menutheme) == "string" and cust.menutheme or "Hub")
 
-					Accent.AddLabel("Click a circle to choose a color")
-					makeColorPicker(Accent, "Main Color", "accent", { 41, 74, 122 }, requestApply)
-					switches.gradient = Accent.AddSwitch("Use Gradient", requestApply, "customization", "gradient")
-					makeColorPicker(Accent, "Gradient Color", "grad", { 70, 110, 180 }, function()
-						if cust.gradient ~= true then
-							setSwitch("gradient", true)
-						end
+					MenuFolder.AddButton("Random Colors", randomizeTheme)
+					MenuFolder.AddButton("Reset Menu Style", resetTheme)
 
-						requestApply()
+					MenuFolder.AddButton("Copy Menu Theme", function()
+						exportConfig(MENU_NUM, MENU_FLAG, true, "Menu theme")
 					end)
-					sliders.gradrotation = Accent.AddSlider("Gradient Angle", requestApply, 0, 360, "customization", "gradrotation", { Left = true })
-					switches.gradanimated = Accent.AddSwitch("Animate Gradient", requestApply, "customization", "gradanimated")
-					switches.rainbow = Accent.AddSwitch("Rainbow Mode", requestApply, "customization", "rainbow")
-					Accent.Toggle(true, true)
 
-					makeColorPicker(Background, "Window Color", "bg", { 21, 22, 23 }, requestApply)
-					switches.bggradient = Background.AddSwitch("Use Gradient", requestApply, "customization", "bggradient")
-					makeColorPicker(Background, "Gradient Color", "bgend", { 30, 34, 48 }, function()
-						if cust.bggradient ~= true then
-							setSwitch("bggradient", true)
-						end
+					MenuFolder.AddTextBox("Paste menu theme here", function(text)
+						importConfig(text, MENU_NUM, MENU_FLAG, true, "Menu theme")
+					end, nil, nil, { Clear = true })
 
-						requestApply()
-					end)
-					sliders.bgrotation = Background.AddSlider("Gradient Angle", requestApply, 0, 360, "customization", "bgrotation", { Left = true })
-					makeColorPicker(Background, "Panel Color", "panel", { 42, 42, 42 }, requestApply)
-					Background.Toggle(true, true)
+					MenuFolder.Toggle(true, true)
 
-					sliders.windowtransparency = Window.AddSlider("Window Transparency", requestApply, 0, 90, "customization", "windowtransparency", { Left = true })
-					sliders.paneltransparency = Window.AddSlider("Panel Transparency", requestApply, 0, 90, "customization", "paneltransparency", { Left = true })
-					switches.outline = Window.AddSwitch("Glowing Outline", requestApply, "customization", "outline")
-					sliders.outlinethickness = Window.AddSlider("Outline Size", requestApply, 1, 6, "customization", "outlinethickness", { Left = true })
+					-- menu colors
+					ColorsFolder.AddLabel("Click a circle to choose a color")
+					makeColorPicker(ColorsFolder, "Accent (switches, sliders)", "accent", { 66, 133, 244 }, menuChanged)
+					makeColorPicker(ColorsFolder, "Buttons", "button", { 31, 36, 48 }, menuChanged)
+					makeColorPicker(ColorsFolder, "Title Bar", "bar", { 20, 23, 29 }, menuChanged)
+					makeColorPicker(ColorsFolder, "Window Background", "bg", { 7, 8, 10 }, menuChanged)
+					makeColorPicker(ColorsFolder, "Cards & Panels", "panel", { 25, 29, 38 }, menuChanged)
+					addSwitch(ColorsFolder, "Buttons & Title Bar Use Accent", "accentlink", menuChanged, "ON: buttons and the title bar copy the accent color (old Atlas look). OFF: they use their own colors above.")
+					addSwitch(ColorsFolder, "Rainbow Colors", "rainbow", menuChanged, "Buttons and sliders slowly cycle through all colors.")
+					addSlider(ColorsFolder, "Rainbow Speed", "rainbowspeed", 1, 100, menuChanged)
+					ColorsFolder.Toggle(true, true)
 
-					fontDropdown = Window.AddDropdown("Font", FONTS, nil, function()
+					-- font & shape
+					fontDropdown = FontFolder.AddDropdown("Font", FONTS, nil, function()
+						updatePreview()
 						requestApply()
 					end, "customization", "font")
 
-					Window.Toggle(true, true)
+					previewLabel = FontFolder.AddLabel("Preview")
+					previewLabel.Size = UDim2.new(1, 0, 0, 22)
+					previewLabel.TextSize = 14
+					previewLabel:SetAttribute("AtlasIgnore", true)
+					updatePreview()
 
-					switches.skyenabled = SkyFolder.AddSwitch("Enable Custom Sky", setSky, "customization", "sky", {
-						Tooltip = "Client-side only. Picking a sky color turns this on automatically.",
-					})
+					addSlider(FontFolder, "Text Size (100 = normal)", "textscale", 80, 130, menuChanged)
+					addSlider(FontFolder, "Corner Roundness (50 = Atlas, 100 = Hub)", "roundness", 0, 100, menuChanged)
+					addSwitch(FontFolder, "Card Style Boxes", "cards", menuChanged, "ON: every section is a filled card (Hub look). OFF: transparent sections (Atlas look).")
+					addSwitch(FontFolder, "Round Toggle Switches", "pill", menuChanged, "ON: on/off sliders like on a phone (Hub look). OFF: small check boxes (Atlas look).")
+					FontFolder.Toggle(true, true)
 
-					SkyFolder.AddDropdown("Sky Preset", SKY_NAMES, nil, function(name)
+					-- sky (visual only)
+					addSwitch(SkyFolder, "Enable Custom Sky", "sky", function()
+						refreshEngine()
+					end, "Only you see it. Changes only the sky itself (colors, stars, moon, clouds). Lighting, shadows and other objects stay untouched unless \"Sky Affects World\" is on.")
+
+					dropdowns.skypreset = SkyFolder.AddDropdown("Sky Preset", SKY_NAMES, nil, function(name)
 						applySkyPreset(name)
 					end)
 
-					makeColorPicker(SkyFolder, "Sky Top", "sky", { 90, 170, 255 }, function()
-						if cust.sky ~= true then
-							setSwitch("skyenabled", true)
+					dropdowns.skypreset.SetValue(type(cust.skypreset) == "string" and cust.skypreset or "Custom")
+
+					makeColorPicker(SkyFolder, "Sky Top Color", "sky", { 90, 170, 255 }, skyTouch)
+					makeColorPicker(SkyFolder, "Horizon Color", "sky2", { 150, 205, 255 }, skyTouch)
+					addSlider(SkyFolder, "Stars (0 = none)", "skystars", 0, 100, skyTouch)
+
+					addSwitch(SkyFolder, "Moon", "skymoon", skyTouch, "A moon is drawn on one side of the sky. Turn around to find it.")
+
+					addSwitch(SkyFolder, "Game Sun & Moon", "skybodies", skyTouch, "Turn off to hide the game's own sun and moon (good for night skies).")
+
+					addSlider(SkyFolder, "Clouds (0 = none)", "skycloud", 0, 100, skyTouch)
+					makeColorPicker(SkyFolder, "Cloud Color", "cloud", { 255, 255, 255 }, skyTouch)
+
+					addSwitch(SkyFolder, "Stronger Sky Colors", "skyhaze", skyTouch, "Removes the game's haze so sky colors are not washed out. Slightly changes how distant objects look, so it is off by default.")
+
+					SkyFolder.AddButton("Reset Sky", resetSky)
+
+					SkyFolder.AddButton("Copy Sky Config", function()
+						local merged = {}
+
+						for key, range in pairs(SKY_NUM) do
+							merged[key] = range
 						end
+
+						exportConfig(merged, SKY_FLAG, false, "Sky config")
 					end)
-					switches.skygradient = SkyFolder.AddSwitch("Two-Color Sky", nil, "customization", "skygradient")
-					makeColorPicker(SkyFolder, "Sky Horizon", "sky2", { 40, 100, 220 }, function()
-						if cust.skygradient ~= true then
-							setSwitch("skygradient", true)
-						end
 
-						if cust.sky ~= true then
-							setSwitch("skyenabled", true)
-						end
-					end)
-					switches.skyhidebodies = SkyFolder.AddSwitch("Hide Sun/Moon/Stars", nil, "customization", "skyhidebodies")
-					switches.skyclearhaze = SkyFolder.AddSwitch("Remove Game Haze", nil, "customization", "skyclearhaze", {
-						Tooltip = "Turns off the game's atmosphere haze so your sky colors are not washed out.",
-					})
-					switches.skytint = SkyFolder.AddSwitch("Tint World Lighting", nil, "customization", "skytint")
-					switches.skyfog = SkyFolder.AddSwitch("Colored Fog", nil, "customization", "skyfog")
-					sliders.skyfogend = SkyFolder.AddSlider("Fog Distance", nil, 100, 10000, "customization", "skyfogend", { Left = true })
-
-					switches.skylocktime = SkyFolder.AddSwitch("Lock Time Of Day", nil, "customization", "skylocktime", {
-						Tooltip = "Changes Lighting.ClockTime. Features that detect night (fireflies, memory match) will see this time.",
-					})
-
-					sliders.skytime = SkyFolder.AddSlider("Time Of Day", nil, 0, 24, "customization", "skytime", { Left = true, Decimal = true })
-
-					SkyFolder.AddButton("Reset Sky", function()
-						setSwitch("skyenabled", false)
-					end)
+					SkyFolder.AddTextBox("Paste sky config here", function(text)
+						importConfig(text, SKY_NUM, SKY_FLAG, false, "Sky config")
+					end, nil, nil, { Clear = true })
 
 					SkyFolder.Toggle(true, true)
+
+					-- world look (changes the real picture)
+					addSwitch(WorldFolder, "Sky Affects World", "worldon", function()
+						refreshEngine()
+					end, "OFF: the sky is only a backdrop. No lighting, shadow or color changes to anything else.\nON: everything in this box is applied to the whole picture.\nMoving any slider here turns it on.")
+
+					addSwitch(WorldFolder, "Lock Time Of Day", "worldlock", worldTouch, "Changes the real time of day (and shadow direction). Features that detect night will see this time.")
+					addSlider(WorldFolder, "Time Of Day (hours 0-24)", "worldtime", 0, 24, worldTouch, true)
+					addSlider(WorldFolder, "Sky Color Tint", "worldtint", 0, 100, worldTouch)
+					addSlider(WorldFolder, "Fog (0 = none)", "fogamount", 0, 100, worldTouch)
+					makeColorPicker(WorldFolder, "Fog Color", "fog", { 170, 200, 235 }, worldTouch)
+					addSlider(WorldFolder, "Brightness (50 = normal)", "bright", 0, 100, worldTouch)
+					addSlider(WorldFolder, "Saturation (50 = normal)", "satur", 0, 100, worldTouch)
+					addSlider(WorldFolder, "Contrast (50 = normal)", "contr", 0, 100, worldTouch)
+					makeColorPicker(WorldFolder, "Screen Tint", "screen", { 255, 255, 255 }, worldTouch)
+					addSlider(WorldFolder, "Glow / Bloom", "bloom", 0, 100, worldTouch)
+					addSlider(WorldFolder, "Sun Rays", "sunrays", 0, 100, worldTouch)
+					WorldFolder.AddButton("Reset World Look", resetWorld)
+					WorldFolder.Toggle(true, true)
 
 					----------------------------------------------------------------
 					-- start theming: scan what exists and watch for new elements
@@ -68939,6 +69331,7 @@ more accurate dodging]],
 					end))
 
 					requestApply()
+					refreshEngine()
 				end
 
 				local ok, err = pcall(buildCustomization, controls.customization)
