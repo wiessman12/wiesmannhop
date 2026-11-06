@@ -296,12 +296,6 @@ local cfg = {
 		fastshowertween = false,
 		fastcoconuttween = false,
 		fastraretween = false,
-		fastprecise = false,
-		fastprecisemethod = "Tween",
-		fastprecisemark = false,
-		fastprecisemarkmethod = "Tween",
-		precisetweenspeed = 150,
-		precisespeedradius = 10,
 		rares = false,
 	},
 	dispensers = {
@@ -50807,95 +50801,6 @@ do
 			end
 		end
 
-		-- ===== Precise helper: accurate tween + speed hack pause =====
-		local PT = { depth = 0, HOLD = 0.3 }
-
-		function PT.speed()
-			return math.clamp(tonumber(cfg.detected.precisetweenspeed) or 150, 40, 400)
-		end
-
-		function PT.pause()
-			PT.depth += 1
-			state.speedPausedUntil = os.clock() + 8 -- failsafe
-
-			local humanoid = getHumanoid()
-			local native = state.nativeWalkSpeed
-
-			if native and native >= 8 and humanoid.WalkSpeed > native then
-				humanoid.WalkSpeed = native
-			end
-		end
-
-		function PT.resume()
-			PT.depth = math.max(PT.depth - 1, 0)
-
-			if PT.depth == 0 then
-				state.speedPausedUntil = os.clock() + 0.15
-			end
-		end
-
-		-- Moves the root part every Heartbeat, lands exactly on the target, then holds
-		-- position for holdFor seconds (or until alive() is false) so the touch registers.
-		-- getTarget: Vector3 or function (nil = target gone). flat: keep current height.
-		function PT.moveTo(getTarget, reach, flat, holdFor, alive)
-			local rootPart = getRootPart()
-			local humanoid = getHumanoid()
-			local startedAt = os.clock()
-			local speed = PT.speed()
-			local dt = 1 / 60
-			local lastTarget
-
-			PT.pause()
-			humanoid:MoveTo(rootPart.Position)
-
-			while true do
-				local target = type(getTarget) == "function" and getTarget() or getTarget
-
-				if not target or humanoid.Health <= 0 or not rootPart.Parent then
-					break
-				end
-
-				local current = rootPart.Position
-
-				if flat then
-					target = Vector3.new(target.X, current.Y, target.Z)
-				end
-
-				lastTarget = target
-				local delta = target - current
-				local dist = delta.Magnitude
-
-				if dist <= (reach or 0.5) or os.clock() - startedAt > 6 then
-					break
-				end
-
-				local step = speed * dt
-				local nextPos = dist <= step and target or current + delta.Unit * step
-				rootPart.CFrame = CFrame.new(nextPos) * rootPart.CFrame.Rotation
-				rootPart.AssemblyLinearVelocity = Vector3.zero
-
-				if dist <= step then
-					break
-				end
-
-				dt = math.min(RunService.Heartbeat:Wait(), 0.1)
-				state.speedPausedUntil = os.clock() + 8
-			end
-
-			if lastTarget and holdFor and holdFor > 0 then
-				local holdUntil = os.clock() + holdFor
-
-				while os.clock() < holdUntil and rootPart.Parent and humanoid.Health > 0 and (not alive or alive()) do
-					rootPart.CFrame = CFrame.new(lastTarget) * rootPart.CFrame.Rotation
-					rootPart.AssemblyLinearVelocity = Vector3.zero
-					RunService.Heartbeat:Wait()
-				end
-			end
-
-			PT.resume()
-			return true
-		end
-
 		collectObject = function(object, trackedKey, reachDistance, longTimeout, keepMoving, useTween, cloudMode, hasId)
 			if not useTween then
 				if (reachDistance or 5) < distanceTo(object.Position, true) then
@@ -50905,27 +50810,7 @@ do
 
 			local now = os.clock()
 
-			if useTween == "Precise" then
-				PT.moveTo(function()
-					if object.Name == true then
-						return (not hasId or (tracked.precise2[object.ID] and not object.Touched)) and object.Position
-					end
-
-					return object.Parent and object.Position
-				end, 0.5, false, PT.HOLD, function()
-					if object.Name == true then
-						return not hasId or (tracked.precise2[object.ID] and not object.Touched)
-					end
-
-					return object.Parent
-				end)
-
-				now = os.clock()
-			elseif useTween == "Teleport" then
-				PT.pause()
-				getRootPart().CFrame = CFrame.new(object.Position)
-				PT.resume()
-			elseif useTween then
+			if useTween then
 				local linear = Enum.EasingStyle.Linear
 				local out = Enum.EasingDirection.Out
 				TweenService:Create(getRootPart(), TweenInfo.new(distanceTo(object.Position) / 400, linear, out), { CFrame = CFrame.new(object.Position) }):Play()
@@ -51178,30 +51063,7 @@ do
 			return nodePositions, nodeEdges
 		end
 
-		-- Fast movement helper for Fast Precise / Fast Precise Mark.
-		-- Returns nil when the feature is off, "Teleport" or true (tween) otherwise.
-		local function fastMode(enabled, method)
-			if enabled and method == "Teleport" then
-				return "Teleport"
-			end
-
-			return "Precise"
-		end
-
-		local function fastMoveTo(targetPosition, mode)
-			local rootPart = getRootPart()
-
-			if mode == "Teleport" then
-				PT.pause()
-				rootPart.CFrame = CFrame.new(targetPosition)
-				PT.resume()
-				return
-			end
-
-			PT.moveTo(targetPosition, 0.5)
-		end
-
-		local function dodgePrecise(preciseMark, options, fastMovement)
+		local function dodgePrecise(preciseMark, options)
 			if not options.avoid then
 				options.avoid = {}
 			end
@@ -51215,19 +51077,6 @@ do
 			end
 
 			state.break1 = nil
-
-			if fastMovement == "Teleport" then
-				fastMoveTo(preciseMark.Position, "Teleport")
-				task.wait(0.15)
-				touchedMarks[preciseMark] = true
-
-				task.delay(3, function()
-					touchedMarks[preciseMark] = nil
-				end)
-
-				return true
-			end
-
 			local nodes, links = buildAvoidGrid(avoid)
 			local position2 = preciseMark.Position
 			local path = findPath(getRootPart().Position, position2, false, nodes, links)
@@ -51243,11 +51092,7 @@ do
 				if not (not state.break1 and getHumanoid().Health ~= 0) then
 					break
 				end
-				if fastMovement then
-					fastMoveTo(waypoint.Position, fastMovement)
-				else
-					getHumanoid():MoveTo(waypoint.Position)
-				end
+				getHumanoid():MoveTo(waypoint.Position)
 
 				while distanceTo(waypoint.Position, true) > 6 do
 					if not RunService.Heartbeat:Wait() then
@@ -51264,12 +51109,6 @@ do
 						return true
 					end
 				end
-			end
-
-			if fastMovement == "Precise" and preciseMark.Parent then
-				PT.moveTo(preciseMark.Position, 0.5, false, PT.HOLD, function()
-					return preciseMark.Parent
-				end)
 			end
 
 			touchedMarks[preciseMark] = true
@@ -51296,10 +51135,7 @@ do
 					now2 = os.clock()
 
 					if distanceTo(v132.v.Position, true) > 6 then
-						local cur = v132.v
-						PT.moveTo(function()
-							return cur.Parent and cur.Position
-						end, 2, true)
+						getHumanoid():MoveTo(v132.v.Position)
 					end
 
 					while not (not v132.v.Parent or not (not not (distanceTo(v132.v.Position, true) > 6) and os.clock() - now2 < 4)) do
@@ -51341,7 +51177,7 @@ do
 			end
 		end
 
-		local function dodgeMarks(mark, options, fastMovement)
+		local function dodgeMarks(mark, options)
 			if not options.avoid then
 				options.avoid = {}
 			end
@@ -51355,19 +51191,6 @@ do
 			end
 
 			state.break1 = nil
-
-			if fastMovement == "Teleport" then
-				fastMoveTo(mark.Position, "Teleport")
-				task.wait(0.15)
-				touchedMarks[mark] = true
-
-				task.delay(3, function()
-					touchedMarks[mark] = nil
-				end)
-
-				return true
-			end
-
 			local nodes, links = buildAvoidGrid(avoid)
 			local position2 = mark.Position
 			local path = findPath(getRootPart().Position, position2, false, nodes, links)
@@ -51383,11 +51206,7 @@ do
 				if not (not state.break1 and getHumanoid().Health ~= 0) then
 					break
 				end
-				if fastMovement then
-					fastMoveTo(waypoint.Position, fastMovement)
-				else
-					getHumanoid():MoveTo(waypoint.Position)
-				end
+				getHumanoid():MoveTo(waypoint.Position)
 
 				while distanceTo(waypoint.Position, true) > 6 do
 					if not RunService.Heartbeat:Wait() then
@@ -51404,12 +51223,6 @@ do
 						return true
 					end
 				end
-			end
-
-			if fastMovement == "Precise" and tracked.precise2[mark.ID] then
-				PT.moveTo(mark.Position, 0.5, false, PT.HOLD, function()
-					return tracked.precise2[mark.ID] and not mark.Touched
-				end)
 			end
 
 			touchedMarks[mark] = true
@@ -51436,10 +51249,7 @@ do
 					now2 = os.clock()
 
 					if distanceTo(v134.v.Position, true) > 6 then
-						local cur = v134.v
-						PT.moveTo(function()
-							return tracked.precise2[cur.ID] and cur.Position
-						end, 2, true)
+						getHumanoid():MoveTo(v134.v.Position)
 					end
 
 					while not (not tracked.precise2[v134.v.ID] or not (not not (distanceTo(v134.v.Position, true) > 6) and os.clock() - now2 < 4)) do
@@ -51588,11 +51398,11 @@ do
 			end
 
 			if targetKind == "Precise Purple" then
-				return dodgePrecise(targetObject, options, fastMode(cfg.detected.fastprecisemark, cfg.detected.fastprecisemarkmethod))
+				return dodgePrecise(targetObject, options)
 			end
 
 			if targetKind == "Precise" then
-				return collectObject(targetObject, "precise", 6, nil, nil, fastMode(cfg.detected.fastprecise, cfg.detected.fastprecisemethod))
+				return collectObject(targetObject, "precise", 6)
 			end
 
 			if targetKind == "Precise2Convert" then
@@ -51600,11 +51410,11 @@ do
 			end
 
 			if targetKind == "Precise2Purple" then
-				return dodgeMarks(targetObject, options, fastMode(cfg.detected.fastprecisemark, cfg.detected.fastprecisemarkmethod))
+				return dodgeMarks(targetObject, options)
 			end
 
 			if targetKind == "Precise2" or targetKind == "Precise2All" then
-				return collectObject(targetObject, nil, 6, nil, nil, fastMode(cfg.detected.fastprecise, cfg.detected.fastprecisemethod), nil, true)
+				return collectObject(targetObject, nil, 6, nil, nil, nil, nil, true)
 			end
 
 			if targetKind == "Puppy Ball" then
@@ -63563,8 +63373,10 @@ do
 				end
 
 				if not (not cfg.planters.enabled or cfg.planters.method ~= "Nectar" or not cfg.planters.nectar.farmfield) then
-					for _, planter in ipairs(tracked.planters) do
-						setField(planter.field)
+					local v136, v137, v138
+
+					for _, v139 in v136, v137, v138 do
+						setField(v139.field)
 						break
 					end
 				end
@@ -63994,6 +63806,775 @@ do
 
 		state.stop = stop or nil
 	end)
+
+	-- ==================== MAP TELEPORT (Home tab) ====================
+	-- Opens a top-down view of the whole map. Drag = pan, wheel / pinch = zoom,
+	-- click = pick a point, Teleport button (or Enter) = go there.
+	controls.maptp = (function()
+		local GuiService = getService("GuiService")
+		local ContextActionService = getService("ContextActionService")
+
+		local mapCfg = { speed = 12, instant = false }
+
+		local PLANE_Y = 60       -- reference ground height for pan / zoom maths
+		local MIN_SPAN = 60      -- closest zoom (studs visible vertically)
+		local MAX_SPAN = 2400    -- farthest zoom
+		local MIN_CAM_Y = 450    -- camera never goes lower than this (above the mountain)
+		local WIDE_FOV = 70
+		local ACCENT = Color3.fromRGB(66, 135, 245)
+		local GREY = Color3.fromRGB(60, 60, 68)
+		local PANEL = Color3.fromRGB(18, 18, 24)
+		local HINT = "Drag: move   Wheel / pinch: zoom   Click: pick   Enter: teleport   M: close"
+
+		local M = {
+			isOpen = false,
+			cx = 0,
+			cz = 0,
+			span = 1500,
+			target = nil,
+			moveId = 0,
+			points = {},
+			markers = {},
+			conns = {},
+		}
+		local saved = {}
+		local drag = { active = false, moved = false, dist = 0, input = nil, start = Vector2.new(0, 0), pinching = false }
+		local gui, cover, markerLayer, targetLabel, statusLabel, tpButton, youDot, pin
+		local statusToken = 0
+		local close
+
+		local function new(class, props, parent)
+			local inst = Instance.new(class)
+			for key, value in pairs(props) do
+				inst[key] = value
+			end
+			inst.Parent = parent
+			return inst
+		end
+
+		local function makeButton(parent, text, width, color)
+			local button = new("TextButton", {
+				Text = text,
+				Size = UDim2.new(0, width, 0, 30),
+				BackgroundColor3 = color or Color3.fromRGB(44, 44, 54),
+				TextColor3 = Color3.new(1, 1, 1),
+				Font = Enum.Font.GothamSemibold,
+				TextSize = 14,
+				BorderSizePixel = 0,
+				AutoButtonColor = true,
+			}, parent)
+			new("UICorner", { CornerRadius = UDim.new(0, 6) }, button)
+			return button
+		end
+
+		local function setStatus(text)
+			statusToken = statusToken + 1
+			local token = statusToken
+			if statusLabel then
+				statusLabel.Text = text
+			end
+			task.delay(5, function()
+				if token == statusToken and statusLabel then
+					statusLabel.Text = HINT
+				end
+			end)
+		end
+
+		local function fieldNameAt(pos)
+			local zones = workspace:FindFirstChild("FlowerZones")
+			if not zones then
+				return nil
+			end
+			for _, zone in ipairs(zones:GetChildren()) do
+				if zone:IsA("BasePart") then
+					local rel = zone.CFrame:PointToObjectSpace(pos)
+					local half = zone.Size / 2
+					if math.abs(rel.X) <= half.X and math.abs(rel.Z) <= half.Z then
+						return zone.Name
+					end
+				end
+			end
+			return nil
+		end
+
+		local function updateTargetUi()
+			if not targetLabel then
+				return
+			end
+			if M.target then
+				targetLabel.Text = string.format(
+					"Target: %s  (%.0f, %.0f, %.0f)",
+					fieldNameAt(M.target) or "open world",
+					M.target.X,
+					M.target.Y,
+					M.target.Z
+				)
+				tpButton.BackgroundColor3 = ACCENT
+			else
+				targetLabel.Text = "Target: none - click anywhere on the map"
+				tpButton.BackgroundColor3 = GREY
+			end
+		end
+
+		local function setTarget(pos)
+			M.target = pos
+			updateTargetUi()
+		end
+
+		-- what is under the cursor: first solid, visible surface below the camera ray
+		local function pickGround(p)
+			local cam = workspace.CurrentCamera
+			local ray = cam:ViewportPointToRay(p.X, p.Y)
+			local excluded = {}
+			if localPlayer.Character then
+				excluded[1] = localPlayer.Character
+			end
+			local params = RaycastParams.new()
+			params.FilterType = Enum.RaycastFilterType.Exclude
+			params.RespectCanCollide = true
+			params.FilterDescendantsInstances = excluded
+			for _ = 1, 10 do
+				local result = workspace:Raycast(ray.Origin, ray.Direction * 6000, params)
+				if not result then
+					return nil
+				end
+				local inst = result.Instance
+				if inst == workspace.Terrain or inst.Transparency < 0.95 then
+					return result.Position
+				end
+				excluded[#excluded + 1] = inst -- invisible wall / barrier: look through it
+				params.FilterDescendantsInstances = excluded
+			end
+			return nil
+		end
+
+		-- zoom is defined by `span` = studs visible vertically at PLANE_Y.
+		-- Far away we move the camera up (fov 70); close up we keep the camera high and narrow the fov.
+		local function camParams()
+			local fov = WIDE_FOV
+			local dist = M.span / (2 * math.tan(math.rad(fov / 2)))
+			local camY = dist + PLANE_Y
+			if camY < MIN_CAM_Y then
+				camY = MIN_CAM_Y
+				dist = camY - PLANE_Y
+				fov = math.max(1, math.deg(2 * math.atan(M.span / (2 * dist))))
+			end
+			return camY, fov
+		end
+
+		local function applyCamera()
+			local cam = workspace.CurrentCamera
+			local camY, fov = camParams()
+			cam.CameraType = Enum.CameraType.Scriptable
+			cam.FieldOfView = fov
+			-- looking straight down: screen right = +X, screen down = +Z
+			cam.CFrame = CFrame.new(M.cx, camY, M.cz) * CFrame.Angles(-math.pi / 2, 0, 0)
+		end
+
+		local function clampView()
+			M.cx = math.clamp(M.cx, -1800, 1800)
+			M.cz = math.clamp(M.cz, -1800, 1800)
+		end
+
+		local function zoomAt(p, factor)
+			local vp = workspace.CurrentCamera.ViewportSize
+			local k = M.span / vp.Y
+			local wx = M.cx + (p.X - vp.X / 2) * k
+			local wz = M.cz + (p.Y - vp.Y / 2) * k
+			M.span = math.clamp(M.span * factor, MIN_SPAN, MAX_SPAN)
+			k = M.span / vp.Y
+			M.cx = wx - (p.X - vp.X / 2) * k
+			M.cz = wz - (p.Y - vp.Y / 2) * k
+			clampView()
+		end
+
+		local function buildPoints()
+			local list = {}
+			local zones = workspace:FindFirstChild("FlowerZones")
+			if zones then
+				for _, zone in ipairs(zones:GetChildren()) do
+					if zone:IsA("BasePart") then
+						list[#list + 1] = { name = zone.Name, pos = zone.Position, kind = "field" }
+					end
+				end
+			end
+			for name, pos in pairs(locations) do
+				if typeof(pos) == "Vector3" and math.abs(pos.Y) < 2000 then
+					local pretty = string.gsub(name, "(%l)(%u)", "%1 %2")
+					list[#list + 1] = { name = pretty, pos = pos, kind = "place" }
+				end
+			end
+			M.points = list
+		end
+
+		local function fitView()
+			local minX, maxX, minZ, maxZ = math.huge, -math.huge, math.huge, -math.huge
+			for _, point in ipairs(M.points) do
+				minX = math.min(minX, point.pos.X)
+				maxX = math.max(maxX, point.pos.X)
+				minZ = math.min(minZ, point.pos.Z)
+				maxZ = math.max(maxZ, point.pos.Z)
+			end
+			if minX == math.huge then
+				M.cx, M.cz, M.span = 0, 0, 1500
+				return
+			end
+			M.cx = (minX + maxX) / 2
+			M.cz = (minZ + maxZ) / 2
+			local vp = workspace.CurrentCamera.ViewportSize
+			local needZ = ((maxZ - minZ) + 260) * 1.15
+			local needX = ((maxX - minX) + 260) * vp.Y / vp.X * 1.15
+			M.span = math.clamp(math.max(needZ, needX), MIN_SPAN, MAX_SPAN)
+		end
+
+		local function updateMarkers()
+			local cam = workspace.CurrentCamera
+			for _, marker in ipairs(M.markers) do
+				local visible = false
+				if marker.kind == "field" or M.span <= 1100 then
+					local v, onScreen = cam:WorldToViewportPoint(marker.pos)
+					if onScreen and v.Z > 0 then
+						marker.button.Position = UDim2.fromOffset(v.X, v.Y)
+						visible = true
+					end
+				end
+				marker.button.Visible = visible
+			end
+
+			local char = localPlayer.Character
+			local root = char and char:FindFirstChild("HumanoidRootPart")
+			if root then
+				local v, onScreen = cam:WorldToViewportPoint(root.Position)
+				youDot.Visible = onScreen
+				youDot.Position = UDim2.fromOffset(v.X, v.Y)
+			else
+				youDot.Visible = false
+			end
+
+			if M.target then
+				local v, onScreen = cam:WorldToViewportPoint(M.target)
+				pin.Visible = onScreen
+				pin.Position = UDim2.fromOffset(v.X, v.Y)
+			else
+				pin.Visible = false
+			end
+		end
+
+		-- ---------------------------------------------------------------- movement
+		local function teleport(pos)
+			local char = localPlayer.Character
+			local root = char and char:FindFirstChild("HumanoidRootPart")
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			if not root or not hum or hum.Health <= 0 then
+				ui.Notify("Map Teleport", "Character is not available")
+				return
+			end
+
+			-- pause the autofarm, otherwise it would walk us straight back to the field
+			if cfg.autofarm.enabled and not state.stop then
+				pcall(function()
+					controls["Stop Everything"].Set(true)
+				end)
+				ui.Notify("Map Teleport", "Autofarm paused (Stop Everything). Turn it off to resume.")
+			end
+
+			M.moveId = M.moveId + 1
+			local myId = M.moveId
+			local dest = pos + Vector3.new(0, 5, 0)
+
+			if mapCfg.instant then
+				root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+				root.CFrame = CFrame.new(dest)
+				return
+			end
+
+			task.spawn(function()
+				for _, child in ipairs(root:GetChildren()) do
+					if child:IsA("AlignPosition") or child:IsA("AlignOrientation") then
+						child:Destroy()
+					end
+				end
+
+				local speed = mapCfg.speed
+				if speed > 12 and _G.unlocktween ~= true then
+					speed = 12
+				end
+				speed = math.max(speed, 1) * 10 -- studs per second
+				local travelTime = (root.Position - dest).Magnitude / speed
+
+				local alignPosition = Instance.new("AlignPosition")
+				alignPosition.Mode = Enum.PositionAlignmentMode.OneAttachment
+				alignPosition.Attachment0 = root.RootAttachment
+				alignPosition.Responsiveness = 20
+				alignPosition.MaxForce = math.huge
+				alignPosition.MaxVelocity = speed
+				alignPosition.Position = dest
+				alignPosition.Parent = root
+
+				local alignOrientation = Instance.new("AlignOrientation")
+				alignOrientation.Attachment0 = root.RootAttachment
+				alignOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
+				alignOrientation.RigidityEnabled = true
+				alignOrientation.CFrame = root.CFrame
+				alignOrientation.Parent = root
+
+				hum:ChangeState(Enum.HumanoidStateType.Physics)
+
+				local noclip = RunService.PreSimulation:Connect(function()
+					for _, part in ipairs(char:GetDescendants()) do
+						if part:IsA("BasePart") and part.CanCollide then
+							part.CanCollide = false
+						end
+					end
+				end)
+
+				local started = os.clock()
+				while M.moveId == myId and hum.Health > 0 and root.Parent do
+					if (root.Position - dest).Magnitude <= 4 then
+						break
+					end
+					if os.clock() - started > travelTime + 3 then
+						break
+					end
+					RunService.Heartbeat:Wait()
+				end
+
+				alignPosition:Destroy()
+				alignOrientation:Destroy()
+				noclip:Disconnect()
+				if M.moveId == myId and hum.Health > 0 then
+					hum:ChangeState(Enum.HumanoidStateType.Freefall)
+				end
+			end)
+		end
+
+		-- ------------------------------------------------------------------ input
+		local function vpPos(input)
+			if input.UserInputType == Enum.UserInputType.Touch then
+				return Vector2.new(input.Position.X, input.Position.Y) + GuiService:GetGuiInset()
+			end
+			return UserInputService:GetMouseLocation()
+		end
+
+		local function onInputChanged(input)
+			local t = input.UserInputType
+			if t == Enum.UserInputType.MouseWheel then
+				zoomAt(UserInputService:GetMouseLocation(), input.Position.Z > 0 and 0.8 or 1.25)
+				return
+			end
+			if not drag.active or drag.pinching or not drag.input then
+				return
+			end
+			local isMove = (drag.input.UserInputType == Enum.UserInputType.MouseButton1 and t == Enum.UserInputType.MouseMovement)
+				or (t == Enum.UserInputType.Touch and input == drag.input)
+			if not isMove then
+				return
+			end
+			local delta = Vector2.new(input.Delta.X, input.Delta.Y)
+			drag.dist = drag.dist + delta.Magnitude
+			if drag.dist > 6 then
+				drag.moved = true
+			end
+			if drag.moved then
+				local k = M.span / workspace.CurrentCamera.ViewportSize.Y
+				M.cx = M.cx - delta.X * k
+				M.cz = M.cz - delta.Y * k
+				clampView()
+			end
+		end
+
+		local function onInputEnded(input)
+			if not drag.active or not drag.input then
+				return
+			end
+			local t = input.UserInputType
+			local ends = (drag.input.UserInputType == Enum.UserInputType.MouseButton1 and t == Enum.UserInputType.MouseButton1)
+				or (t == Enum.UserInputType.Touch and input == drag.input)
+			if not ends then
+				return
+			end
+			local wasTap = not drag.moved and not drag.pinching
+			drag.active = false
+			drag.input = nil
+			if wasTap then
+				local ground = pickGround(drag.start)
+				if ground then
+					setTarget(ground)
+				else
+					setStatus("Nothing to land on there, try another spot")
+				end
+			end
+		end
+
+		local function onPinch(positions, scale, _, pinchState)
+			if pinchState == Enum.UserInputState.Begin then
+				drag.pinching = true
+				drag.moved = true
+				M.pinchSpan = M.span
+			elseif pinchState == Enum.UserInputState.Change then
+				if M.pinchSpan and positions[1] and positions[2] then
+					local center = (positions[1] + positions[2]) / 2 + GuiService:GetGuiInset()
+					zoomAt(center, (M.pinchSpan / scale) / M.span)
+				end
+			else
+				drag.pinching = false
+				M.pinchSpan = nil
+			end
+		end
+
+		local function doTeleport()
+			if not M.target then
+				setStatus("Pick a point on the map first")
+				return
+			end
+			local dest = M.target
+			local name = fieldNameAt(dest) or "selected point"
+			close()
+			ui.Notify("Map Teleport", "Going to " .. name)
+			teleport(dest)
+		end
+
+		local function onKey(input)
+			if input.KeyCode == Enum.KeyCode.Return or input.KeyCode == Enum.KeyCode.KeypadEnter then
+				doTeleport()
+			elseif input.KeyCode == Enum.KeyCode.M or input.KeyCode == Enum.KeyCode.Escape then
+				close()
+			end
+		end
+
+		local function onRender(dt)
+			local dx, dz = 0, 0
+			if UserInputService:IsKeyDown(Enum.KeyCode.A) or UserInputService:IsKeyDown(Enum.KeyCode.Left) then
+				dx = dx - 1
+			end
+			if UserInputService:IsKeyDown(Enum.KeyCode.D) or UserInputService:IsKeyDown(Enum.KeyCode.Right) then
+				dx = dx + 1
+			end
+			if UserInputService:IsKeyDown(Enum.KeyCode.W) or UserInputService:IsKeyDown(Enum.KeyCode.Up) then
+				dz = dz - 1
+			end
+			if UserInputService:IsKeyDown(Enum.KeyCode.S) or UserInputService:IsKeyDown(Enum.KeyCode.Down) then
+				dz = dz + 1
+			end
+			if dx ~= 0 or dz ~= 0 then
+				M.cx = M.cx + dx * M.span * 0.6 * dt
+				M.cz = M.cz + dz * M.span * 0.6 * dt
+				clampView()
+			end
+			local vp = workspace.CurrentCamera.ViewportSize
+			if UserInputService:IsKeyDown(Enum.KeyCode.E) then
+				zoomAt(vp / 2, 0.3 ^ dt)
+			elseif UserInputService:IsKeyDown(Enum.KeyCode.Q) then
+				zoomAt(vp / 2, (1 / 0.3) ^ dt)
+			end
+			applyCamera()
+			updateMarkers()
+		end
+
+		-- --------------------------------------------------------------------- UI
+		local function build()
+			if gui then
+				return
+			end
+			buildPoints()
+
+			gui = new("ScreenGui", {
+				Name = "AtlasMapTeleport",
+				ResetOnSpawn = false,
+				DisplayOrder = 1000,
+				ScreenInsets = Enum.ScreenInsets.None,
+				ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+				Enabled = false,
+			}, gethui and gethui() or getService("CoreGui"))
+
+			cover = new("Frame", { Name = "Cover", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Active = true, ZIndex = 1 }, gui)
+			markerLayer = new("Frame", { Name = "Markers", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 2 }, gui)
+
+			cover.InputBegan:Connect(function(input)
+				local t = input.UserInputType
+				if t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch then
+					if drag.active then
+						return
+					end
+					drag.active = true
+					drag.moved = false
+					drag.dist = 0
+					drag.input = input
+					drag.start = vpPos(input)
+				end
+			end)
+
+			for _, point in ipairs(M.points) do
+				local isField = point.kind == "field"
+				local button = new("TextButton", {
+					Text = point.name,
+					AnchorPoint = Vector2.new(0.5, 0.5),
+					Size = UDim2.fromOffset(0, 20),
+					AutomaticSize = Enum.AutomaticSize.X,
+					BackgroundColor3 = isField and Color3.fromRGB(26, 52, 96) or Color3.fromRGB(110, 62, 20),
+					BackgroundTransparency = 0.15,
+					TextColor3 = Color3.new(1, 1, 1),
+					Font = Enum.Font.GothamSemibold,
+					TextSize = 12,
+					BorderSizePixel = 0,
+					Visible = false,
+					ZIndex = 5,
+				}, markerLayer)
+				new("UICorner", { CornerRadius = UDim.new(0, 5) }, button)
+				new("UIPadding", { PaddingLeft = UDim.new(0, 7), PaddingRight = UDim.new(0, 7) }, button)
+				button.MouseButton1Click:Connect(function()
+					setTarget(point.pos)
+				end)
+				M.markers[#M.markers + 1] = { button = button, pos = point.pos, kind = point.kind }
+			end
+
+			youDot = new("Frame", {
+				Name = "You",
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Size = UDim2.fromOffset(14, 14),
+				BackgroundColor3 = Color3.fromRGB(60, 220, 120),
+				BorderSizePixel = 0,
+				ZIndex = 6,
+				Visible = false,
+			}, markerLayer)
+			new("UICorner", { CornerRadius = UDim.new(1, 0) }, youDot)
+			new("UIStroke", { Color = Color3.new(1, 1, 1), Thickness = 2 }, youDot)
+
+			pin = new("Frame", {
+				Name = "Pin",
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Size = UDim2.fromOffset(18, 18),
+				BackgroundColor3 = Color3.fromRGB(235, 64, 52),
+				BorderSizePixel = 0,
+				ZIndex = 7,
+				Visible = false,
+			}, markerLayer)
+			new("UICorner", { CornerRadius = UDim.new(1, 0) }, pin)
+			new("UIStroke", { Color = Color3.new(1, 1, 1), Thickness = 2 }, pin)
+
+			-- top bar
+			local topBar = new("Frame", {
+				Name = "Top",
+				Size = UDim2.new(1, 0, 0, 46),
+				BackgroundColor3 = PANEL,
+				BackgroundTransparency = 0.1,
+				BorderSizePixel = 0,
+				ZIndex = 10,
+			}, gui)
+			new("TextLabel", {
+				BackgroundTransparency = 1,
+				Position = UDim2.fromOffset(14, 0),
+				Size = UDim2.new(0, 180, 1, 0),
+				Text = "Map Teleport",
+				TextColor3 = Color3.new(1, 1, 1),
+				Font = Enum.Font.GothamBold,
+				TextSize = 16,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				ZIndex = 11,
+			}, topBar)
+			local buttons = new("Frame", {
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 1, 0),
+				ZIndex = 11,
+			}, topBar)
+			new("UIListLayout", {
+				FillDirection = Enum.FillDirection.Horizontal,
+				HorizontalAlignment = Enum.HorizontalAlignment.Right,
+				VerticalAlignment = Enum.VerticalAlignment.Center,
+				Padding = UDim.new(0, 6),
+			}, buttons)
+			new("UIPadding", { PaddingRight = UDim.new(0, 10) }, buttons)
+
+			local overviewButton = makeButton(buttons, "Overview", 78)
+			local meButton = makeButton(buttons, "Me", 46)
+			local zoomOutButton = makeButton(buttons, "-", 34)
+			local zoomInButton = makeButton(buttons, "+", 34)
+			local closeButton = makeButton(buttons, "X", 34, Color3.fromRGB(150, 50, 50))
+			for _, b in ipairs({ overviewButton, meButton, zoomOutButton, zoomInButton, closeButton }) do
+				b.ZIndex = 12
+			end
+
+			overviewButton.MouseButton1Click:Connect(fitView)
+			meButton.MouseButton1Click:Connect(function()
+				local char = localPlayer.Character
+				local root = char and char:FindFirstChild("HumanoidRootPart")
+				if root then
+					M.cx = root.Position.X
+					M.cz = root.Position.Z
+					M.span = math.min(M.span, 450)
+					clampView()
+				end
+			end)
+			zoomInButton.MouseButton1Click:Connect(function()
+				zoomAt(workspace.CurrentCamera.ViewportSize / 2, 0.6)
+			end)
+			zoomOutButton.MouseButton1Click:Connect(function()
+				zoomAt(workspace.CurrentCamera.ViewportSize / 2, 1 / 0.6)
+			end)
+			closeButton.MouseButton1Click:Connect(function()
+				close()
+			end)
+
+			-- bottom bar
+			local bottomBar = new("Frame", {
+				Name = "Bottom",
+				AnchorPoint = Vector2.new(0.5, 1),
+				Position = UDim2.new(0.5, 0, 1, -14),
+				Size = UDim2.new(1, -24, 0, 72),
+				BackgroundColor3 = PANEL,
+				BackgroundTransparency = 0.1,
+				BorderSizePixel = 0,
+				ZIndex = 10,
+			}, gui)
+			new("UICorner", { CornerRadius = UDim.new(0, 10) }, bottomBar)
+			new("UISizeConstraint", { MaxSize = Vector2.new(620, 72) }, bottomBar)
+
+			targetLabel = new("TextLabel", {
+				BackgroundTransparency = 1,
+				Position = UDim2.fromOffset(14, 8),
+				Size = UDim2.new(1, -176, 0, 24),
+				Text = "",
+				TextColor3 = Color3.new(1, 1, 1),
+				Font = Enum.Font.GothamBold,
+				TextSize = 14,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextTruncate = Enum.TextTruncate.AtEnd,
+				ZIndex = 11,
+			}, bottomBar)
+			statusLabel = new("TextLabel", {
+				BackgroundTransparency = 1,
+				Position = UDim2.fromOffset(14, 34),
+				Size = UDim2.new(1, -176, 0, 30),
+				Text = HINT,
+				TextColor3 = Color3.fromRGB(170, 170, 180),
+				Font = Enum.Font.Gotham,
+				TextSize = 12,
+				TextWrapped = true,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextYAlignment = Enum.TextYAlignment.Top,
+				ZIndex = 11,
+			}, bottomBar)
+			tpButton = makeButton(bottomBar, "Teleport", 150, GREY)
+			tpButton.AnchorPoint = Vector2.new(1, 0.5)
+			tpButton.Position = UDim2.new(1, -12, 0.5, 0)
+			tpButton.Size = UDim2.new(0, 150, 0, 44)
+			tpButton.TextSize = 16
+			tpButton.ZIndex = 12
+			tpButton.MouseButton1Click:Connect(doTeleport)
+
+			updateTargetUi()
+		end
+
+		local function open()
+			if M.isOpen then
+				return
+			end
+			build()
+			M.isOpen = true
+
+			local cam = workspace.CurrentCamera
+			saved.fov = cam.FieldOfView
+			saved.scriptGui = ScreenGui.Enabled
+			ScreenGui.Enabled = false
+
+			-- make the whole map visible from high up
+			saved.fog = Lighting.FogEnd
+			Lighting.FogEnd = 1000000
+			saved.atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+			if saved.atmosphere then
+				saved.density = saved.atmosphere.Density
+				saved.atmosphere.Density = 0
+			end
+			saved.clouds = workspace.Terrain:FindFirstChildOfClass("Clouds")
+			if saved.clouds then
+				saved.cloudsEnabled = saved.clouds.Enabled
+				saved.clouds.Enabled = false
+			end
+
+			-- keep the character still while we browse the map
+			ContextActionService:BindActionAtPriority("AtlasMapSink", function()
+				return Enum.ContextActionResult.Sink
+			end, false, 3000, Enum.KeyCode.W, Enum.KeyCode.A, Enum.KeyCode.S, Enum.KeyCode.D, Enum.KeyCode.Up, Enum.KeyCode.Down, Enum.KeyCode.Left, Enum.KeyCode.Right, Enum.KeyCode.Space, Enum.KeyCode.Q, Enum.KeyCode.E)
+
+			M.conns[#M.conns + 1] = UserInputService.InputChanged:Connect(onInputChanged)
+			M.conns[#M.conns + 1] = UserInputService.InputEnded:Connect(onInputEnded)
+			M.conns[#M.conns + 1] = UserInputService.InputBegan:Connect(onKey)
+			M.conns[#M.conns + 1] = UserInputService.TouchPinch:Connect(onPinch)
+
+			drag.active = false
+			drag.pinching = false
+			statusLabel.Text = HINT
+			updateTargetUi()
+			fitView()
+			applyCamera()
+			gui.Enabled = true
+			RunService:BindToRenderStep("AtlasMapTeleport", Enum.RenderPriority.Camera.Value + 1, onRender)
+		end
+
+		close = function()
+			if not M.isOpen then
+				return
+			end
+			M.isOpen = false
+			for _, connection in ipairs(M.conns) do
+				connection:Disconnect()
+			end
+			M.conns = {}
+			pcall(function()
+				RunService:UnbindFromRenderStep("AtlasMapTeleport")
+			end)
+			pcall(function()
+				ContextActionService:UnbindAction("AtlasMapSink")
+			end)
+			drag.active = false
+			drag.pinching = false
+			gui.Enabled = false
+
+			Lighting.FogEnd = saved.fog or Lighting.FogEnd
+			if saved.atmosphere and saved.density then
+				saved.atmosphere.Density = saved.density
+			end
+			if saved.clouds and saved.cloudsEnabled ~= nil then
+				saved.clouds.Enabled = saved.cloudsEnabled
+			end
+
+			local cam = workspace.CurrentCamera
+			cam.CameraType = Enum.CameraType.Custom
+			cam.FieldOfView = saved.fov or 70
+			local hum = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid")
+			if hum then
+				cam.CameraSubject = hum
+			end
+			ScreenGui.Enabled = saved.scriptGui ~= false
+		end
+
+		return {
+			Cfg = mapCfg,
+			Open = open,
+			Close = close,
+			Toggle = function()
+				if M.isOpen then
+					close()
+				else
+					open()
+				end
+			end,
+			Cancel = function()
+				M.moveId = M.moveId + 1
+			end,
+		}
+	end)()
+
+	Home.AddHorizontalAlignment()
+	Home.AddButton("Open Map Teleport", controls.maptp.Toggle)
+	Home.AddButton("Cancel Map Teleport", controls.maptp.Cancel)
+	Home.AddSlider("Map Teleport Speed", nil, 1, 12, controls.maptp.Cfg, "speed", { Left = true })
+	Home.AddSwitch("Instant Map Teleport (risky)", function(enabled)
+		if enabled then
+			ui.Notify("Instant Teleport", "Instant movement can get detected and reset you.")
+		end
+	end, controls.maptp.Cfg, "instant")
+	-- ==================== END MAP TELEPORT ====================
 
 	Home.Toggle(true)
 end
@@ -66544,53 +67125,6 @@ more accurate dodging]],
 					else
 						threads:Add("walkspeed", function()
 							while task.wait(0.1) do
-								local humanoid = getHumanoid()
-								local holdSpeed = os.clock() < (state.speedPausedUntil or 0)
-
-								-- speed hack is off only while close to an active precise target
-								if not holdSpeed and tracked then
-									local root = getRootPart()
-									local pos = root.Position
-									local vel = root.AssemblyLinearVelocity
-									local ahead = pos + Vector3.new(vel.X, 0, vel.Z) * 0.15
-									local radius = tonumber(cfg.detected.precisespeedradius) or 10
-
-									local function isNear(p)
-										return Vector3.new(p.X - pos.X, 0, p.Z - pos.Z).Magnitude < radius or Vector3.new(p.X - ahead.X, 0, p.Z - ahead.Z).Magnitude < radius
-									end
-
-									for k in pairs(tracked.precise) do
-										if k.Parent and k.BrickColor.Name ~= "Flint" and isNear(k.Position) then
-											holdSpeed = true
-											break
-										end
-									end
-
-									if not holdSpeed then
-										for _, mark in pairs(tracked.precise2) do
-											if not mark.Touched and isNear(mark.Position) then
-												holdSpeed = true
-												break
-											end
-										end
-									end
-								end
-
-								-- remember the game's own speed (before the hack raises it)
-								if not holdSpeed and humanoid.WalkSpeed < cfg.vars.walkspeed then
-									state.nativeWalkSpeed = humanoid.WalkSpeed
-								end
-
-								if holdSpeed then
-									local native = state.nativeWalkSpeed
-
-									if native and native >= 8 and humanoid.WalkSpeed > native then
-										humanoid.WalkSpeed = native
-									end
-
-									continue
-								end
-
 								if not cfg.vars.walkdynamic then
 									local walkspeed = cfg.vars.walkspeed
 
@@ -69343,34 +69877,6 @@ Are you sure you want to enable it?]])
 						ui.Notify("Fast Tween To Rares", "This feature is detected and can get you reset.\nAre you sure you want to enable it?")
 					end
 				end, "detected", "fastraretween")
-
-				local fastPreciseSwitch = nil
-
-				fastPreciseSwitch = detectedFolder.AddSwitch("Fast Precise", function(n)
-					if n and fastPreciseSwitch and (not now2 or os.clock() - now2 > 4) then
-						now2 = os.clock()
-						fastPreciseSwitch.Set(false)
-						ui.Notify("Fast Precise", "This feature is detected and can get you reset.\nAre you sure you want to enable it?")
-					end
-				end, "detected", "fastprecise")
-
-				detectedFolder.AddDropdown("Fast Precise Method", { "Tween", "Teleport" }, nil, nil, "detected", "fastprecisemethod", { Width = 250 })
-
-				local fastPreciseMarkSwitch = nil
-
-				fastPreciseMarkSwitch = detectedFolder.AddSwitch("Fast Precise Mark", function(n)
-					if n and fastPreciseMarkSwitch and (not now2 or os.clock() - now2 > 4) then
-						now2 = os.clock()
-						fastPreciseMarkSwitch.Set(false)
-						ui.Notify("Fast Precise Mark", "This feature is detected and can get you reset.\nAre you sure you want to enable it?")
-					end
-				end, "detected", "fastprecisemark")
-
-				detectedFolder.AddDropdown("Fast Precise Mark Method", { "Tween", "Teleport" }, nil, nil, "detected", "fastprecisemarkmethod", { Width = 250 })
-
-				detectedFolder.AddSlider("Precise Tween Speed", nil, 40, 400, "detected", "precisetweenspeed", { Left = true })
-
-				detectedFolder.AddSlider("Precise Speed Hack Off Radius", nil, 4, 30, "detected", "precisespeedradius", { Left = true })
 
 				local eggIconIds = {
 					Sticker = "Sticker",
