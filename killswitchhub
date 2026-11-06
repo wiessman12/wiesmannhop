@@ -642,6 +642,7 @@ local cfg = {
 		font = "Default",
 		textscale = 100,
 		roundness = 100,
+		menuopacity = 100,
 		sky = false,
 		skypreset = "Custom",
 		skyr = 90, skyg = 170, skyb = 255,
@@ -650,6 +651,9 @@ local cfg = {
 		skymoon = false,
 		skybodies = true,
 		skycloud = 0,
+		skyclouddens = 55,
+		skytransp = 0,
+		weather = "Clear",
 		cloudr = 255, cloudg = 255, cloudb = 255,
 		skyhaze = false,
 		worldon = false,
@@ -66935,6 +66939,13 @@ more accurate dodging]],
 					end
 
 					local cust = cfg.customization
+
+					for key, value in pairs({ menuopacity = 100, skyclouddens = 55, skytransp = 0, weather = "Clear" }) do
+						if cust[key] == nil then
+							cust[key] = value
+						end
+					end
+
 					local weak = { __mode = "k" }
 					local sliders = {}
 					local switches = {}
@@ -67115,6 +67126,25 @@ more accurate dodging]],
 						}
 					end
 
+					-- menu opacity: fades the window / bar / card backgrounds toward see-through (text and controls stay solid)
+					local FADE_ROLES = { bg = true, bg2 = true, bar = true, panel = true, box = true, inset = true }
+
+					local function fade(inst)
+						local base = inst:GetAttribute("AtlasBT0")
+
+						if base == nil then
+							base = inst.BackgroundTransparency
+							inst:SetAttribute("AtlasBT0", base)
+						end
+
+						local opacity = math.clamp(num("menuopacity", 100), 20, 100) / 100
+						local want = base + (1 - base) * (1 - opacity)
+
+						if math.abs(inst.BackgroundTransparency - want) > 0.001 then
+							inst.BackgroundTransparency = want
+						end
+					end
+
 					local function styleInstance(inst, role, pal)
 						local color = pal[role]
 
@@ -67151,6 +67181,10 @@ more accurate dodging]],
 
 						if inst.BackgroundColor3 ~= color then
 							inst.BackgroundColor3 = color
+						end
+
+						if FADE_ROLES[role] then
+							fade(inst)
 						end
 					end
 
@@ -67938,6 +67972,21 @@ more accurate dodging]],
 						local horizon = rgbOf("sky2", 150, 205, 255)
 						local stars = math.clamp(num("skystars", 0), 0, 100)
 						local moon = cust.skymoon == true
+
+						-- sky transparency: blends the sky toward the fog color, thins stars/clouds, hides moon and sun
+						local skyFade = math.clamp(num("skytransp", 0), 0, 100) / 100
+
+						if skyFade > 0 then
+							local fadeTo = rgbOf("fog", 170, 200, 235)
+							top = top:Lerp(fadeTo, skyFade)
+							horizon = horizon:Lerp(fadeTo, skyFade)
+							stars = math.floor(stars * (1 - skyFade))
+
+							if skyFade >= 0.5 then
+								moon = false
+							end
+						end
+
 						local assetFn = getcustomasset or getsynasset
 						local canBox = type(assetFn) == "function" and type(writefile) == "function" and not boxFailed
 						local useBox = skyOn and canBox
@@ -67988,7 +68037,7 @@ more accurate dodging]],
 						end
 
 						if sky then
-							if skyOn and cust.skybodies == false then
+							if skyOn and (cust.skybodies == false or skyFade >= 0.5) then
 								drive(sky, "CelestialBodiesShown", false)
 							else
 								release(sky, "CelestialBodiesShown")
@@ -68008,7 +68057,7 @@ more accurate dodging]],
 
 						local terrain = workspace:FindFirstChildOfClass("Terrain")
 						local clouds = terrain and terrain:FindFirstChildOfClass("Clouds")
-						local cloudAmount = skyOn and math.clamp(num("skycloud", 0), 0, 100) or 0
+						local cloudAmount = (skyOn and math.clamp(num("skycloud", 0), 0, 100) or 0) * (1 - skyFade)
 
 						if terrain then
 							if cloudAmount > 0 then
@@ -68021,7 +68070,7 @@ more accurate dodging]],
 
 								drive(clouds, "Enabled", true)
 								drive(clouds, "Cover", cloudAmount / 100)
-								drive(clouds, "Density", 0.25 + 0.55 * cloudAmount / 100)
+								drive(clouds, "Density", math.clamp(num("skyclouddens", 55), 0, 100) / 100)
 								drive(clouds, "Color", rgbOf("cloud", 255, 255, 255))
 							elseif clouds then
 								for _, property in ipairs({ "Enabled", "Cover", "Density", "Color" }) do
@@ -68206,6 +68255,91 @@ more accurate dodging]],
 					end
 
 					ScreenGui.Destroying:Connect(stopEngine)
+
+					----------------------------------------------------------------
+					-- weather (visual only, created on your client: nobody else sees it)
+					----------------------------------------------------------------
+					local weatherPart, weatherEmitter, weatherConn = nil, nil, nil
+
+					local function clearWeather()
+						if weatherConn then
+							weatherConn:Disconnect()
+							weatherConn = nil
+						end
+
+						if weatherPart then
+							weatherPart:Destroy()
+							weatherPart = nil
+							weatherEmitter = nil
+						end
+					end
+
+					local function updateWeather()
+						local mode = cust.weather
+
+						if mode ~= "Rain" and mode ~= "Snow" then
+							clearWeather()
+							return
+						end
+
+						if not weatherPart then
+							local part = Instance.new("Part")
+							part.Name = "AtlasWeather"
+							part.Anchored = true
+							part.CanCollide = false
+							part.CanQuery = false
+							part.CanTouch = false
+							part.CastShadow = false
+							part.Transparency = 1
+							part.Size = Vector3.new(80, 1, 80)
+
+							local emitter = Instance.new("ParticleEmitter")
+							emitter.EmissionDirection = Enum.NormalId.Bottom
+							emitter.Parent = part
+							part.Parent = workspace
+
+							weatherPart = part
+							weatherEmitter = emitter
+
+							weatherConn = RunService.RenderStepped:Connect(function()
+								local camera = workspace.CurrentCamera
+
+								if camera and weatherPart then
+									weatherPart.CFrame = CFrame.new(camera.CFrame.Position + Vector3.new(0, 40, 0))
+								end
+							end)
+						end
+
+						local e = weatherEmitter
+
+						if mode == "Rain" then
+							e.Rate = 500
+							e.Lifetime = NumberRange.new(0.45, 0.6)
+							e.Speed = NumberRange.new(95, 115)
+							e.SpreadAngle = Vector2.new(3, 3)
+							e.Acceleration = Vector3.new(0, 0, 0)
+							e.Size = NumberSequence.new(0.35)
+							e.Orientation = Enum.ParticleOrientation.VelocityParallel
+							e.Color = ColorSequence.new(Color3.fromRGB(170, 195, 230))
+							e.Transparency = NumberSequence.new(0.45)
+							e.LightEmission = 0.2
+							e.RotSpeed = NumberRange.new(0)
+						else
+							e.Rate = 220
+							e.Lifetime = NumberRange.new(6, 8)
+							e.Speed = NumberRange.new(6, 10)
+							e.SpreadAngle = Vector2.new(25, 25)
+							e.Acceleration = Vector3.new(0, -1, 0)
+							e.Size = NumberSequence.new(0.4)
+							e.Orientation = Enum.ParticleOrientation.FacingCamera
+							e.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+							e.Transparency = NumberSequence.new(0.15)
+							e.LightEmission = 0.6
+							e.RotSpeed = NumberRange.new(-60, 60)
+						end
+					end
+
+					ScreenGui.Destroying:Connect(clearWeather)
 
 					----------------------------------------------------------------
 					-- color circles + custom color input
@@ -68799,6 +68933,15 @@ more accurate dodging]],
 						end
 					end
 
+					-- moving the time slider is what applies the time (no separate lock switch any more)
+					local function timeTouch()
+						if not applyingPreset then
+							cust.worldlock = true
+						end
+
+						worldTouch()
+					end
+
 					-- menu themes: Hub (new look, default) and Atlas (the old look) + color variants of Hub
 					local applyingMenu = false
 
@@ -68855,7 +68998,7 @@ more accurate dodging]],
 						setSwitch("cards", theme.cards)
 						setSwitch("pill", theme.pill)
 						setSwitch("accentlink", theme.link)
-						setSlider("roundness", theme.round)
+						cust.roundness = theme.round
 						applyingMenu = false
 
 						cust.menutheme = name
@@ -68987,11 +69130,11 @@ more accurate dodging]],
 						setPicker("sky2", preset.horizon)
 						setSlider("skystars", preset.stars)
 						setSwitch("skymoon", preset.moon)
-						setSwitch("skybodies", preset.bodies)
+						cust.skybodies = preset.bodies
 						setSlider("skycloud", preset.clouds)
 						setPicker("cloud", preset.cloud)
 
-						setSwitch("worldlock", world.lock)
+						cust.worldlock = world.lock
 						setSlider("worldtime", world.time)
 						setSlider("worldtint", world.tint)
 						setSlider("fogamount", world.fog)
@@ -69027,10 +69170,12 @@ more accurate dodging]],
 						setPicker("sky2", { 150, 205, 255 })
 						setSlider("skystars", 0)
 						setSwitch("skymoon", false)
-						setSwitch("skybodies", true)
+						cust.skybodies = true
 						setSlider("skycloud", 0)
+						setSlider("skyclouddens", 55)
+						setSlider("skytransp", 0)
 						setPicker("cloud", { 255, 255, 255 })
-						setSwitch("skyhaze", false)
+						cust.skyhaze = false
 						applyingPreset = false
 						cust.skypreset = "Custom"
 						saveConfig()
@@ -69043,7 +69188,7 @@ more accurate dodging]],
 					local function resetWorld()
 						applyingPreset = true
 						setSwitch("worldon", false)
-						setSwitch("worldlock", false)
+						cust.worldlock = false
 						setSlider("worldtime", 12)
 						setSlider("worldtint", 0)
 						setSlider("fogamount", 0)
@@ -69201,16 +69346,7 @@ more accurate dodging]],
 
 					dropdowns.menutheme.SetValue(type(cust.menutheme) == "string" and cust.menutheme or "Hub")
 
-					MenuFolder.AddButton("Random Colors", randomizeTheme)
 					MenuFolder.AddButton("Reset Menu Style", resetTheme)
-
-					MenuFolder.AddButton("Copy Menu Theme", function()
-						exportConfig(MENU_NUM, MENU_FLAG, true, "Menu theme")
-					end)
-
-					MenuFolder.AddTextBox("Paste menu theme here", function(text)
-						importConfig(text, MENU_NUM, MENU_FLAG, true, "Menu theme")
-					end, nil, nil, { Clear = true })
 
 					MenuFolder.Toggle(true, true)
 
@@ -69239,7 +69375,7 @@ more accurate dodging]],
 					updatePreview()
 
 					addSlider(FontFolder, "Text Size (100 = normal)", "textscale", 80, 130, menuChanged)
-					addSlider(FontFolder, "Corner Roundness (50 = Atlas, 100 = Hub)", "roundness", 0, 100, menuChanged)
+					addSlider(FontFolder, "Menu Opacity", "menuopacity", 20, 100, requestApply)
 					addSwitch(FontFolder, "Card Style Boxes", "cards", menuChanged, "ON: every section is a filled card (Hub look). OFF: transparent sections (Atlas look).")
 					addSwitch(FontFolder, "Round Toggle Switches", "pill", menuChanged, "ON: on/off sliders like on a phone (Hub look). OFF: small check boxes (Atlas look).")
 					FontFolder.Toggle(true, true)
@@ -69261,28 +69397,23 @@ more accurate dodging]],
 
 					addSwitch(SkyFolder, "Moon", "skymoon", skyTouch, "A moon is drawn on one side of the sky. Turn around to find it.")
 
-					addSwitch(SkyFolder, "Game Sun & Moon", "skybodies", skyTouch, "Turn off to hide the game's own sun and moon (good for night skies).")
 
 					addSlider(SkyFolder, "Clouds (0 = none)", "skycloud", 0, 100, skyTouch)
+					addSlider(SkyFolder, "Cloud Density", "skyclouddens", 0, 100, skyTouch)
 					makeColorPicker(SkyFolder, "Cloud Color", "cloud", { 255, 255, 255 }, skyTouch)
 
-					addSwitch(SkyFolder, "Stronger Sky Colors", "skyhaze", skyTouch, "Removes the game's haze so sky colors are not washed out. Slightly changes how distant objects look, so it is off by default.")
 
-					SkyFolder.AddButton("Reset Sky", resetSky)
+					addSlider(SkyFolder, "Sky Transparency (100 = sky hidden)", "skytransp", 0, 100, skyTouch)
 
-					SkyFolder.AddButton("Copy Sky Config", function()
-						local merged = {}
-
-						for key, range in pairs(SKY_NUM) do
-							merged[key] = range
-						end
-
-						exportConfig(merged, SKY_FLAG, false, "Sky config")
+					dropdowns.weather = SkyFolder.AddDropdown("Weather", { "Clear", "Rain", "Snow" }, nil, function(name)
+						cust.weather = name
+						saveConfig()
+						updateWeather()
 					end)
 
-					SkyFolder.AddTextBox("Paste sky config here", function(text)
-						importConfig(text, SKY_NUM, SKY_FLAG, false, "Sky config")
-					end, nil, nil, { Clear = true })
+					dropdowns.weather.SetValue(type(cust.weather) == "string" and cust.weather or "Clear")
+
+					SkyFolder.AddButton("Reset Sky", resetSky)
 
 					SkyFolder.Toggle(true, true)
 
@@ -69291,8 +69422,7 @@ more accurate dodging]],
 						refreshEngine()
 					end, "OFF: the sky is only a backdrop. No lighting, shadow or color changes to anything else.\nON: everything in this box is applied to the whole picture.\nMoving any slider here turns it on.")
 
-					addSwitch(WorldFolder, "Lock Time Of Day", "worldlock", worldTouch, "Changes the real time of day (and shadow direction). Features that detect night will see this time.")
-					addSlider(WorldFolder, "Time Of Day (hours 0-24)", "worldtime", 0, 24, worldTouch, true)
+					addSlider(WorldFolder, "Time Of Day (hours 0-24)", "worldtime", 0, 24, timeTouch, true)
 					addSlider(WorldFolder, "Sky Color Tint", "worldtint", 0, 100, worldTouch)
 					addSlider(WorldFolder, "Fog (0 = none)", "fogamount", 0, 100, worldTouch)
 					makeColorPicker(WorldFolder, "Fog Color", "fog", { 170, 200, 235 }, worldTouch)
@@ -69304,6 +69434,29 @@ more accurate dodging]],
 					addSlider(WorldFolder, "Sun Rays", "sunrays", 0, 100, worldTouch)
 					WorldFolder.AddButton("Reset World Look", resetWorld)
 					WorldFolder.Toggle(true, true)
+
+					-- reset everything on this tab
+					local function resetAll()
+						resetTheme()
+						setSlider("menuopacity", 100)
+						resetSky()
+						resetWorld()
+						cust.weather = "Clear"
+
+						if dropdowns.weather then
+							dropdowns.weather.SetValue("Clear")
+						end
+
+						updateWeather()
+						saveConfig()
+						requestApply()
+						refreshEngine()
+						ui.Notify("Customization", "Everything reset to default")
+					end
+
+					local ResetFolder = tab.AddFolder("Reset")
+					ResetFolder.AddButton("Reset All", resetAll)
+					ResetFolder.Toggle(true, true)
 
 					----------------------------------------------------------------
 					-- start theming: scan what exists and watch for new elements
@@ -69332,6 +69485,7 @@ more accurate dodging]],
 
 					requestApply()
 					refreshEngine()
+					updateWeather()
 				end
 
 				local ok, err = pcall(buildCustomization, controls.customization)
