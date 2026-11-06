@@ -68837,11 +68837,15 @@ more accurate dodging]],
 					----------------------------------------------------------------
 					-- presets / import / export
 					----------------------------------------------------------------
+					-- setters: use the on-screen control if there is one, otherwise write the value straight into the config
+					-- (so presets still work for settings that no longer have their own control)
 					local function setSlider(key, value)
 						local slider = sliders[key]
 
 						if slider then
 							slider.Set(value)
+						else
+							cust[key] = value
 						end
 					end
 
@@ -68850,6 +68854,12 @@ more accurate dodging]],
 
 						if switch then
 							switch.Set(value)
+						else
+							cust[key] = value
+
+							if key == "worldon" then
+								refreshEngine()
+							end
 						end
 					end
 
@@ -68858,8 +68868,13 @@ more accurate dodging]],
 
 						if picker then
 							picker.Set(color[1], color[2], color[3])
+						else
+							cust[prefix .. "r"] = byte(color[1])
+							cust[prefix .. "g"] = byte(color[2])
+							cust[prefix .. "b"] = byte(color[3])
 						end
 					end
+
 
 					local function updatePreview()
 						if not previewLabel then
@@ -69146,6 +69161,7 @@ more accurate dodging]],
 						setSlider("bloom", world.bloom)
 						setSlider("sunrays", world.rays)
 
+						setSwitch("worldon", true)
 						setSwitch("sky", true)
 						applyingPreset = false
 
@@ -69156,11 +69172,7 @@ more accurate dodging]],
 							dropdowns.skypreset.SetValue(name)
 						end
 
-						if cust.worldon == true then
-							ui.Notify("Sky", name .. " applied (sky + world lighting)")
-						else
-							ui.Notify("Sky", name .. " applied. Turn on \"Sky Affects World\" to also change lighting, fog and colors.")
-						end
+						ui.Notify("Sky", name .. " applied")
 					end
 
 					local function resetSky()
@@ -69333,77 +69345,83 @@ more accurate dodging]],
 						requestApply()
 					end
 
-					local MenuFolder = tab.AddFolder("Menu Theme")
-					local ColorsFolder = tab.AddFolder("Menu Colors")
-					local FontFolder = tab.AddFolder("Font & Shape")
-					local SkyFolder = tab.AddFolder("Sky", true)
-					local WorldFolder = tab.AddFolder("World Look", true)
+					local function hint(folder, text, lines)
+						local label = folder.AddLabel(text)
+						label.TextWrapped = true
+						label.TextXAlignment = Enum.TextXAlignment.Left
+						label.TextTransparency = 0.35
+						label.Size = UDim2.new(1, 0, 0, 14 * (lines or 2) + 4)
+						return label
+					end
 
-					-- menu theme
-					dropdowns.menutheme = MenuFolder.AddDropdown("Menu Theme", MENU_NAMES, nil, function(name)
+					-- changing the main color re-colors the whole menu to match (buttons and title bar follow it)
+					local function accentChanged()
+						if not applyingMenu then
+							local accent = { num("accentr", 66), num("accentg", 133), num("accentb", 244) }
+							local bg = { num("bgr", 7), num("bgg", 8), num("bgb", 10) }
+							local panel = { num("panelr", 25), num("panelg", 29), num("panelb", 38) }
+							local button = mixc(panel, accent, 0.22)
+							local bar = mixc(bg, panel, 0.6)
+
+							applyingMenu = true
+							setPicker("button", button)
+							setPicker("bar", bar)
+							applyingMenu = false
+						end
+
+						menuChanged()
+					end
+
+					local MenuFolder = tab.AddFolder("Menu Look")
+					local SkyFolder = tab.AddFolder("Sky & Weather", true)
+					local WorldFolder = tab.AddFolder("Lighting & Time", true)
+
+					----------------------------------------------------------------
+					-- MENU LOOK
+					----------------------------------------------------------------
+					hint(MenuFolder, "How this menu looks. Pick a theme, then change the main color if you want.", 2)
+
+					dropdowns.menutheme = MenuFolder.AddDropdown("Theme", MENU_NAMES, nil, function(name)
 						applyMenuPreset(name)
 					end)
 
 					dropdowns.menutheme.SetValue(type(cust.menutheme) == "string" and cust.menutheme or "Hub")
 
-					MenuFolder.AddButton("Reset Menu Style", resetTheme)
+					makeColorPicker(MenuFolder, "Main Color (click the circle)", "accent", { 66, 133, 244 }, accentChanged)
+					addSwitch(MenuFolder, "Rainbow Colors", "rainbow", menuChanged, "The menu color slowly cycles through all colors.")
+					addSlider(MenuFolder, "Menu Transparency (100 = solid)", "menuopacity", 20, 100, requestApply)
+					addSlider(MenuFolder, "Text Size (100 = normal)", "textscale", 80, 130, requestApply)
 
-					MenuFolder.Toggle(true, true)
-
-					-- menu colors
-					ColorsFolder.AddLabel("Click a circle to choose a color")
-					makeColorPicker(ColorsFolder, "Accent (switches, sliders)", "accent", { 66, 133, 244 }, menuChanged)
-					makeColorPicker(ColorsFolder, "Buttons", "button", { 31, 36, 48 }, menuChanged)
-					makeColorPicker(ColorsFolder, "Title Bar", "bar", { 20, 23, 29 }, menuChanged)
-					makeColorPicker(ColorsFolder, "Window Background", "bg", { 7, 8, 10 }, menuChanged)
-					makeColorPicker(ColorsFolder, "Cards & Panels", "panel", { 25, 29, 38 }, menuChanged)
-					addSwitch(ColorsFolder, "Buttons & Title Bar Use Accent", "accentlink", menuChanged, "ON: buttons and the title bar copy the accent color (old Atlas look). OFF: they use their own colors above.")
-					addSwitch(ColorsFolder, "Rainbow Colors", "rainbow", menuChanged, "Buttons and sliders slowly cycle through all colors.")
-					addSlider(ColorsFolder, "Rainbow Speed", "rainbowspeed", 1, 100, menuChanged)
-					ColorsFolder.Toggle(true, true)
-
-					-- font & shape
-					fontDropdown = FontFolder.AddDropdown("Font", FONTS, nil, function()
+					fontDropdown = MenuFolder.AddDropdown("Font", FONTS, nil, function()
 						updatePreview()
 						requestApply()
 					end, "customization", "font")
 
-					previewLabel = FontFolder.AddLabel("Preview")
-					previewLabel.Size = UDim2.new(1, 0, 0, 22)
-					previewLabel.TextSize = 14
-					previewLabel:SetAttribute("AtlasIgnore", true)
-					updatePreview()
+					MenuFolder.Toggle(true, true)
 
-					addSlider(FontFolder, "Text Size (100 = normal)", "textscale", 80, 130, menuChanged)
-					addSlider(FontFolder, "Menu Opacity", "menuopacity", 20, 100, requestApply)
-					addSwitch(FontFolder, "Card Style Boxes", "cards", menuChanged, "ON: every section is a filled card (Hub look). OFF: transparent sections (Atlas look).")
-					addSwitch(FontFolder, "Round Toggle Switches", "pill", menuChanged, "ON: on/off sliders like on a phone (Hub look). OFF: small check boxes (Atlas look).")
-					FontFolder.Toggle(true, true)
+					----------------------------------------------------------------
+					-- SKY & WEATHER
+					----------------------------------------------------------------
+					hint(SkyFolder, "Only you can see this. Pick a ready-made sky, or change anything below to make your own.", 3)
 
-					-- sky (visual only)
-					addSwitch(SkyFolder, "Enable Custom Sky", "sky", function()
+					addSwitch(SkyFolder, "Custom Sky", "sky", function()
 						refreshEngine()
-					end, "Only you see it. Changes only the sky itself (colors, stars, moon, clouds). Lighting, shadows and other objects stay untouched unless \"Sky Affects World\" is on.")
+					end, "ON: your sky is used. OFF: the normal game sky. Moving any control below turns it on by itself.")
 
-					dropdowns.skypreset = SkyFolder.AddDropdown("Sky Preset", SKY_NAMES, nil, function(name)
+					dropdowns.skypreset = SkyFolder.AddDropdown("Ready-made Sky", SKY_NAMES, nil, function(name)
 						applySkyPreset(name)
 					end)
 
 					dropdowns.skypreset.SetValue(type(cust.skypreset) == "string" and cust.skypreset or "Custom")
 
-					makeColorPicker(SkyFolder, "Sky Top Color", "sky", { 90, 170, 255 }, skyTouch)
-					makeColorPicker(SkyFolder, "Horizon Color", "sky2", { 150, 205, 255 }, skyTouch)
+					makeColorPicker(SkyFolder, "Sky Color (top)", "sky", { 90, 170, 255 }, skyTouch)
+					makeColorPicker(SkyFolder, "Horizon Color (bottom)", "sky2", { 150, 205, 255 }, skyTouch)
 					addSlider(SkyFolder, "Stars (0 = none)", "skystars", 0, 100, skyTouch)
-
-					addSwitch(SkyFolder, "Moon", "skymoon", skyTouch, "A moon is drawn on one side of the sky. Turn around to find it.")
-
-
+					addSwitch(SkyFolder, "Moon", "skymoon", skyTouch, "Draws a moon in the sky. Turn around to find it.")
 					addSlider(SkyFolder, "Clouds (0 = none)", "skycloud", 0, 100, skyTouch)
-					addSlider(SkyFolder, "Cloud Density", "skyclouddens", 0, 100, skyTouch)
+					addSlider(SkyFolder, "Cloud Density (thin - thick)", "skyclouddens", 0, 100, skyTouch)
 					makeColorPicker(SkyFolder, "Cloud Color", "cloud", { 255, 255, 255 }, skyTouch)
-
-
-					addSlider(SkyFolder, "Sky Transparency (100 = sky hidden)", "skytransp", 0, 100, skyTouch)
+					addSlider(SkyFolder, "Sky Transparency (100 = hidden)", "skytransp", 0, 100, skyTouch)
 
 					dropdowns.weather = SkyFolder.AddDropdown("Weather", { "Clear", "Rain", "Snow" }, nil, function(name)
 						cust.weather = name
@@ -69413,34 +69431,8 @@ more accurate dodging]],
 
 					dropdowns.weather.SetValue(type(cust.weather) == "string" and cust.weather or "Clear")
 
-					SkyFolder.AddButton("Reset Sky", resetSky)
-
-					SkyFolder.Toggle(true, true)
-
-					-- world look (changes the real picture)
-					addSwitch(WorldFolder, "Sky Affects World", "worldon", function()
-						refreshEngine()
-					end, "OFF: the sky is only a backdrop. No lighting, shadow or color changes to anything else.\nON: everything in this box is applied to the whole picture.\nMoving any slider here turns it on.")
-
-					addSlider(WorldFolder, "Time Of Day (hours 0-24)", "worldtime", 0, 24, timeTouch, true)
-					addSlider(WorldFolder, "Sky Color Tint", "worldtint", 0, 100, worldTouch)
-					addSlider(WorldFolder, "Fog (0 = none)", "fogamount", 0, 100, worldTouch)
-					makeColorPicker(WorldFolder, "Fog Color", "fog", { 170, 200, 235 }, worldTouch)
-					addSlider(WorldFolder, "Brightness (50 = normal)", "bright", 0, 100, worldTouch)
-					addSlider(WorldFolder, "Saturation (50 = normal)", "satur", 0, 100, worldTouch)
-					addSlider(WorldFolder, "Contrast (50 = normal)", "contr", 0, 100, worldTouch)
-					makeColorPicker(WorldFolder, "Screen Tint", "screen", { 255, 255, 255 }, worldTouch)
-					addSlider(WorldFolder, "Glow / Bloom", "bloom", 0, 100, worldTouch)
-					addSlider(WorldFolder, "Sun Rays", "sunrays", 0, 100, worldTouch)
-					WorldFolder.AddButton("Reset World Look", resetWorld)
-					WorldFolder.Toggle(true, true)
-
-					-- reset everything on this tab
-					local function resetAll()
-						resetTheme()
-						setSlider("menuopacity", 100)
+					local function resetSkyAndWeather()
 						resetSky()
-						resetWorld()
 						cust.weather = "Clear"
 
 						if dropdowns.weather then
@@ -69449,13 +69441,43 @@ more accurate dodging]],
 
 						updateWeather()
 						saveConfig()
+					end
+
+					SkyFolder.AddButton("Reset Sky & Weather", resetSkyAndWeather)
+					SkyFolder.Toggle(true, true)
+
+					----------------------------------------------------------------
+					-- LIGHTING & TIME
+					----------------------------------------------------------------
+					hint(WorldFolder, "Changes the whole picture of the game (only for you). Move a slider to turn it on.", 2)
+
+					addSlider(WorldFolder, "Time Of Day (0-24 hours)", "worldtime", 0, 24, timeTouch, true)
+					hint(WorldFolder, "Note: autofarm features that wait for night will see this time too.", 2)
+					addSlider(WorldFolder, "Brightness (50 = normal)", "bright", 0, 100, worldTouch)
+					addSlider(WorldFolder, "Saturation (50 = normal)", "satur", 0, 100, worldTouch)
+					addSlider(WorldFolder, "Contrast (50 = normal)", "contr", 0, 100, worldTouch)
+					addSlider(WorldFolder, "Fog (0 = none)", "fogamount", 0, 100, worldTouch)
+					makeColorPicker(WorldFolder, "Fog Color", "fog", { 170, 200, 235 }, worldTouch)
+					addSlider(WorldFolder, "Glow (0 = none)", "bloom", 0, 100, worldTouch)
+					WorldFolder.AddButton("Reset Lighting & Time", resetWorld)
+					WorldFolder.Toggle(true, true)
+
+					----------------------------------------------------------------
+					-- RESET EVERYTHING
+					----------------------------------------------------------------
+					local function resetAll()
+						resetTheme()
+						setSlider("menuopacity", 100)
+						resetSkyAndWeather()
+						resetWorld()
+						saveConfig()
 						requestApply()
 						refreshEngine()
 						ui.Notify("Customization", "Everything reset to default")
 					end
 
 					local ResetFolder = tab.AddFolder("Reset")
-					ResetFolder.AddButton("Reset All", resetAll)
+					ResetFolder.AddButton("Reset Everything", resetAll)
 					ResetFolder.Toggle(true, true)
 
 					----------------------------------------------------------------
