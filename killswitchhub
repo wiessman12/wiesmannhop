@@ -652,6 +652,10 @@ local cfg = {
 		skybodies = true,
 		skycloud = 0,
 		skyclouddens = 55,
+		weatherstrength = 50,
+		fogon = false,
+		bloomon = false,
+		raysenabled = false,
 		skytransp = 0,
 		weather = "Clear",
 		cloudr = 255, cloudg = 255, cloudb = 255,
@@ -66940,7 +66944,7 @@ more accurate dodging]],
 
 					local cust = cfg.customization
 
-					for key, value in pairs({ menuopacity = 100, skyclouddens = 55, skytransp = 0, weather = "Clear" }) do
+					for key, value in pairs({ menuopacity = 100, skyclouddens = 55, skytransp = 0, weather = "Clear", weatherstrength = 50, fogon = false, bloomon = false, raysenabled = false }) do
 						if cust[key] == nil then
 							cust[key] = value
 						end
@@ -68108,7 +68112,7 @@ more accurate dodging]],
 
 						-- fog: the normal Lighting fog is ignored by Roblox when an Atmosphere exists,
 						-- so the Atmosphere is driven too
-						local fog = worldOn and math.clamp(num("fogamount", 0), 0, 100) or 0
+						local fog = (worldOn and cust.fogon == true) and math.clamp(num("fogamount", 0), 0, 100) or 0
 						local fogColor = rgbOf("fog", 170, 200, 235)
 						local desired = {}
 						local needAtm = false
@@ -68185,8 +68189,8 @@ more accurate dodging]],
 
 						-- color grading, glow, sun rays
 						local bright = num("bright", 50)
-						local satur = num("satur", 50)
-						local contr = num("contr", 50)
+						local satur = 50
+						local contr = 50
 						local screen = rgbOf("screen", 255, 255, 255)
 						local wantGrade = worldOn and (bright ~= 50 or satur ~= 50 or contr ~= 50 or colorKey(screen) ~= 16777215)
 
@@ -68197,7 +68201,7 @@ more accurate dodging]],
 							TintColor = screen,
 						})
 
-						local bloom = worldOn and math.clamp(num("bloom", 0), 0, 100) or 0
+						local bloom = (worldOn and cust.bloomon == true) and math.clamp(num("bloom", 0), 0, 100) or 0
 
 						ensureEffect("AtlasBloom", "BloomEffect", bloom > 0, {
 							Intensity = bloom / 100 * 1.2,
@@ -68205,7 +68209,7 @@ more accurate dodging]],
 							Threshold = 0.8,
 						})
 
-						local rays = worldOn and math.clamp(num("sunrays", 0), 0, 100) or 0
+						local rays = (worldOn and cust.raysenabled == true) and math.clamp(num("sunrays", 0), 0, 100) or 0
 
 						ensureEffect("AtlasRays", "SunRaysEffect", rays > 0, {
 							Intensity = rays / 100 * 0.35,
@@ -68313,7 +68317,7 @@ more accurate dodging]],
 						local e = weatherEmitter
 
 						if mode == "Rain" then
-							e.Rate = 500
+							e.Rate = math.max(20, math.clamp(num("weatherstrength", 50), 1, 100) * 10)
 							e.Lifetime = NumberRange.new(0.45, 0.6)
 							e.Speed = NumberRange.new(95, 115)
 							e.SpreadAngle = Vector2.new(3, 3)
@@ -68325,7 +68329,7 @@ more accurate dodging]],
 							e.LightEmission = 0.2
 							e.RotSpeed = NumberRange.new(0)
 						else
-							e.Rate = 220
+							e.Rate = math.max(10, math.clamp(num("weatherstrength", 50), 1, 100) * 4.4)
 							e.Lifetime = NumberRange.new(6, 8)
 							e.Speed = NumberRange.new(6, 10)
 							e.SpreadAngle = Vector2.new(25, 25)
@@ -68959,6 +68963,7 @@ more accurate dodging]],
 
 					-- menu themes: Hub (new look, default) and Atlas (the old look) + color variants of Hub
 					local applyingMenu = false
+					local syncWorld = nil
 
 					local function mixc(a, b, k)
 						return { mix(a[1], b[1], k), mix(a[2], b[2], k), mix(a[3], b[3], k) }
@@ -69128,7 +69133,13 @@ more accurate dodging]],
 							setSwitch("worldon", false)
 							applyingPreset = false
 							cust.skypreset = name
+							cust.worldlock = false
 							saveConfig()
+
+							if syncWorld then
+								syncWorld()
+							end
+
 							return
 						end
 
@@ -69160,6 +69171,9 @@ more accurate dodging]],
 						setPicker("screen", world.screen)
 						setSlider("bloom", world.bloom)
 						setSlider("sunrays", world.rays)
+						setSwitch("fogon", world.fog > 0)
+						setSwitch("bloomon", world.bloom > 0)
+						setSwitch("raysenabled", world.rays > 0)
 
 						setSwitch("worldon", true)
 						setSwitch("sky", true)
@@ -69170,6 +69184,10 @@ more accurate dodging]],
 
 						if dropdowns.skypreset then
 							dropdowns.skypreset.SetValue(name)
+						end
+
+						if syncWorld then
+							syncWorld()
 						end
 
 						ui.Notify("Sky", name .. " applied")
@@ -69211,8 +69229,15 @@ more accurate dodging]],
 						setPicker("screen", { 255, 255, 255 })
 						setSlider("bloom", 0)
 						setSlider("sunrays", 0)
+						setSwitch("fogon", false)
+						setSwitch("bloomon", false)
+						setSwitch("raysenabled", false)
 						applyingPreset = false
 						saveConfig()
+
+						if syncWorld then
+							syncWorld()
+						end
 					end
 
 					-- import / export (only these keys are accepted)
@@ -69430,10 +69455,14 @@ more accurate dodging]],
 					end)
 
 					dropdowns.weather.SetValue(type(cust.weather) == "string" and cust.weather or "Clear")
+					addSlider(SkyFolder, "Weather Strength (light - heavy)", "weatherstrength", 1, 100, function()
+						updateWeather()
+					end)
 
 					local function resetSkyAndWeather()
 						resetSky()
 						cust.weather = "Clear"
+						setSlider("weatherstrength", 50)
 
 						if dropdowns.weather then
 							dropdowns.weather.SetValue("Clear")
@@ -69449,16 +69478,133 @@ more accurate dodging]],
 					----------------------------------------------------------------
 					-- LIGHTING & TIME
 					----------------------------------------------------------------
-					hint(WorldFolder, "Changes the whole picture of the game (only for you). Move a slider to turn it on.", 2)
+					hint(WorldFolder, "Changes how the whole game looks. Only you can see it.", 1)
 
-					addSlider(WorldFolder, "Time Of Day (0-24 hours)", "worldtime", 0, 24, timeTouch, true)
-					hint(WorldFolder, "Note: autofarm features that wait for night will see this time too.", 2)
+					local TIMES = { Morning = 7, Noon = 12, Evening = 18, Night = 0 }
+
+					local FILTERS = {
+						Normal = { 255, 255, 255 },
+						Warm = { 255, 225, 190 },
+						Cold = { 200, 225, 255 },
+						Pink = { 255, 210, 235 },
+						Green = { 215, 255, 215 },
+					}
+
+					dropdowns.timeofday = WorldFolder.AddDropdown("Time Of Day", { "Game Default", "Morning", "Noon", "Evening", "Night" }, nil, function(name)
+						if name == "Game Default" then
+							cust.worldlock = false
+						elseif TIMES[name] then
+							cust.worldlock = true
+							cust.worldtime = TIMES[name]
+						end
+
+						worldTouch()
+						saveConfig()
+
+						if dropdowns.timeofday then
+							dropdowns.timeofday.SetValue(name)
+						end
+					end)
+
+					hint(WorldFolder, "Note: autofarm features that wait for night will see the time you pick.", 2)
+
 					addSlider(WorldFolder, "Brightness (50 = normal)", "bright", 0, 100, worldTouch)
-					addSlider(WorldFolder, "Saturation (50 = normal)", "satur", 0, 100, worldTouch)
-					addSlider(WorldFolder, "Contrast (50 = normal)", "contr", 0, 100, worldTouch)
-					addSlider(WorldFolder, "Fog (0 = none)", "fogamount", 0, 100, worldTouch)
+
+					dropdowns.colorfilter = WorldFolder.AddDropdown("Color Filter", { "Normal", "Warm", "Cold", "Pink", "Green" }, nil, function(name)
+						local rgb = FILTERS[name]
+
+						if rgb then
+							setPicker("screen", rgb)
+							worldTouch()
+							saveConfig()
+							dropdowns.colorfilter.SetValue(name)
+						end
+					end)
+
+					local fogBusy = false
+
+					addSwitch(WorldFolder, "Fog", "fogon", function(enabled)
+						if applyingPreset then
+							return
+						end
+
+						if enabled and num("fogamount", 0) <= 0 then
+							fogBusy = true
+							setSlider("fogamount", 40)
+							fogBusy = false
+						end
+
+						worldTouch()
+					end, "ON: adds fog to the world. Use Fog Thickness and Fog Color to change it.")
+
+					addSlider(WorldFolder, "Fog Thickness (thin - thick)", "fogamount", 0, 100, function()
+						if not applyingPreset and not fogBusy and cust.fogon ~= true then
+							setSwitch("fogon", true)
+						end
+
+						worldTouch()
+					end)
+
 					makeColorPicker(WorldFolder, "Fog Color", "fog", { 170, 200, 235 }, worldTouch)
-					addSlider(WorldFolder, "Glow (0 = none)", "bloom", 0, 100, worldTouch)
+
+					addSwitch(WorldFolder, "Glow", "bloomon", function(enabled)
+						if applyingPreset then
+							return
+						end
+
+						if enabled and num("bloom", 0) <= 0 then
+							setSlider("bloom", 30)
+						end
+
+						worldTouch()
+					end, "ON: bright things get a soft glow.")
+
+					addSwitch(WorldFolder, "Sun Rays", "raysenabled", function(enabled)
+						if applyingPreset then
+							return
+						end
+
+						if enabled and num("sunrays", 0) <= 0 then
+							setSlider("sunrays", 40)
+						end
+
+						worldTouch()
+					end, "ON: light beams come from the sun.")
+
+					-- keeps the dropdown texts matching what a preset or reset actually set
+					syncWorld = function()
+						local timeName = "Game Default"
+
+						if cust.worldlock == true then
+							local t = num("worldtime", 12)
+
+							if t < 5 or t >= 21 then
+								timeName = "Night"
+							elseif t < 10 then
+								timeName = "Morning"
+							elseif t < 16 then
+								timeName = "Noon"
+							else
+								timeName = "Evening"
+							end
+						end
+
+						dropdowns.timeofday.SetValue(timeName)
+
+						local filterName = "Custom"
+						local sr, sg, sb = num("screenr", 255), num("screeng", 255), num("screenb", 255)
+
+						for name, rgb in pairs(FILTERS) do
+							if rgb[1] == sr and rgb[2] == sg and rgb[3] == sb then
+								filterName = name
+							end
+						end
+
+						dropdowns.colorfilter.SetValue(filterName)
+					end
+
+					syncWorld()
+
 					WorldFolder.AddButton("Reset Lighting & Time", resetWorld)
 					WorldFolder.Toggle(true, true)
 
