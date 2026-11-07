@@ -654,6 +654,30 @@ local cfg = {
 		skylocktime = false,
 		skytime = 12,
 		recent = "5E5E5E,8A8A88,5D4079,457A78,5E7A43,FF0000",
+		fxblur = false, fxblursize = 8,
+		fxbloom = false, fxbloomint = 40, fxbloomsize = 24,
+		fxrays = false, fxraysint = 25,
+		fxdof = false, fxdoffar = 30, fxdofdist = 60,
+		cc = false, ccbrightness = 0, cccontrast = 0, ccsaturation = 0,
+		cctintr = 255, cctintg = 255, cctintb = 255,
+		gfxq = false, gfxqlevel = 10, gfxshadows = false,
+		particles = false, particleamount = 50,
+		fov = false, fovvalue = 70, stretch = false, stretchvalue = 75,
+		weather = "Off", weatherintensity = 50,
+		trail = false, trailr = 90, trailg = 170, trailb = 255,
+		trail2r = 170, trail2g = 90, trail2b = 255,
+		traillife = 6, trailwidth = 10, trailtrans = 20,
+		cursor = false, cursorstyle = "Dot", cursorr = 255, cursorg = 255, cursorb = 255,
+		cursorsize = 14, cursoroutline = true,
+		toolol = false, toololr = 90, toololg = 170, toololb = 255,
+		toolrainbow = false, toolfill = 0,
+		toolpos = false, toolx = 0, tooly = 0, toolz = 0, toolrx = 0, toolry = 0, toolrz = 0,
+		hud = false, hudpos = "Top Left", hudname = true, hudnick = false,
+		hudfps = true, hudping = true, hudplayers = false, hudlist = false, hudtab = false,
+		hudsize = 14, hudmargin = 10, hudbg = true,
+		hudtextr = 255, hudtextg = 255, hudtextb = 255,
+		wpr = 255, wpg = 200, wpb = 60, wpexpire = 0, wpdistance = true,
+		animmenu = false, animgame = false, animspeed = 220,
 	},
 }
 
@@ -2234,10 +2258,14 @@ do
 
 		ImageButton2.MouseButton1Click:Connect(function()
 			state.mobiletoggle = mobileToggleButton.Visible
-			mobileToggleButton.Visible = not mobileToggleButton.Visible
+			local nextVisible = not mobileToggleButton.Visible
+
+			if not (state.customToggle and state.customToggle(nextVisible)) then
+				mobileToggleButton.Visible = nextVisible
+			end
 
 			if cfg.misc.console then
-				logger.toggle(mobileToggleButton.Visible)
+				logger.toggle(nextVisible)
 			end
 		end)
 	end
@@ -4886,6 +4914,7 @@ do
 		config = ui.AddTab("Config", "rbxassetid://10734950309", true),
 		customization = ui.AddTab("Custom", "rbxassetid://10709782758", true),
 		debug = ui.AddTab("Debug", "rbxassetid://10709782845", true),
+		farmstats = ui.AddTab("Farm %", "rbxassetid://10723407389", true),
 	}
 
 	currentField = nil
@@ -63807,1054 +63836,6 @@ do
 		state.stop = stop or nil
 	end)
 
-	-- ==================== MAP TELEPORT v2 (Home tab) ====================
-	-- Full-screen top-down map in its own GUI (does NOT touch the game camera).
-	--   * 3D layer : a ViewportFrame with a copy of the big static parts of the world
-	--   * 2D layer : grid, field rectangles, markers (fields, shops, your own markers)
-	-- Drag = pan | wheel / pinch / +- = zoom | tap map or marker = teleport | M / Esc = close
-	controls.maptp = (function()
-		local GuiService = getService("GuiService")
-		local ContextActionService = getService("ContextActionService")
-		local Players = getService("Players")
-
-		-- ---- your own markers: { "Name", Vector3.new(x, y, z) } ------------------
-		-- (or at runtime: controls.maptp.AddMarker("Name", Vector3.new(x, y, z)))
-		local CUSTOM_MARKERS = {
-			-- { "My Spot", Vector3.new(0, 60, 0) },
-		}
-
-		local mapCfg = { speed = 12, instant = false }
-
-		local MAX_3D_PARTS = 4500 -- lower this on weak PCs / phones
-		local PLANE_Y = 60 -- reference ground height for pan / zoom maths
-		local MIN_SPAN = 60 -- closest zoom (studs visible vertically)
-		local MAX_SPAN = 2600 -- farthest zoom
-		local MIN_CAM_Y = 450 -- 3D camera never goes lower than this
-		local WIDE_FOV = 70
-		local TAP_SLOP = 8 -- pixels of movement that still count as a tap
-		local GRID_LINES = 90
-
-		-- top-level workspace folders that are not worth drawing (dynamic / tiny / invisible)
-		local SKIP_TOP = {
-			Camera = true, Terrain = true, FlowerZones = true, Particles = true, Collectibles = true,
-			Flowers = true, Sprouts = true, Planters = true, NPCBees = true, Monsters = true, Bees = true,
-			PlayerFlames = true, Balloons = true, Clouds = true, Happenings = true, ["Invisible Walls"] = true,
-			Territories = true, Paths = true, HiddenStickers = true, Leaderboards = true, Honey = true,
-			Goo = true, Gadgets = true, NPCs = true, Stations = true, HiveDeco = true, RetroEvent = true,
-			TheGamesEvent = true, TheGames_WideBanners = true,
-		}
-		-- children of a cloned part that are worth keeping (they change how it looks)
-		local KEEP_CHILD = {
-			Decal = true, Texture = true, SpecialMesh = true, BlockMesh = true,
-			CylinderMesh = true, FileMesh = true, SurfaceAppearance = true,
-		}
-
-		local M = {
-			isOpen = false,
-			cx = 0,
-			cz = 0,
-			span = 1500,
-			camY = 1000,
-			fov = 70,
-			tanHalf = 0.7,
-			W = 1280,
-			H = 720,
-			points = {},
-			markers = {},
-			zones = {},
-			gridLines = {},
-			gridUsed = 0,
-			conns = {},
-			moveId = 0,
-			worldState = "idle", -- idle | loading | ready | empty | error
-			worldMade = 0,
-			worldProgress = 0,
-			worldError = "",
-			message = "",
-			messageUntil = 0,
-			lastStatus = "",
-			renderErr = nil,
-		}
-		local saved = {}
-		local drag = { active = false, moved = false, dist = 0, input = nil, start = Vector2.new(0, 0), pinching = false, pinchSpan = nil }
-		local gui, viewport, vpCamera, worldModel, gridLayer, zoneLayer, cover, markerLayer
-		local statusLabel, modeButton, youDot
-		local goTo, close
-
-		-- ------------------------------------------------------------- helpers
-		local function new(class, props, parent)
-			local inst = Instance.new(class)
-			for key, value in pairs(props) do
-				inst[key] = value
-			end
-			inst.Parent = parent
-			return inst
-		end
-
-		local function makeButton(parent, text, width, color)
-			local button = new("TextButton", {
-				Text = text,
-				Size = UDim2.new(0, width, 0, 30),
-				BackgroundColor3 = color or Color3.fromRGB(44, 44, 54),
-				TextColor3 = Color3.new(1, 1, 1),
-				Font = Enum.Font.GothamSemibold,
-				TextSize = 14,
-				BorderSizePixel = 0,
-				AutoButtonColor = true,
-			}, parent)
-			new("UICorner", { CornerRadius = UDim.new(0, 6) }, button)
-			return button
-		end
-
-		local function setStatus(text, seconds)
-			M.message = text
-			M.messageUntil = os.clock() + (seconds or 4)
-		end
-
-		-- ----------------------------------------------------- view / camera maths
-		-- `span` = studs visible vertically at height PLANE_Y. Far away the 3D camera
-		-- goes up (fov 70); close up it stays high and narrows the fov instead.
-		local function computeView()
-			local size = workspace.CurrentCamera.ViewportSize
-			M.W = math.max(size.X, 1)
-			M.H = math.max(size.Y, 1)
-			local fov = WIDE_FOV
-			local dist = M.span / (2 * math.tan(math.rad(fov / 2)))
-			local camY = dist + PLANE_Y
-			if camY < MIN_CAM_Y then
-				camY = MIN_CAM_Y
-				dist = camY - PLANE_Y
-				fov = math.max(2, math.deg(2 * math.atan(M.span / (2 * dist))))
-			end
-			M.camY = camY
-			M.fov = fov
-			M.tanHalf = math.tan(math.rad(fov / 2))
-		end
-
-		-- world position -> screen pixels (x, y) and pixels-per-stud at that height
-		local function project(pos)
-			local depth = math.max(M.camY - pos.Y, 1)
-			local k = (M.H / 2) / (M.tanHalf * depth)
-			return M.W / 2 + (pos.X - M.cx) * k, M.H / 2 + (pos.Z - M.cz) * k, k
-		end
-
-		local function clampView()
-			M.cx = math.clamp(M.cx, -1800, 1800)
-			M.cz = math.clamp(M.cz, -1800, 1800)
-		end
-
-		local function zoomAt(px, py, factor)
-			local k = M.H / M.span
-			local wx = M.cx + (px - M.W / 2) / k
-			local wz = M.cz + (py - M.H / 2) / k
-			M.span = math.clamp(M.span * factor, MIN_SPAN, MAX_SPAN)
-			k = M.H / M.span
-			M.cx = wx - (px - M.W / 2) / k
-			M.cz = wz - (py - M.H / 2) / k
-			clampView()
-		end
-
-		local function fitView()
-			computeView()
-			local minX, maxX, minZ, maxZ = math.huge, -math.huge, math.huge, -math.huge
-			for _, point in ipairs(M.points) do
-				minX = math.min(minX, point.pos.X)
-				maxX = math.max(maxX, point.pos.X)
-				minZ = math.min(minZ, point.pos.Z)
-				maxZ = math.max(maxZ, point.pos.Z)
-			end
-			if minX == math.huge then
-				M.cx, M.cz, M.span = 0, 0, 1500
-				return
-			end
-			M.cx = (minX + maxX) / 2
-			M.cz = (minZ + maxZ) / 2
-			local aspect = M.W / M.H
-			local needZ = ((maxZ - minZ) + 220) * 1.25
-			local needX = ((maxX - minX) + 220) / aspect * 1.1
-			M.span = math.clamp(math.max(needZ, needX), MIN_SPAN, MAX_SPAN)
-		end
-
-		-- ---------------------------------------------------------------- points
-		local function buildPoints()
-			local list = {}
-			local zones = workspace:FindFirstChild("FlowerZones")
-			if zones then
-				for _, zone in ipairs(zones:GetChildren()) do
-					if zone:IsA("BasePart") then
-						local group = zone:FindFirstChild("ColorGroup")
-						local lift = (zone.Name == "Coconut Field" or zone.Name == "Stump Field") and 16 or 9
-						list[#list + 1] = {
-							name = zone.Name,
-							pos = zone.Position,
-							kind = "field",
-							offset = Vector3.new(0, lift, 0),
-							group = group and group.Value or nil,
-							part = zone,
-						}
-					end
-				end
-			end
-			for name, pos in pairs(locations) do
-				if typeof(pos) == "Vector3" and math.abs(pos.Y) < 2000 then
-					local pretty = string.gsub(name, "(%l)(%u)", "%1 %2")
-					list[#list + 1] = { name = pretty, pos = pos, kind = "place", offset = Vector3.new(0, 4, 0) }
-				end
-			end
-			for _, entry in ipairs(CUSTOM_MARKERS) do
-				list[#list + 1] = { name = entry[1], pos = entry[2], kind = "custom", offset = entry[3] or Vector3.new(0, 4, 0) }
-			end
-			M.points = list
-		end
-
-		-- ------------------------------------------------------- picking the ground
-		-- what is under pixel p: first solid, visible surface along the map camera ray
-		local function pickGround(p)
-			local ndcX = (p.X - M.W / 2) / (M.H / 2)
-			local ndcY = (p.Y - M.H / 2) / (M.H / 2)
-			local origin = Vector3.new(M.cx, M.camY, M.cz)
-			local direction = Vector3.new(ndcX * M.tanHalf, -1, ndcY * M.tanHalf).Unit * 4000
-
-			local excluded = {}
-			if localPlayer.Character then
-				excluded[1] = localPlayer.Character
-			end
-			local params = RaycastParams.new()
-			params.FilterType = Enum.RaycastFilterType.Exclude
-			params.RespectCanCollide = true
-			params.FilterDescendantsInstances = excluded
-
-			for _ = 1, 10 do
-				local result = workspace:Raycast(origin, direction, params)
-				if not result then
-					return nil
-				end
-				local inst = result.Instance
-				if inst == workspace.Terrain or inst.Transparency < 0.95 then
-					return result.Position
-				end
-				excluded[#excluded + 1] = inst -- invisible wall: look through it
-				params.FilterDescendantsInstances = excluded
-			end
-			return nil
-		end
-
-		-- ------------------------------------------------------------- teleporting
-		local function teleport(dest)
-			local char = localPlayer.Character
-			local root = char and char:FindFirstChild("HumanoidRootPart")
-			local hum = char and char:FindFirstChildOfClass("Humanoid")
-			if not root or not hum or hum.Health <= 0 then
-				ui.Notify("Map Teleport", "Character is not available")
-				return
-			end
-
-			-- pause the autofarm, otherwise it would walk us straight back to the field
-			if cfg.autofarm.enabled and not state.stop then
-				pcall(function()
-					controls["Stop Everything"].Set(true)
-				end)
-				ui.Notify("Map Teleport", "Autofarm paused (Stop Everything is ON)")
-			end
-
-			M.moveId = M.moveId + 1
-			local myId = M.moveId
-
-			task.spawn(function()
-				if workspace.StreamingEnabled then
-					pcall(function()
-						localPlayer:RequestStreamAroundAsync(dest, 3)
-					end)
-					if M.moveId ~= myId then
-						return
-					end
-				end
-
-				if mapCfg.instant then
-					root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-					root.CFrame = CFrame.new(dest) * root.CFrame.Rotation
-					return
-				end
-
-				-- same technique the farm uses for Tween movement (AlignPosition + noclip)
-				for _, child in ipairs(root:GetChildren()) do
-					if child:IsA("AlignPosition") or child:IsA("AlignOrientation") then
-						child:Destroy()
-					end
-				end
-
-				local speed = mapCfg.speed
-				if speed > 12 and _G.unlocktween ~= true then
-					speed = 12
-				end
-				speed = math.max(speed, 1) * 10 -- studs per second
-				local travelTime = (root.Position - dest).Magnitude / speed
-
-				local alignPosition = Instance.new("AlignPosition")
-				alignPosition.Mode = Enum.PositionAlignmentMode.OneAttachment
-				alignPosition.Attachment0 = root.RootAttachment
-				alignPosition.Responsiveness = 20
-				alignPosition.MaxForce = math.huge
-				alignPosition.MaxVelocity = speed
-				alignPosition.Position = dest
-				alignPosition.Parent = root
-
-				local alignOrientation = Instance.new("AlignOrientation")
-				alignOrientation.Attachment0 = root.RootAttachment
-				alignOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
-				alignOrientation.RigidityEnabled = true
-				alignOrientation.CFrame = root.CFrame
-				alignOrientation.Parent = root
-
-				hum:ChangeState(Enum.HumanoidStateType.Physics)
-
-				local noclip = RunService.PreSimulation:Connect(function()
-					for _, part in ipairs(char:GetDescendants()) do
-						if part:IsA("BasePart") and part.CanCollide then
-							part.CanCollide = false
-						end
-					end
-				end)
-
-				local started = os.clock()
-				while M.moveId == myId and hum.Health > 0 and root.Parent do
-					if (root.Position - dest).Magnitude <= 4 then
-						break
-					end
-					if os.clock() - started > travelTime + 3 then
-						break
-					end
-					RunService.Heartbeat:Wait()
-				end
-
-				alignPosition:Destroy()
-				alignOrientation:Destroy()
-				noclip:Disconnect()
-				if M.moveId == myId and hum.Health > 0 then
-					hum:ChangeState(Enum.HumanoidStateType.Freefall)
-				end
-			end)
-		end
-
-		goTo = function(dest, label)
-			close()
-			ui.Notify("Map Teleport", (mapCfg.instant and "Teleporting to " or "Flying to ") .. label)
-			teleport(dest)
-		end
-
-		local function onTap(p)
-			local hit = pickGround(p)
-			if not hit then
-				setStatus("Nothing to land on there - try another spot")
-				return
-			end
-			goTo(hit + Vector3.new(0, 4, 0), string.format("%.0f, %.0f", hit.X, hit.Z))
-		end
-
-		-- --------------------------------------------------------- 3D world copy
-		local function worldThread()
-			local candidates = {}
-			local seen = 0
-
-			local function consider(inst)
-				seen = seen + 1
-				if seen % 2500 == 0 then
-					RunService.Heartbeat:Wait()
-				end
-				if not inst:IsA("BasePart") or inst:IsA("Terrain") then
-					return
-				end
-				if not inst.Anchored or inst.Transparency > 0.9 then
-					return
-				end
-				local size = inst.Size
-				local flat = math.max(size.X, size.Z)
-				if flat > 3000 or (flat < 4 and size.Y < 10) then
-					return
-				end
-				local y = inst.Position.Y
-				if y - size.Y / 2 > 320 or y + size.Y / 2 < -60 then
-					return
-				end
-				candidates[#candidates + 1] = { inst, size.X * size.Z + 0.5 * size.Y * (size.X + size.Z) }
-			end
-
-			for _, top in ipairs(workspace:GetChildren()) do
-				local skip = SKIP_TOP[top.Name]
-				if not skip and top:IsA("Model") then
-					if top:FindFirstChildOfClass("Humanoid") or Players:GetPlayerFromCharacter(top) then
-						skip = true
-					end
-				end
-				if not skip then
-					consider(top)
-					for _, descendant in ipairs(top:GetDescendants()) do
-						consider(descendant)
-					end
-				end
-			end
-
-			table.sort(candidates, function(a, b)
-				return a[2] > b[2]
-			end)
-
-			local total = math.min(#candidates, MAX_3D_PARTS)
-			local made = 0
-			for i = 1, total do
-				local part = candidates[i][1]
-				if part.Parent then
-					local ok, clone = pcall(function()
-						local wasArchivable = part.Archivable
-						part.Archivable = true -- some games block cloning; this is only a client-side flag
-						local copy = part:Clone()
-						part.Archivable = wasArchivable
-						return copy
-					end)
-					if ok and clone then
-						for _, child in ipairs(clone:GetChildren()) do
-							if not KEEP_CHILD[child.ClassName] then
-								child:Destroy()
-							end
-						end
-						clone.Anchored = true
-						clone.Parent = worldModel
-						made = made + 1
-					end
-				end
-				if i % 100 == 0 then
-					M.worldProgress = i / total
-					M.worldMade = made
-					RunService.Heartbeat:Wait()
-				end
-			end
-
-			M.worldMade = made
-			M.worldProgress = 1
-			M.worldState = made > 0 and "ready" or "empty"
-		end
-
-		local function startWorld()
-			if M.worldState == "loading" then
-				return
-			end
-			M.worldState = "loading"
-			M.worldMade = 0
-			M.worldProgress = 0
-			task.spawn(function()
-				local ok, err = pcall(worldThread)
-				if not ok then
-					M.worldState = "error"
-					M.worldError = tostring(err)
-				end
-			end)
-		end
-
-		local function reload3D()
-			if M.worldState == "loading" or not worldModel then
-				return
-			end
-			worldModel:ClearAllChildren()
-			startWorld()
-		end
-
-		-- ------------------------------------------------------------ 2D overlay
-		local function addZoneRect(point)
-			local part = point.part
-			if not part then
-				return
-			end
-			local color = Color3.fromRGB(235, 235, 235)
-			if point.group == "Blue" then
-				color = Color3.fromRGB(70, 120, 255)
-			elseif point.group == "Red" then
-				color = Color3.fromRGB(255, 80, 80)
-			end
-			local right = part.CFrame.RightVector
-			local rect = new("Frame", {
-				AnchorPoint = Vector2.new(0.5, 0.5),
-				BackgroundColor3 = color,
-				BackgroundTransparency = 0.72,
-				BorderSizePixel = 0,
-				Size = UDim2.fromOffset(10, 10),
-				Rotation = math.deg(math.atan2(right.Z, right.X)),
-				ZIndex = 3,
-			}, zoneLayer)
-			new("UIStroke", { Color = color, Thickness = 1.5, Transparency = 0.15 }, rect)
-			M.zones[#M.zones + 1] = { rect = rect, pos = part.Position, sx = part.Size.X, sz = part.Size.Z }
-		end
-
-		local function addMarkerButton(point)
-			local color = Color3.fromRGB(104, 56, 150)
-			if point.kind == "field" then
-				color = Color3.fromRGB(70, 74, 84)
-				if point.group == "Blue" then
-					color = Color3.fromRGB(28, 62, 140)
-				elseif point.group == "Red" then
-					color = Color3.fromRGB(140, 36, 36)
-				end
-			elseif point.kind == "place" then
-				color = Color3.fromRGB(128, 78, 18)
-			end
-
-			local button = new("TextButton", {
-				Text = point.name,
-				AnchorPoint = Vector2.new(0.5, 0.5),
-				Size = UDim2.fromOffset(0, 20),
-				AutomaticSize = Enum.AutomaticSize.X,
-				BackgroundColor3 = color,
-				BackgroundTransparency = 0.1,
-				TextColor3 = Color3.new(1, 1, 1),
-				Font = Enum.Font.GothamSemibold,
-				TextSize = 12,
-				BorderSizePixel = 0,
-				Visible = false,
-				ZIndex = 5,
-			}, markerLayer)
-			new("UICorner", { CornerRadius = UDim.new(0, 5) }, button)
-			new("UIPadding", { PaddingLeft = UDim.new(0, 7), PaddingRight = UDim.new(0, 7) }, button)
-			button.MouseButton1Click:Connect(function()
-				goTo(point.pos + point.offset, point.name)
-			end)
-			M.markers[#M.markers + 1] = { button = button, pos = point.pos, kind = point.kind }
-		end
-
-		local function gridStep()
-			local s = M.span
-			if s <= 250 then
-				return 25
-			elseif s <= 600 then
-				return 50
-			elseif s <= 1300 then
-				return 100
-			elseif s <= 2600 then
-				return 250
-			end
-			return 500
-		end
-
-		local function updateGrid()
-			local step = gridStep()
-			local k0 = M.H / M.span
-			local halfW = (M.W / 2) / k0
-			local halfH = M.span / 2
-			local used = 0
-			local limit = #M.gridLines
-
-			local x = math.floor((M.cx - halfW) / step) * step
-			while x <= M.cx + halfW and used < limit do
-				used = used + 1
-				local line = M.gridLines[used]
-				line.Position = UDim2.fromOffset(M.W / 2 + (x - M.cx) * k0, 0)
-				line.Size = UDim2.fromOffset(1, M.H)
-				line.Visible = true
-				x = x + step
-			end
-			local z = math.floor((M.cz - halfH) / step) * step
-			while z <= M.cz + halfH and used < limit do
-				used = used + 1
-				local line = M.gridLines[used]
-				line.Position = UDim2.fromOffset(0, M.H / 2 + (z - M.cz) * k0)
-				line.Size = UDim2.fromOffset(M.W, 1)
-				line.Visible = true
-				z = z + step
-			end
-			for i = used + 1, M.gridUsed do
-				M.gridLines[i].Visible = false
-			end
-			M.gridUsed = used
-		end
-
-		local function updateOverlay()
-			for _, zone in ipairs(M.zones) do
-				local px, py, k = project(zone.pos)
-				zone.rect.Position = UDim2.fromOffset(px, py)
-				zone.rect.Size = UDim2.fromOffset(zone.sx * k, zone.sz * k)
-			end
-
-			for _, marker in ipairs(M.markers) do
-				local visible = false
-				if marker.kind ~= "place" or M.span <= 1300 then
-					local px, py = project(marker.pos)
-					if px > -80 and px < M.W + 80 and py > -40 and py < M.H + 40 then
-						marker.button.Position = UDim2.fromOffset(px, py)
-						visible = true
-					end
-				end
-				marker.button.Visible = visible
-			end
-
-			local char = localPlayer.Character
-			local root = char and char:FindFirstChild("HumanoidRootPart")
-			if root then
-				local px, py = project(root.Position)
-				youDot.Position = UDim2.fromOffset(px, py)
-				youDot.Visible = true
-			else
-				youDot.Visible = false
-			end
-
-			updateGrid()
-		end
-
-		local function worldText()
-			if M.worldState == "loading" then
-				return string.format("3D map: loading %.0f%%", M.worldProgress * 100)
-			elseif M.worldState == "ready" then
-				return string.format("3D map: %d parts", M.worldMade)
-			elseif M.worldState == "empty" then
-				return "3D map: nothing to draw (schematic view)"
-			elseif M.worldState == "error" then
-				return "3D map error: " .. string.sub(M.worldError, 1, 80)
-			end
-			return "3D map: not built"
-		end
-
-		local function refreshMode()
-			if mapCfg.instant then
-				modeButton.Text = "Mode: Instant"
-				modeButton.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
-			else
-				modeButton.Text = "Mode: Fly"
-				modeButton.BackgroundColor3 = Color3.fromRGB(40, 110, 70)
-			end
-		end
-
-		-- -------------------------------------------------------------- per frame
-		local function step(dt)
-			computeView()
-
-			-- keyboard pan / zoom
-			local dx, dz = 0, 0
-			if UserInputService:IsKeyDown(Enum.KeyCode.A) or UserInputService:IsKeyDown(Enum.KeyCode.Left) then
-				dx = dx - 1
-			end
-			if UserInputService:IsKeyDown(Enum.KeyCode.D) or UserInputService:IsKeyDown(Enum.KeyCode.Right) then
-				dx = dx + 1
-			end
-			if UserInputService:IsKeyDown(Enum.KeyCode.W) or UserInputService:IsKeyDown(Enum.KeyCode.Up) then
-				dz = dz - 1
-			end
-			if UserInputService:IsKeyDown(Enum.KeyCode.S) or UserInputService:IsKeyDown(Enum.KeyCode.Down) then
-				dz = dz + 1
-			end
-			if dx ~= 0 or dz ~= 0 then
-				M.cx = M.cx + dx * M.span * 0.6 * dt
-				M.cz = M.cz + dz * M.span * 0.6 * dt
-				clampView()
-			end
-			if UserInputService:IsKeyDown(Enum.KeyCode.E) then
-				zoomAt(M.W / 2, M.H / 2, 0.3 ^ dt)
-			elseif UserInputService:IsKeyDown(Enum.KeyCode.Q) then
-				zoomAt(M.W / 2, M.H / 2, (1 / 0.3) ^ dt)
-			end
-			computeView()
-
-			-- keep the cursor free (shift-lock would pin it to the screen centre)
-			if UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then
-				UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-			end
-			UserInputService.MouseIconEnabled = true
-
-			-- 3D camera
-			vpCamera.FieldOfView = M.fov
-			vpCamera.CFrame = CFrame.new(M.cx, M.camY, M.cz) * CFrame.Angles(-math.pi / 2, 0, 0)
-
-			updateOverlay()
-
-			-- status line
-			local text
-			if os.clock() < M.messageUntil then
-				text = M.message
-			else
-				local mouse = UserInputService:GetMouseLocation()
-				local k0 = M.H / M.span
-				text = string.format(
-					"x %.0f  z %.0f   |   %s",
-					M.cx + (mouse.X - M.W / 2) / k0,
-					M.cz + (mouse.Y - M.H / 2) / k0,
-					worldText()
-				)
-			end
-			if text ~= M.lastStatus then
-				M.lastStatus = text
-				statusLabel.Text = text
-			end
-		end
-
-		local function onRender(dt)
-			local ok, err = pcall(step, dt)
-			if not ok and not M.renderErr then
-				M.renderErr = tostring(err)
-				setStatus("Map error: " .. M.renderErr, 60)
-			end
-		end
-
-		-- ---------------------------------------------------------------- input
-		local function vpPos(input)
-			if input.UserInputType == Enum.UserInputType.Touch then
-				return Vector2.new(input.Position.X, input.Position.Y) + GuiService:GetGuiInset()
-			end
-			return UserInputService:GetMouseLocation()
-		end
-
-		local function onInputChanged(input)
-			local t = input.UserInputType
-			if t == Enum.UserInputType.MouseWheel then
-				local mouse = UserInputService:GetMouseLocation()
-				zoomAt(mouse.X, mouse.Y, input.Position.Z > 0 and 0.8 or 1.25)
-				return
-			end
-			if not drag.active or drag.pinching or not drag.input then
-				return
-			end
-			local isMove = (drag.input.UserInputType == Enum.UserInputType.MouseButton1 and t == Enum.UserInputType.MouseMovement)
-				or (t == Enum.UserInputType.Touch and input == drag.input)
-			if not isMove then
-				return
-			end
-			local delta = Vector2.new(input.Delta.X, input.Delta.Y)
-			drag.dist = drag.dist + delta.Magnitude
-			if drag.dist > TAP_SLOP then
-				drag.moved = true
-			end
-			if drag.moved then
-				local k0 = M.H / M.span
-				M.cx = M.cx - delta.X / k0
-				M.cz = M.cz - delta.Y / k0
-				clampView()
-			end
-		end
-
-		local function onInputEnded(input)
-			if not drag.active or not drag.input then
-				return
-			end
-			local t = input.UserInputType
-			local ends = (drag.input.UserInputType == Enum.UserInputType.MouseButton1 and t == Enum.UserInputType.MouseButton1)
-				or (t == Enum.UserInputType.Touch and input == drag.input)
-			if not ends then
-				return
-			end
-			local wasTap = not drag.moved and not drag.pinching
-			local at = drag.start
-			drag.active = false
-			drag.input = nil
-			if wasTap then
-				onTap(at)
-			end
-		end
-
-		local function onPinch(positions, scale, _, pinchState)
-			if pinchState == Enum.UserInputState.Begin then
-				drag.pinching = true
-				drag.moved = true
-				drag.pinchSpan = M.span
-			elseif pinchState == Enum.UserInputState.Change then
-				if drag.pinchSpan and positions[1] and positions[2] then
-					local center = (positions[1] + positions[2]) / 2 + GuiService:GetGuiInset()
-					zoomAt(center.X, center.Y, (drag.pinchSpan / scale) / M.span)
-				end
-			else
-				drag.pinching = false
-				drag.pinchSpan = nil
-			end
-		end
-
-		local function onKey(input)
-			if input.KeyCode == Enum.KeyCode.M or input.KeyCode == Enum.KeyCode.Escape then
-				close()
-			end
-		end
-
-		-- ------------------------------------------------------------------ GUI
-		local function build()
-			if gui then
-				return
-			end
-			buildPoints()
-			local full = UDim2.fromScale(1, 1)
-
-			gui = new("ScreenGui", {
-				Name = "AtlasMapTeleport",
-				ResetOnSpawn = false,
-				DisplayOrder = 1000,
-				ScreenInsets = Enum.ScreenInsets.None,
-				ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-				Enabled = false,
-			}, gethui and gethui() or getService("CoreGui"))
-
-			-- 3D layer
-			viewport = new("ViewportFrame", {
-				Name = "World3D",
-				Size = full,
-				BackgroundColor3 = Color3.fromRGB(26, 36, 30),
-				BorderSizePixel = 0,
-				Ambient = Color3.fromRGB(190, 190, 190),
-				LightColor = Color3.fromRGB(160, 160, 160),
-				LightDirection = Vector3.new(-0.4, -1, -0.3),
-				ZIndex = 1,
-			}, gui)
-			vpCamera = new("Camera", { FieldOfView = 70 }, viewport)
-			viewport.CurrentCamera = vpCamera
-			worldModel = new("Model", { Name = "World" }, viewport)
-
-			-- 2D layers
-			gridLayer = new("Frame", { Name = "Grid", BackgroundTransparency = 1, Size = full, ZIndex = 2 }, gui)
-			zoneLayer = new("Frame", { Name = "Zones", BackgroundTransparency = 1, Size = full, ZIndex = 3 }, gui)
-			cover = new("Frame", { Name = "Cover", BackgroundTransparency = 1, Size = full, Active = true, ZIndex = 4 }, gui)
-			markerLayer = new("Frame", { Name = "Markers", BackgroundTransparency = 1, Size = full, ZIndex = 5 }, gui)
-
-			for i = 1, GRID_LINES do
-				M.gridLines[i] = new("Frame", {
-					BackgroundColor3 = Color3.new(1, 1, 1),
-					BackgroundTransparency = 0.88,
-					BorderSizePixel = 0,
-					Visible = false,
-					ZIndex = 2,
-				}, gridLayer)
-			end
-
-			for _, point in ipairs(M.points) do
-				if point.kind == "field" then
-					addZoneRect(point)
-				end
-				addMarkerButton(point)
-			end
-
-			youDot = new("Frame", {
-				Name = "You",
-				AnchorPoint = Vector2.new(0.5, 0.5),
-				Size = UDim2.fromOffset(16, 16),
-				BackgroundColor3 = Color3.fromRGB(60, 220, 120),
-				BorderSizePixel = 0,
-				ZIndex = 7,
-				Visible = false,
-			}, markerLayer)
-			new("UICorner", { CornerRadius = UDim.new(1, 0) }, youDot)
-			new("UIStroke", { Color = Color3.new(1, 1, 1), Thickness = 2 }, youDot)
-
-			cover.InputBegan:Connect(function(input)
-				local t = input.UserInputType
-				if t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch then
-					if drag.active then
-						return
-					end
-					drag.active = true
-					drag.moved = false
-					drag.dist = 0
-					drag.input = input
-					drag.start = vpPos(input)
-				end
-			end)
-
-			-- top bar
-			local topBar = new("Frame", {
-				Name = "Top",
-				Size = UDim2.new(1, 0, 0, 46),
-				BackgroundColor3 = Color3.fromRGB(18, 18, 24),
-				BackgroundTransparency = 0.1,
-				BorderSizePixel = 0,
-				Active = true,
-				ZIndex = 10,
-			}, gui)
-			new("TextLabel", {
-				BackgroundTransparency = 1,
-				Position = UDim2.fromOffset(14, 0),
-				Size = UDim2.new(0, 160, 1, 0),
-				Text = "Map Teleport",
-				TextColor3 = Color3.new(1, 1, 1),
-				Font = Enum.Font.GothamBold,
-				TextSize = 16,
-				TextXAlignment = Enum.TextXAlignment.Left,
-			}, topBar)
-			local buttons = new("Frame", { BackgroundTransparency = 1, Size = full }, topBar)
-			new("UIListLayout", {
-				FillDirection = Enum.FillDirection.Horizontal,
-				HorizontalAlignment = Enum.HorizontalAlignment.Right,
-				VerticalAlignment = Enum.VerticalAlignment.Center,
-				Padding = UDim.new(0, 6),
-			}, buttons)
-			new("UIPadding", { PaddingRight = UDim.new(0, 10) }, buttons)
-
-			local overviewButton = makeButton(buttons, "Overview", 78)
-			local meButton = makeButton(buttons, "Me", 46)
-			local reloadButton = makeButton(buttons, "Reload 3D", 86)
-			local zoomOutButton = makeButton(buttons, "-", 34)
-			local zoomInButton = makeButton(buttons, "+", 34)
-			local closeButton = makeButton(buttons, "X", 34, Color3.fromRGB(150, 50, 50))
-
-			overviewButton.MouseButton1Click:Connect(fitView)
-			meButton.MouseButton1Click:Connect(function()
-				local char = localPlayer.Character
-				local root = char and char:FindFirstChild("HumanoidRootPart")
-				if root then
-					M.cx = root.Position.X
-					M.cz = root.Position.Z
-					M.span = math.min(M.span, 400)
-					clampView()
-				end
-			end)
-			reloadButton.MouseButton1Click:Connect(reload3D)
-			zoomInButton.MouseButton1Click:Connect(function()
-				zoomAt(M.W / 2, M.H / 2, 0.6)
-			end)
-			zoomOutButton.MouseButton1Click:Connect(function()
-				zoomAt(M.W / 2, M.H / 2, 1 / 0.6)
-			end)
-			closeButton.MouseButton1Click:Connect(function()
-				close()
-			end)
-
-			-- bottom bar
-			local bottomBar = new("Frame", {
-				Name = "Bottom",
-				AnchorPoint = Vector2.new(0.5, 1),
-				Position = UDim2.new(0.5, 0, 1, -14),
-				Size = UDim2.new(1, -24, 0, 66),
-				BackgroundColor3 = Color3.fromRGB(18, 18, 24),
-				BackgroundTransparency = 0.1,
-				BorderSizePixel = 0,
-				Active = true,
-				ZIndex = 10,
-			}, gui)
-			new("UICorner", { CornerRadius = UDim.new(0, 10) }, bottomBar)
-			new("UISizeConstraint", { MaxSize = Vector2.new(680, 66) }, bottomBar)
-
-			new("TextLabel", {
-				BackgroundTransparency = 1,
-				Position = UDim2.fromOffset(14, 8),
-				Size = UDim2.new(1, -170, 0, 22),
-				Text = "Tap the map or a marker to teleport",
-				TextColor3 = Color3.new(1, 1, 1),
-				Font = Enum.Font.GothamBold,
-				TextSize = 14,
-				TextXAlignment = Enum.TextXAlignment.Left,
-			}, bottomBar)
-			statusLabel = new("TextLabel", {
-				BackgroundTransparency = 1,
-				Position = UDim2.fromOffset(14, 32),
-				Size = UDim2.new(1, -170, 0, 28),
-				Text = "",
-				TextColor3 = Color3.fromRGB(170, 170, 180),
-				Font = Enum.Font.Gotham,
-				TextSize = 12,
-				TextWrapped = true,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				TextYAlignment = Enum.TextYAlignment.Top,
-			}, bottomBar)
-
-			modeButton = makeButton(bottomBar, "", 140)
-			modeButton.AnchorPoint = Vector2.new(1, 0.5)
-			modeButton.Position = UDim2.new(1, -12, 0.5, 0)
-			modeButton.Size = UDim2.new(0, 140, 0, 40)
-			modeButton.MouseButton1Click:Connect(function()
-				mapCfg.instant = not mapCfg.instant
-				refreshMode()
-				if mapCfg.instant then
-					setStatus("Instant teleport can get you detected / reset by the game", 6)
-				else
-					setStatus("Fly mode: moves at the Map Teleport Speed from Home", 5)
-				end
-			end)
-			refreshMode()
-		end
-
-		-- ---------------------------------------------------------- open / close
-		local function open()
-			if M.isOpen then
-				return
-			end
-			local ok, err = pcall(build)
-			if not ok then
-				ui.Notify("Map Teleport", "Failed to build the map: " .. tostring(err))
-				return
-			end
-			M.isOpen = true
-			M.renderErr = nil
-			M.lastStatus = ""
-
-			saved.scriptGui = ScreenGui.Enabled
-			saved.mouseBehavior = UserInputService.MouseBehavior
-			saved.mouseIcon = UserInputService.MouseIconEnabled
-			ScreenGui.Enabled = false
-
-			-- keep the character still while browsing the map
-			ContextActionService:BindActionAtPriority("AtlasMapSink", function()
-				return Enum.ContextActionResult.Sink
-			end, false, 3000, Enum.KeyCode.W, Enum.KeyCode.A, Enum.KeyCode.S, Enum.KeyCode.D, Enum.KeyCode.Up, Enum.KeyCode.Down, Enum.KeyCode.Left, Enum.KeyCode.Right, Enum.KeyCode.Space, Enum.KeyCode.Q, Enum.KeyCode.E, Enum.UserInputType.MouseWheel)
-
-			M.conns[#M.conns + 1] = UserInputService.InputChanged:Connect(onInputChanged)
-			M.conns[#M.conns + 1] = UserInputService.InputEnded:Connect(onInputEnded)
-			M.conns[#M.conns + 1] = UserInputService.InputBegan:Connect(onKey)
-			M.conns[#M.conns + 1] = UserInputService.TouchPinch:Connect(onPinch)
-
-			drag.active = false
-			drag.pinching = false
-			gui.Enabled = true
-			fitView()
-			M.conns[#M.conns + 1] = RunService.RenderStepped:Connect(onRender)
-
-			if M.worldState == "idle" or M.worldState == "error" then
-				startWorld()
-			end
-			if workspace.StreamingEnabled then
-				setStatus("StreamingEnabled is ON: only the loaded part of the world can be drawn in 3D", 8)
-			end
-		end
-
-		close = function()
-			if not M.isOpen then
-				return
-			end
-			M.isOpen = false
-			for _, connection in ipairs(M.conns) do
-				connection:Disconnect()
-			end
-			M.conns = {}
-			pcall(function()
-				ContextActionService:UnbindAction("AtlasMapSink")
-			end)
-			drag.active = false
-			drag.pinching = false
-			gui.Enabled = false
-			pcall(function()
-				UserInputService.MouseBehavior = saved.mouseBehavior or Enum.MouseBehavior.Default
-				UserInputService.MouseIconEnabled = saved.mouseIcon ~= false
-			end)
-			ScreenGui.Enabled = saved.scriptGui ~= false
-		end
-
-		return {
-			Cfg = mapCfg,
-			Open = open,
-			Close = close,
-			Toggle = function()
-				if M.isOpen then
-					close()
-				else
-					open()
-				end
-			end,
-			Cancel = function()
-				M.moveId = M.moveId + 1
-			end,
-			AddMarker = function(name, pos, offset)
-				local point = { name = name, pos = pos, kind = "custom", offset = offset or Vector3.new(0, 4, 0) }
-				CUSTOM_MARKERS[#CUSTOM_MARKERS + 1] = { name, pos, point.offset }
-				M.points[#M.points + 1] = point
-				if gui then
-					addMarkerButton(point)
-				end
-			end,
-		}
-	end)()
-
-	Home.AddHorizontalAlignment()
-	Home.AddButton("Open Map Teleport", controls.maptp.Toggle)
-	Home.AddButton("Cancel Map Teleport", controls.maptp.Cancel)
-	Home.AddSlider("Map Teleport Speed", nil, 1, 12, controls.maptp.Cfg, "speed", { Left = true })
-	-- ==================== END MAP TELEPORT ====================
-
 	Home.Toggle(true)
 end
 
@@ -69094,61 +68075,507 @@ more accurate dodging]],
 					----------------------------------------------------------------
 					-- controls
 					----------------------------------------------------------------
-					local Presets = tab.AddFolder("Theme Presets")
-					local Accent = tab.AddFolder("Accent Color")
-					local Background = tab.AddFolder("Background")
-					local Window = tab.AddFolder("Window", true)
-					local SkyFolder = tab.AddFolder("Sky", true)
+					----------------------------------------------------------------
+					-- shared helpers for the visual features
+					----------------------------------------------------------------
+					local Players = getService("Players")
+					local Stats = getService("Stats")
+					local cleanups = {}
+					local requests = {}
+					local overlay = nil
 
-					Presets.AddDropdown("Preset", PRESET_NAMES, nil, function(name)
+					-- 2D overlay (HUD, cursor). 3D adornments (highlight, billboards) go straight to the container.
+					local function getOverlay()
+						if overlay and overlay.Parent then
+							return overlay
+						end
+
+						overlay = Instance.new("ScreenGui")
+						overlay.Name = "AtlasOverlay"
+						overlay.ResetOnSpawn = false
+						overlay.IgnoreGuiInset = true
+						overlay.ScreenInsets = Enum.ScreenInsets.None
+						overlay.DisplayOrder = 2000000000
+						overlay.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+						overlay.Parent = ScreenGui.Parent
+						return overlay
+					end
+
+					local function debounce(callback)
+						local queued = false
+
+						return function()
+							if queued then
+								return
+							end
+
+							queued = true
+
+							task.defer(function()
+								queued = false
+								local ok, err = pcall(callback)
+
+								if not ok then
+									warn("Customization: " .. tostring(err))
+								end
+							end)
+						end
+					end
+
+					local function feature(name, builder)
+						local ok, err = pcall(builder)
+
+						if not ok then
+							warn("Customization (" .. name .. "): " .. tostring(err))
+						end
+					end
+
+					local function addSwitch(folder, text, key, callback, options)
+						local switch = folder.AddSwitch(text, callback, "customization", key, options)
+						switches[key] = switch
+						return switch
+					end
+
+					local function addSlider(folder, text, key, min, max, callback, decimal)
+						local slider = folder.AddSlider(text, callback, min, max, "customization", key, { Left = true, Decimal = decimal })
+						sliders[key] = slider
+						return slider
+					end
+
+					local function addDropdown(folder, text, items, key, callback)
+						return folder.AddDropdown(text, items, nil, function(value)
+							cust[key] = value
+							callback()
+						end, "customization", key)
+					end
+
+					local unloading = false
+
+					local function on(key)
+						return cust[key] == true and not unloading
+					end
+
+					ScreenGui.Destroying:Connect(function()
+						unloading = true
+
+						for _, cleanup in ipairs(cleanups) do
+							pcall(cleanup)
+						end
+
+						if overlay then
+							pcall(function()
+								overlay:Destroy()
+							end)
+						end
+					end)
+
+					----------------------------------------------------------------
+					-- LEFT COLUMN: menu + screen
+					----------------------------------------------------------------
+					local ThemeFolder = tab.AddFolder("Menu Theme")
+
+					ThemeFolder.AddDropdown("Preset", PRESET_NAMES, nil, function(name)
 						applyPreset(name)
 					end)
 
-					Presets.AddButton("Random Colors", randomizeTheme)
-					Presets.AddButton("Reset Menu Style", resetTheme)
-					Presets.AddButton("Copy Theme To Clipboard", exportTheme)
-					Presets.AddTextBox("Paste theme here", importTheme, nil, nil, { Clear = true })
-					Presets.Toggle(true, true)
-
-					Accent.AddLabel("Click a circle to choose a color")
-					makeColorPicker(Accent, "Main Color", "accent", { 41, 74, 122 }, requestApply)
-					switches.gradient = Accent.AddSwitch("Use Gradient", requestApply, "customization", "gradient")
-					makeColorPicker(Accent, "Gradient Color", "grad", { 70, 110, 180 }, function()
+					makeColorPicker(ThemeFolder, "Main Color", "accent", { 41, 74, 122 }, requestApply)
+					switches.gradient = ThemeFolder.AddSwitch("Gradient", requestApply, "customization", "gradient")
+					makeColorPicker(ThemeFolder, "Gradient Color", "grad", { 70, 110, 180 }, function()
 						if cust.gradient ~= true then
 							setSwitch("gradient", true)
 						end
 
 						requestApply()
 					end)
-					sliders.gradrotation = Accent.AddSlider("Gradient Angle", requestApply, 0, 360, "customization", "gradrotation", { Left = true })
-					switches.gradanimated = Accent.AddSwitch("Animate Gradient", requestApply, "customization", "gradanimated")
-					switches.rainbow = Accent.AddSwitch("Rainbow Mode", requestApply, "customization", "rainbow")
-					Accent.Toggle(true, true)
+					makeColorPicker(ThemeFolder, "Window Color", "bg", { 21, 22, 23 }, requestApply)
+					makeColorPicker(ThemeFolder, "Panel Color", "panel", { 42, 42, 42 }, requestApply)
+					ThemeFolder.AddButton("Reset Menu Style", resetTheme)
+					ThemeFolder.Toggle(true, true)
 
-					makeColorPicker(Background, "Window Color", "bg", { 21, 22, 23 }, requestApply)
-					switches.bggradient = Background.AddSwitch("Use Gradient", requestApply, "customization", "bggradient")
-					makeColorPicker(Background, "Gradient Color", "bgend", { 30, 34, 48 }, function()
+					local ExtrasFolder = tab.AddFolder("Menu Extras")
+					sliders.gradrotation = ExtrasFolder.AddSlider("Gradient Angle", requestApply, 0, 360, "customization", "gradrotation", { Left = true })
+					switches.gradanimated = ExtrasFolder.AddSwitch("Animate Gradient", requestApply, "customization", "gradanimated")
+					switches.rainbow = ExtrasFolder.AddSwitch("Rainbow Mode", requestApply, "customization", "rainbow")
+					switches.bggradient = ExtrasFolder.AddSwitch("Background Gradient", requestApply, "customization", "bggradient")
+					makeColorPicker(ExtrasFolder, "Background End", "bgend", { 30, 34, 48 }, function()
 						if cust.bggradient ~= true then
 							setSwitch("bggradient", true)
 						end
 
 						requestApply()
 					end)
-					sliders.bgrotation = Background.AddSlider("Gradient Angle", requestApply, 0, 360, "customization", "bgrotation", { Left = true })
-					makeColorPicker(Background, "Panel Color", "panel", { 42, 42, 42 }, requestApply)
-					Background.Toggle(true, true)
+					sliders.bgrotation = ExtrasFolder.AddSlider("Background Angle", requestApply, 0, 360, "customization", "bgrotation", { Left = true })
+					sliders.windowtransparency = ExtrasFolder.AddSlider("Window Transparency", requestApply, 0, 90, "customization", "windowtransparency", { Left = true })
+					sliders.paneltransparency = ExtrasFolder.AddSlider("Panel Transparency", requestApply, 0, 90, "customization", "paneltransparency", { Left = true })
+					switches.outline = ExtrasFolder.AddSwitch("Glowing Outline", requestApply, "customization", "outline")
+					sliders.outlinethickness = ExtrasFolder.AddSlider("Outline Size", requestApply, 1, 6, "customization", "outlinethickness", { Left = true })
 
-					sliders.windowtransparency = Window.AddSlider("Window Transparency", requestApply, 0, 90, "customization", "windowtransparency", { Left = true })
-					sliders.paneltransparency = Window.AddSlider("Panel Transparency", requestApply, 0, 90, "customization", "paneltransparency", { Left = true })
-					switches.outline = Window.AddSwitch("Glowing Outline", requestApply, "customization", "outline")
-					sliders.outlinethickness = Window.AddSlider("Outline Size", requestApply, 1, 6, "customization", "outlinethickness", { Left = true })
-
-					fontDropdown = Window.AddDropdown("Font", FONTS, nil, function()
+					fontDropdown = ExtrasFolder.AddDropdown("Font", FONTS, nil, function()
 						requestApply()
 					end, "customization", "font")
 
-					Window.Toggle(true, true)
+					ExtrasFolder.AddButton("Random Colors", randomizeTheme)
+					ExtrasFolder.AddButton("Copy Theme To Clipboard", exportTheme)
+					ExtrasFolder.AddTextBox("Paste theme here", importTheme, nil, nil, { Clear = true })
 
+					-- post processing -------------------------------------------------
+					feature("Effects", function()
+						local folder = tab.AddFolder("Effects")
+
+						local function setEffect(class, name, enabled, setup)
+							local inst = Lighting:FindFirstChild(name)
+
+							if enabled then
+								if inst and inst.ClassName ~= class then
+									inst:Destroy()
+									inst = nil
+								end
+
+								if not inst then
+									inst = Instance.new(class)
+									inst.Name = name
+									inst.Parent = Lighting
+								end
+
+								inst.Enabled = true
+								setup(inst)
+							elseif inst then
+								inst.Enabled = false
+							end
+						end
+
+						local function apply()
+							setEffect("BlurEffect", "AtlasBlur", cust.fxblur == true, function(effect)
+								effect.Size = math.clamp(num("fxblursize", 8), 0, 40)
+							end)
+
+							setEffect("BloomEffect", "AtlasBloom", cust.fxbloom == true, function(effect)
+								effect.Intensity = math.clamp(num("fxbloomint", 40), 0, 300) / 100
+								effect.Size = math.clamp(num("fxbloomsize", 24), 0, 56)
+								effect.Threshold = 0.8
+							end)
+
+							setEffect("SunRaysEffect", "AtlasRays", cust.fxrays == true, function(effect)
+								effect.Intensity = math.clamp(num("fxraysint", 25), 0, 100) / 100
+								effect.Spread = 0.6
+							end)
+
+							setEffect("DepthOfFieldEffect", "AtlasDOF", cust.fxdof == true, function(effect)
+								effect.FarIntensity = math.clamp(num("fxdoffar", 30), 0, 100) / 100
+								effect.FocusDistance = math.clamp(num("fxdofdist", 60), 0, 500)
+								effect.InFocusRadius = 30
+								effect.NearIntensity = 0
+							end)
+						end
+
+						local request = debounce(apply)
+						requests[#requests + 1] = request
+
+						cleanups[#cleanups + 1] = function()
+							for _, name in ipairs({ "AtlasBlur", "AtlasBloom", "AtlasRays", "AtlasDOF" }) do
+								local effect = Lighting:FindFirstChild(name)
+
+								if effect then
+									effect:Destroy()
+								end
+							end
+						end
+
+						addSwitch(folder, "Blur", "fxblur", request)
+						addSlider(folder, "Blur Strength", "fxblursize", 0, 40, request)
+						addSwitch(folder, "Bloom (glow)", "fxbloom", request)
+						addSlider(folder, "Bloom Strength", "fxbloomint", 0, 300, request)
+						addSlider(folder, "Bloom Size", "fxbloomsize", 0, 56, request)
+						addSwitch(folder, "Sun Rays", "fxrays", request)
+						addSlider(folder, "Sun Rays Strength", "fxraysint", 0, 100, request)
+						addSwitch(folder, "Distance Blur", "fxdof", request)
+						addSlider(folder, "Distance Blur Strength", "fxdoffar", 0, 100, request)
+						addSlider(folder, "Focus Distance", "fxdofdist", 5, 300, request)
+					end)
+
+					-- color correction ------------------------------------------------
+					feature("Color Correction", function()
+						local folder = tab.AddFolder("Color Correction")
+
+						local function apply()
+							local effect = Lighting:FindFirstChild("AtlasColorCorrection")
+
+							if cust.cc ~= true then
+								if effect then
+									effect.Enabled = false
+								end
+
+								return
+							end
+
+							if not effect then
+								effect = Instance.new("ColorCorrectionEffect")
+								effect.Name = "AtlasColorCorrection"
+								effect.Parent = Lighting
+							end
+
+							effect.Enabled = true
+							effect.Brightness = math.clamp(num("ccbrightness", 0), -100, 100) / 100
+							effect.Contrast = math.clamp(num("cccontrast", 0), -100, 100) / 100
+							effect.Saturation = math.clamp(num("ccsaturation", 0), -100, 100) / 100
+							effect.TintColor = rgbOf("cctint", 255, 255, 255)
+						end
+
+						local request = debounce(apply)
+						requests[#requests + 1] = request
+
+						cleanups[#cleanups + 1] = function()
+							local effect = Lighting:FindFirstChild("AtlasColorCorrection")
+
+							if effect then
+								effect:Destroy()
+							end
+						end
+
+						local CC_NAMES = { "Default", "Vivid", "Cinematic", "Warm", "Cool", "Black & White", "Night" }
+
+						local CC_PRESETS = {
+							Default = { 0, 0, 0, { 255, 255, 255 } },
+							Vivid = { 0, 15, 35, { 255, 255, 255 } },
+							Cinematic = { -5, 25, -10, { 240, 235, 225 } },
+							Warm = { 3, 5, 10, { 255, 225, 190 } },
+							Cool = { 0, 5, 0, { 200, 225, 255 } },
+							["Black & White"] = { 0, 10, -100, { 255, 255, 255 } },
+							Night = { -15, 10, -20, { 150, 170, 255 } },
+						}
+
+						addSwitch(folder, "Enable", "cc", request)
+
+						folder.AddDropdown("Preset", CC_NAMES, nil, function(name)
+							local preset = CC_PRESETS[name]
+
+							if preset then
+								setSlider("ccbrightness", preset[1])
+								setSlider("cccontrast", preset[2])
+								setSlider("ccsaturation", preset[3])
+								setPicker("cctint", preset[4])
+								setSwitch("cc", true)
+								request()
+							end
+						end)
+
+						addSlider(folder, "Brightness", "ccbrightness", -100, 100, request)
+						addSlider(folder, "Contrast", "cccontrast", -100, 100, request)
+						addSlider(folder, "Saturation", "ccsaturation", -100, 100, request)
+						makeColorPicker(folder, "Tint", "cctint", { 255, 255, 255 }, request)
+					end)
+
+					-- graphics + particles ---------------------------------------------
+					feature("Graphics", function()
+						local folder = tab.AddFolder("Graphics")
+						local rendering = nil
+
+						pcall(function()
+							rendering = settings().Rendering
+						end)
+
+						local origQuality = nil
+						local origShadows = nil
+						local emitters = setmetatable({}, weak)
+						local scanned = false
+
+						local function factor()
+							if on("particles") then
+								return math.clamp(num("particleamount", 50), 0, 100) / 100
+							end
+
+							return 1
+						end
+
+						local function applyEmitter(emitter)
+							local base = emitter:GetAttribute("AtlasRate0")
+
+							if type(base) == "number" then
+								emitter.Rate = base * factor()
+							end
+						end
+
+						local function trackEmitter(emitter)
+							if emitter:GetAttribute("AtlasOwn") then
+								return
+							end
+
+							if type(emitter:GetAttribute("AtlasRate0")) ~= "number" then
+								emitter:SetAttribute("AtlasRate0", emitter.Rate)
+							end
+
+							emitters[emitter] = true
+							applyEmitter(emitter)
+						end
+
+						local function apply()
+							-- quality level
+							if rendering then
+								if on("gfxq") then
+									if origQuality == nil then
+										origQuality = rendering.QualityLevel
+									end
+
+									local level = math.clamp(math.floor(num("gfxqlevel", 10)), 1, 21)
+									local ok, item = pcall(function()
+										return Enum.QualityLevel:FromValue(level)
+									end)
+
+									if ok and item then
+										pcall(function()
+											rendering.QualityLevel = item
+										end)
+									end
+								elseif origQuality ~= nil then
+									pcall(function()
+										rendering.QualityLevel = origQuality
+									end)
+
+									origQuality = nil
+								end
+							end
+
+							-- shadows
+							if on("gfxshadows") then
+								if origShadows == nil then
+									origShadows = Lighting.GlobalShadows
+								end
+
+								Lighting.GlobalShadows = false
+							elseif origShadows ~= nil then
+								Lighting.GlobalShadows = origShadows
+								origShadows = nil
+							end
+
+							-- particles
+							if on("particles") and not scanned then
+								scanned = true
+
+								task.spawn(function()
+									local count = 0
+
+									for _, descendant in ipairs(workspace:GetDescendants()) do
+										if descendant:IsA("ParticleEmitter") then
+											trackEmitter(descendant)
+										end
+
+										count += 1
+
+										if count % 4000 == 0 then
+											task.wait()
+										end
+									end
+								end)
+
+								connections:Add("customemitters", workspace.DescendantAdded:Connect(function(descendant)
+									if descendant:IsA("ParticleEmitter") then
+										task.defer(function()
+											pcall(trackEmitter, descendant)
+										end)
+									end
+								end))
+							else
+								for emitter in pairs(emitters) do
+									applyEmitter(emitter)
+								end
+							end
+						end
+
+						local request = debounce(apply)
+						requests[#requests + 1] = request
+
+						cleanups[#cleanups + 1] = function()
+							apply()
+						end
+
+						addSwitch(folder, "Override Quality", "gfxq", request, {
+							Tooltip = "Forces Roblox's graphics quality level. Lower is faster, higher looks better.",
+						})
+						addSlider(folder, "Quality Level", "gfxqlevel", 1, 21, request)
+						addSwitch(folder, "Disable Shadows", "gfxshadows", request)
+						addSwitch(folder, "Reduce Particles", "particles", request, {
+							Tooltip = "Lowers how many particles the game's effects create.",
+						})
+						addSlider(folder, "Particle Amount (%)", "particleamount", 0, 100, request)
+					end)
+
+					-- camera -------------------------------------------------------------
+					feature("Camera", function()
+						local folder = tab.AddFolder("Camera")
+						local bound = false
+						local origFov = nil
+
+						local function step()
+							local camera = workspace.CurrentCamera
+
+							if not camera then
+								return
+							end
+
+							if on("fov") then
+								local fov = math.clamp(num("fovvalue", 70), 30, 120)
+
+								if math.abs(camera.FieldOfView - fov) > 0.01 then
+									camera.FieldOfView = fov
+								end
+							end
+
+							if on("stretch") then
+								local scale = math.clamp(num("stretchvalue", 75), 30, 100) / 100
+								camera.CFrame = camera.CFrame * CFrame.new(0, 0, 0, 1, 0, 0, 0, scale, 0, 0, 0, 1)
+							end
+						end
+
+						local function apply()
+							local camera = workspace.CurrentCamera
+							local needed = on("fov") or on("stretch")
+
+							if on("fov") then
+								if camera and origFov == nil then
+									origFov = camera.FieldOfView
+								end
+							elseif origFov ~= nil then
+								if camera then
+									camera.FieldOfView = origFov
+								end
+
+								origFov = nil
+							end
+
+							if needed and not bound then
+								bound = true
+
+								RunService:BindToRenderStep("AtlasCamera", Enum.RenderPriority.Camera.Value + 1, function()
+									pcall(step)
+								end)
+							elseif not needed and bound then
+								bound = false
+
+								pcall(function()
+									RunService:UnbindFromRenderStep("AtlasCamera")
+								end)
+							end
+						end
+
+						local request = debounce(apply)
+						requests[#requests + 1] = request
+
+						cleanups[#cleanups + 1] = function()
+							apply()
+						end
+
+						addSwitch(folder, "Custom FOV", "fov", request)
+						addSlider(folder, "Field Of View", "fovvalue", 30, 120, request)
+						addSwitch(folder, "Stretch Screen", "stretch", request, {
+							Tooltip = "Stretches the picture horizontally without losing quality (stretched resolution).",
+						})
+						addSlider(folder, "Stretch Amount", "stretchvalue", 30, 100, request)
+					end)
+
+					----------------------------------------------------------------
+					-- RIGHT COLUMN: sky, weather, player
+					----------------------------------------------------------------
+					local SkyFolder = tab.AddFolder("Sky", true)
 					switches.skyenabled = SkyFolder.AddSwitch("Enable Custom Sky", setSky, "customization", "sky", {
 						Tooltip = "Client-side only. Picking a sky color turns this on automatically.",
 					})
@@ -69190,7 +68617,1039 @@ more accurate dodging]],
 						setSwitch("skyenabled", false)
 					end)
 
-					SkyFolder.Toggle(true, true)
+
+					-- weather --------------------------------------------------------------
+					feature("Weather", function()
+						local folder = tab.AddFolder("Weather", true)
+						local part = nil
+						local emitter = nil
+						local clouds = nil
+						local cloudsOrig = nil
+						local createdClouds = false
+
+						local function stopParticles()
+							connections:Cancel("customweather")
+
+							if part then
+								part:Destroy()
+							end
+
+							part = nil
+							emitter = nil
+						end
+
+						local function restoreClouds()
+							if clouds then
+								if createdClouds then
+									clouds:Destroy()
+								elseif cloudsOrig then
+									clouds.Cover = cloudsOrig.Cover
+									clouds.Density = cloudsOrig.Density
+									clouds.Color = cloudsOrig.Color
+									clouds.Enabled = cloudsOrig.Enabled
+								end
+							end
+
+							clouds = nil
+							cloudsOrig = nil
+							createdClouds = false
+						end
+
+						local function ensureParticles()
+							if part and part.Parent then
+								return
+							end
+
+							part = Instance.new("Part")
+							part.Name = "AtlasWeather"
+							part.Anchored = true
+							part.CanCollide = false
+							part.CanQuery = false
+							part.CanTouch = false
+							part.Transparency = 1
+							part.Size = Vector3.new(100, 1, 100)
+							part:SetAttribute("AtlasOwn", true)
+							part.Parent = workspace
+
+							emitter = Instance.new("ParticleEmitter")
+							emitter.Name = "AtlasWeatherEmitter"
+							emitter:SetAttribute("AtlasOwn", true)
+							emitter.EmissionDirection = Enum.NormalId.Bottom
+							emitter.LockedToPart = false
+							emitter.Parent = part
+
+							connections:Add("customweather", RunService.Heartbeat:Connect(function()
+								local camera = workspace.CurrentCamera
+
+								if camera and part then
+									part.CFrame = CFrame.new(camera.CFrame.Position + Vector3.new(0, 45, 0))
+								end
+							end))
+						end
+
+						local function configure(mode, intensity)
+							if mode == "Rain" then
+								emitter.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+								emitter.Color = ColorSequence.new(Color3.fromRGB(170, 200, 255))
+								emitter.Size = NumberSequence.new(0.7)
+								emitter.Transparency = NumberSequence.new(0.4)
+								emitter.Lifetime = NumberRange.new(0.55, 0.65)
+								emitter.Speed = NumberRange.new(80, 95)
+								emitter.Acceleration = Vector3.new(0, -30, 0)
+								emitter.SpreadAngle = Vector2.new(1, 1)
+								emitter.Rate = 120 + intensity * 8
+								emitter.Orientation = Enum.ParticleOrientation.VelocityParallel
+								emitter.LightEmission = 0.3
+								emitter.RotSpeed = NumberRange.new(0)
+							else
+								emitter.Texture = "rbxasset://textures/particles/smoke_main.dds"
+								emitter.Color = ColorSequence.new(Color3.new(1, 1, 1))
+								emitter.Size = NumberSequence.new(0.4)
+								emitter.Transparency = NumberSequence.new(0.15)
+								emitter.Lifetime = NumberRange.new(3.5, 4.5)
+								emitter.Speed = NumberRange.new(9, 14)
+								emitter.Acceleration = Vector3.new(0, 0, 0)
+								emitter.SpreadAngle = Vector2.new(25, 25)
+								emitter.Rate = 50 + intensity * 4
+								emitter.Orientation = Enum.ParticleOrientation.FacingCamera
+								emitter.LightEmission = 0.2
+								emitter.RotSpeed = NumberRange.new(-40, 40)
+							end
+						end
+
+						local function applyClouds(intensity)
+							local terrain = workspace.Terrain
+
+							if not clouds or not clouds.Parent then
+								clouds = terrain:FindFirstChildOfClass("Clouds")
+
+								if clouds then
+									cloudsOrig = { Cover = clouds.Cover, Density = clouds.Density, Color = clouds.Color, Enabled = clouds.Enabled }
+									createdClouds = false
+								else
+									clouds = Instance.new("Clouds")
+									clouds.Parent = terrain
+									createdClouds = true
+								end
+							end
+
+							clouds.Enabled = true
+							clouds.Cover = 0.45 + intensity / 200
+							clouds.Density = 0.35 + intensity / 160
+							clouds.Color = Color3.fromRGB(175, 180, 195)
+						end
+
+						local function apply()
+							local mode = cust.weather
+							local intensity = math.clamp(num("weatherintensity", 50), 1, 100)
+
+							if mode == "Rain" or mode == "Snow" then
+								restoreClouds()
+								ensureParticles()
+								configure(mode, intensity)
+							elseif mode == "Overcast" then
+								stopParticles()
+								applyClouds(intensity)
+							else
+								stopParticles()
+								restoreClouds()
+							end
+						end
+
+						local request = debounce(apply)
+						requests[#requests + 1] = request
+
+						cleanups[#cleanups + 1] = function()
+							stopParticles()
+							restoreClouds()
+						end
+
+						addDropdown(folder, "Weather", { "Off", "Rain", "Snow", "Overcast" }, "weather", request)
+						addSlider(folder, "Intensity", "weatherintensity", 1, 100, request)
+					end)
+
+					-- trail ------------------------------------------------------------------
+					feature("Trail", function()
+						local folder = tab.AddFolder("Trail", true)
+
+						local function destroyTrail()
+							local char = localPlayer.Character
+							local root = char and char:FindFirstChild("HumanoidRootPart")
+
+							if root then
+								for _, name in ipairs({ "AtlasTrail", "AtlasTrailA", "AtlasTrailB" }) do
+									local object = root:FindFirstChild(name)
+
+									if object then
+										object:Destroy()
+									end
+								end
+							end
+						end
+
+						local function apply()
+							if not on("trail") then
+								connections:Cancel("customtrail")
+								destroyTrail()
+								return
+							end
+
+							local char = localPlayer.Character
+							local root = char and char:FindFirstChild("HumanoidRootPart")
+
+							if root then
+								local width = math.clamp(num("trailwidth", 10), 1, 40) / 10
+								local a0 = root:FindFirstChild("AtlasTrailA")
+								local a1 = root:FindFirstChild("AtlasTrailB")
+								local trail = root:FindFirstChild("AtlasTrail")
+
+								if not a0 then
+									a0 = Instance.new("Attachment")
+									a0.Name = "AtlasTrailA"
+									a0.Parent = root
+								end
+
+								if not a1 then
+									a1 = Instance.new("Attachment")
+									a1.Name = "AtlasTrailB"
+									a1.Parent = root
+								end
+
+								if not trail then
+									trail = Instance.new("Trail")
+									trail.Name = "AtlasTrail"
+									trail.Attachment0 = a0
+									trail.Attachment1 = a1
+									trail.Parent = root
+								end
+
+								a0.Position = Vector3.new(0, width / 2, 0)
+								a1.Position = Vector3.new(0, -width / 2, 0)
+								trail.Color = ColorSequence.new(rgbOf("trail", 90, 170, 255), rgbOf("trail2", 170, 90, 255))
+
+								trail.Transparency = NumberSequence.new({
+									NumberSequenceKeypoint.new(0, math.clamp(num("trailtrans", 20), 0, 100) / 100),
+									NumberSequenceKeypoint.new(1, 1),
+								})
+
+								trail.Lifetime = math.clamp(num("traillife", 6), 1, 30) / 10
+								trail.LightEmission = 0.6
+								trail.FaceCamera = true
+								trail.MinLength = 0.05
+								trail.Enabled = true
+							end
+
+							-- re-attach after respawn
+							if not connections:Get("customtrail") then
+								local elapsed = 0
+
+								connections:Add("customtrail", RunService.Heartbeat:Connect(function(dt)
+									elapsed += dt
+
+									if elapsed >= 0.5 then
+										elapsed = 0
+										pcall(apply)
+									end
+								end))
+							end
+						end
+
+						local request = debounce(apply)
+						requests[#requests + 1] = request
+
+						cleanups[#cleanups + 1] = function()
+							apply()
+						end
+
+						addSwitch(folder, "Enable", "trail", request)
+						makeColorPicker(folder, "Color", "trail", { 90, 170, 255 }, request)
+						makeColorPicker(folder, "End Color", "trail2", { 170, 90, 255 }, request)
+						addSlider(folder, "Length", "traillife", 1, 30, request)
+						addSlider(folder, "Width", "trailwidth", 1, 40, request)
+						addSlider(folder, "Transparency", "trailtrans", 0, 100, request)
+					end)
+
+					-- cursor -------------------------------------------------------------------
+					feature("Cursor", function()
+						local folder = tab.AddFolder("Cursor", true)
+						local frame = nil
+						local originalIcon = nil
+
+						local function destroy()
+							connections:Cancel("customcursor")
+
+							if frame then
+								frame:Destroy()
+								frame = nil
+							end
+
+							if originalIcon ~= nil then
+								pcall(function()
+									UserInputService.MouseIconEnabled = originalIcon
+								end)
+
+								originalIcon = nil
+							end
+						end
+
+						local function addStroke(target, thickness, color)
+							local stroke = Instance.new("UIStroke")
+							stroke.Thickness = thickness
+							stroke.Color = color
+							stroke.Parent = target
+						end
+
+						local function apply()
+							destroy()
+
+							if cust.cursor ~= true then
+								return
+							end
+
+							if not UserInputService.MouseEnabled then
+								ui.Notify("Cursor", "A mouse is required for the custom cursor")
+								return
+							end
+
+							local size = math.clamp(num("cursorsize", 14), 4, 60)
+							local color = rgbOf("cursor", 255, 255, 255)
+							local style = cust.cursorstyle
+							local outline = cust.cursoroutline == true
+
+							frame = Instance.new("Frame")
+							frame.Name = "AtlasCursor"
+							frame.BackgroundTransparency = 1
+							frame.AnchorPoint = Vector2.new(0.5, 0.5)
+							frame.Size = UDim2.new(0, size, 0, size)
+							frame.ZIndex = 1000
+
+							if style == "Ring" then
+								local ring = Instance.new("Frame")
+								ring.BackgroundTransparency = 1
+								ring.Size = UDim2.new(1, 0, 1, 0)
+								ring.ZIndex = 1000
+								addCorner(ring, UDim.new(1, 0))
+								addStroke(ring, math.max(2, size * 0.12), color)
+								ring.Parent = frame
+							elseif style == "Cross" then
+								local thickness = math.max(2, math.floor(size * 0.12))
+								local arm = size / 2 - size * 0.18
+								local bars = {
+									{ Vector2.new(0, 0.5), UDim2.new(0, 0, 0.5, 0), UDim2.new(0, arm, 0, thickness) },
+									{ Vector2.new(1, 0.5), UDim2.new(1, 0, 0.5, 0), UDim2.new(0, arm, 0, thickness) },
+									{ Vector2.new(0.5, 0), UDim2.new(0.5, 0, 0, 0), UDim2.new(0, thickness, 0, arm) },
+									{ Vector2.new(0.5, 1), UDim2.new(0.5, 0, 1, 0), UDim2.new(0, thickness, 0, arm) },
+								}
+
+								for _, info in ipairs(bars) do
+									local bar = Instance.new("Frame")
+									bar.BorderSizePixel = 0
+									bar.BackgroundColor3 = color
+									bar.AnchorPoint = info[1]
+									bar.Position = info[2]
+									bar.Size = info[3]
+									bar.ZIndex = 1000
+
+									if outline then
+										addStroke(bar, 1, Color3.new(0, 0, 0))
+									end
+
+									bar.Parent = frame
+								end
+							else
+								local dot = Instance.new("Frame")
+								dot.BorderSizePixel = 0
+								dot.BackgroundColor3 = color
+								dot.AnchorPoint = Vector2.new(0.5, 0.5)
+								dot.Position = UDim2.new(0.5, 0, 0.5, 0)
+								dot.Size = UDim2.new(0.7, 0, 0.7, 0)
+								dot.ZIndex = 1000
+								addCorner(dot, UDim.new(1, 0))
+
+								if outline then
+									addStroke(dot, 1.5, Color3.new(0, 0, 0))
+								end
+
+								dot.Parent = frame
+							end
+
+							frame.Parent = getOverlay()
+							originalIcon = UserInputService.MouseIconEnabled
+							UserInputService.MouseIconEnabled = false
+
+							connections:Add("customcursor", RunService.RenderStepped:Connect(function()
+								local location = UserInputService:GetMouseLocation()
+								frame.Position = UDim2.new(0, location.X, 0, location.Y)
+
+								if UserInputService.MouseIconEnabled then
+									UserInputService.MouseIconEnabled = false
+								end
+							end))
+						end
+
+						local request = debounce(apply)
+						requests[#requests + 1] = request
+
+						cleanups[#cleanups + 1] = function()
+							destroy()
+						end
+
+						addSwitch(folder, "Enable", "cursor", request)
+						addDropdown(folder, "Style", { "Dot", "Ring", "Cross" }, "cursorstyle", request)
+						makeColorPicker(folder, "Color", "cursor", { 255, 255, 255 }, request)
+						addSlider(folder, "Size", "cursorsize", 4, 60, request)
+						addSwitch(folder, "Outline", "cursoroutline", request)
+					end)
+
+					-- tool outline + hand position -------------------------------------------------
+					feature("Tool", function()
+						local folder = tab.AddFolder("Tool", true)
+						local highlight = nil
+
+						local function currentTool()
+							local char = localPlayer.Character
+							return char and char:FindFirstChildOfClass("Tool")
+						end
+
+						local function gripWeld()
+							local char = localPlayer.Character
+
+							if not char then
+								return nil
+							end
+
+							local hand = char:FindFirstChild("RightHand") or char:FindFirstChild("Right Arm")
+							return hand and hand:FindFirstChild("RightGrip")
+						end
+
+						local function step()
+							-- outline
+							if on("toolol") then
+								if not highlight or not highlight.Parent then
+									highlight = Instance.new("Highlight")
+									highlight.Name = "AtlasToolOutline"
+									highlight.DepthMode = Enum.HighlightDepthMode.Occluded
+									highlight.Parent = ScreenGui.Parent
+								end
+
+								local tool = currentTool()
+								local adornee = nil
+
+								if tool then
+									adornee = tool:IsA("Model") and tool or tool:FindFirstChild("Handle")
+								end
+
+								if highlight.Adornee ~= adornee then
+									highlight.Adornee = adornee
+								end
+
+								local color = rgbOf("toolol", 90, 170, 255)
+
+								if cust.toolrainbow == true then
+									color = Color3.fromHSV((os.clock() * 0.2) % 1, 0.8, 1)
+								end
+
+								highlight.OutlineColor = color
+								highlight.FillColor = color
+								highlight.OutlineTransparency = 0
+								highlight.FillTransparency = 1 - math.clamp(num("toolfill", 0), 0, 100) / 100
+							elseif highlight then
+								highlight:Destroy()
+								highlight = nil
+							end
+
+							-- hand / tool position
+							local weld = gripWeld()
+
+							if weld then
+								local base = weld:GetAttribute("AtlasBaseC0")
+
+								if on("toolpos") then
+									if typeof(base) ~= "CFrame" then
+										base = weld.C0
+										weld:SetAttribute("AtlasBaseC0", base)
+									end
+
+									local offset = CFrame.new(num("toolx", 0) / 25, num("tooly", 0) / 25, num("toolz", 0) / 25)
+									local rotation = CFrame.Angles(math.rad(num("toolrx", 0)), math.rad(num("toolry", 0)), math.rad(num("toolrz", 0)))
+									local target = offset * base * rotation
+
+									if weld.C0 ~= target then
+										weld.C0 = target
+									end
+								elseif typeof(base) == "CFrame" then
+									weld.C0 = base
+									weld:SetAttribute("AtlasBaseC0", nil)
+								end
+							end
+						end
+
+						local function apply()
+							local needed = on("toolol") or on("toolpos")
+
+							if needed and not connections:Get("customtool") then
+								connections:Add("customtool", RunService.RenderStepped:Connect(function()
+									pcall(step)
+								end))
+							end
+
+							pcall(step)
+
+							if not needed then
+								connections:Cancel("customtool")
+							end
+						end
+
+						local request = debounce(apply)
+						requests[#requests + 1] = request
+
+						cleanups[#cleanups + 1] = function()
+							apply()
+						end
+
+						addSwitch(folder, "Tool Outline", "toolol", request)
+						makeColorPicker(folder, "Outline Color", "toolol", { 90, 170, 255 }, request)
+						addSwitch(folder, "Rainbow Outline", "toolrainbow", request)
+						addSlider(folder, "Fill (%)", "toolfill", 0, 100, request)
+						addSwitch(folder, "Custom Hand Position", "toolpos", request, {
+							Tooltip = "Moves and rotates the tool in your hand. Only you see this.",
+						})
+						addSlider(folder, "Move X", "toolx", -100, 100, request)
+						addSlider(folder, "Move Y", "tooly", -100, 100, request)
+						addSlider(folder, "Move Z", "toolz", -100, 100, request)
+						addSlider(folder, "Rotate X", "toolrx", -180, 180, request)
+						addSlider(folder, "Rotate Y", "toolry", -180, 180, request)
+						addSlider(folder, "Rotate Z", "toolrz", -180, 180, request)
+
+						folder.AddButton("Reset Hand Position", function()
+							for _, key in ipairs({ "toolx", "tooly", "toolz", "toolrx", "toolry", "toolrz" }) do
+								setSlider(key, 0)
+							end
+
+							request()
+						end)
+					end)
+
+					-- HUD ------------------------------------------------------------------------------
+					feature("HUD", function()
+						local folder = tab.AddFolder("HUD", true)
+						local frame = nil
+						local labels = {}
+						local tabHeld = false
+
+						local POSITION_NAMES = { "Top Left", "Top Center", "Top Right", "Mid Left", "Mid Right", "Bottom Left", "Bottom Center", "Bottom Right" }
+
+						-- anchor x, anchor y, margin x sign, margin y sign, text alignment, list alignment
+						local POSITIONS = {
+							["Top Left"] = { 0, 0, 1, 1, Enum.TextXAlignment.Left, Enum.HorizontalAlignment.Left },
+							["Top Center"] = { 0.5, 0, 0, 1, Enum.TextXAlignment.Center, Enum.HorizontalAlignment.Center },
+							["Top Right"] = { 1, 0, -1, 1, Enum.TextXAlignment.Right, Enum.HorizontalAlignment.Right },
+							["Mid Left"] = { 0, 0.5, 1, 0, Enum.TextXAlignment.Left, Enum.HorizontalAlignment.Left },
+							["Mid Right"] = { 1, 0.5, -1, 0, Enum.TextXAlignment.Right, Enum.HorizontalAlignment.Right },
+							["Bottom Left"] = { 0, 1, 1, -1, Enum.TextXAlignment.Left, Enum.HorizontalAlignment.Left },
+							["Bottom Center"] = { 0.5, 1, 0, -1, Enum.TextXAlignment.Center, Enum.HorizontalAlignment.Center },
+							["Bottom Right"] = { 1, 1, -1, -1, Enum.TextXAlignment.Right, Enum.HorizontalAlignment.Right },
+						}
+
+						local function destroy()
+							connections:Cancel("customhud")
+
+							if frame then
+								frame:Destroy()
+								frame = nil
+							end
+
+							labels = {}
+						end
+
+						local function updateList()
+							if not labels.list then
+								return
+							end
+
+							local names = {}
+
+							for _, player in ipairs(Players:GetPlayers()) do
+								names[#names + 1] = player.DisplayName
+							end
+
+							table.sort(names)
+
+							local lines = { "Players (" .. #names .. ")" }
+
+							for i = 1, math.min(#names, 24) do
+								lines[#lines + 1] = names[i]
+							end
+
+							if #names > 24 then
+								lines[#lines + 1] = "+" .. (#names - 24) .. " more"
+							end
+
+							labels.list.Text = table.concat(lines, "\n")
+							labels.list.Visible = cust.hudtab ~= true or tabHeld
+						end
+
+						local function build()
+							destroy()
+
+							if cust.hud ~= true then
+								return
+							end
+
+							local layout = POSITIONS[cust.hudpos] or POSITIONS["Top Left"]
+							local margin = math.clamp(num("hudmargin", 10), 0, 200)
+							local textSize = math.clamp(num("hudsize", 14), 9, 28)
+							local textColor = rgbOf("hudtext", 255, 255, 255)
+
+							frame = Instance.new("Frame")
+							frame.Name = "AtlasHUD"
+							frame.AutomaticSize = Enum.AutomaticSize.XY
+							frame.Size = UDim2.new(0, 0, 0, 0)
+							frame.AnchorPoint = Vector2.new(layout[1], layout[2])
+							frame.Position = UDim2.new(layout[1], layout[3] * margin, layout[2], layout[4] * margin)
+							frame.BackgroundColor3 = Color3.new(0, 0, 0)
+							frame.BackgroundTransparency = cust.hudbg == true and 0.45 or 1
+							frame.BorderSizePixel = 0
+							addCorner(frame, UDim.new(0, 6))
+
+							local padding = Instance.new("UIPadding")
+							padding.PaddingTop = UDim.new(0, 5)
+							padding.PaddingBottom = UDim.new(0, 5)
+							padding.PaddingLeft = UDim.new(0, 7)
+							padding.PaddingRight = UDim.new(0, 7)
+							padding.Parent = frame
+
+							local list = Instance.new("UIListLayout")
+							list.SortOrder = Enum.SortOrder.LayoutOrder
+							list.Padding = UDim.new(0, 2)
+							list.HorizontalAlignment = layout[6]
+							list.Parent = frame
+
+							local function line(order)
+								local label = Instance.new("TextLabel")
+								label.BackgroundTransparency = 1
+								label.AutomaticSize = Enum.AutomaticSize.XY
+								label.Size = UDim2.new(0, 0, 0, 0)
+								label.Font = Enum.Font.GothamMedium
+								label.TextSize = textSize
+								label.TextColor3 = textColor
+								label.TextStrokeTransparency = 0.6
+								label.TextXAlignment = layout[5]
+								label.LayoutOrder = order
+								label.Text = ""
+								label.Parent = frame
+								return label
+							end
+
+							if cust.hudname == true then
+								labels.name = line(1)
+								labels.name.Text = "Atlas BSS"
+								labels.name.Font = Enum.Font.GothamBold
+							end
+
+							if cust.hudnick == true then
+								labels.nick = line(2)
+								labels.nick.Text = localPlayer.DisplayName
+							end
+
+							if cust.hudfps == true then
+								labels.fps = line(3)
+							end
+
+							if cust.hudping == true then
+								labels.ping = line(4)
+							end
+
+							if cust.hudplayers == true then
+								labels.players = line(5)
+							end
+
+							if cust.hudlist == true then
+								labels.list = line(6)
+							end
+
+							frame.Parent = getOverlay()
+							updateList()
+
+							local elapsed = 0
+							local frames = 0
+
+							connections:Add("customhud", RunService.RenderStepped:Connect(function(dt)
+								elapsed += dt
+								frames += 1
+
+								if elapsed < 0.5 then
+									return
+								end
+
+								local fps = math.floor(frames / elapsed + 0.5)
+								elapsed = 0
+								frames = 0
+
+								if labels.fps then
+									labels.fps.Text = "FPS: " .. fps
+								end
+
+								if labels.ping then
+									local ping = 0
+
+									pcall(function()
+										ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue() + 0.5)
+									end)
+
+									labels.ping.Text = "Ping: " .. ping .. " ms"
+								end
+
+								if labels.players then
+									labels.players.Text = "Players: " .. #Players:GetPlayers() .. "/" .. Players.MaxPlayers
+								end
+
+								updateList()
+							end))
+						end
+
+						local request = debounce(build)
+						requests[#requests + 1] = request
+
+						cleanups[#cleanups + 1] = function()
+							destroy()
+						end
+
+						connections:Add("customhudtab1", UserInputService.InputBegan:Connect(function(input)
+							if input.KeyCode == Enum.KeyCode.Tab then
+								tabHeld = true
+								updateList()
+							end
+						end))
+
+						connections:Add("customhudtab2", UserInputService.InputEnded:Connect(function(input)
+							if input.KeyCode == Enum.KeyCode.Tab then
+								tabHeld = false
+								updateList()
+							end
+						end))
+
+						addSwitch(folder, "Enable HUD", "hud", request)
+						addDropdown(folder, "Position", POSITION_NAMES, "hudpos", request)
+						addSwitch(folder, "Script Name", "hudname", request)
+						addSwitch(folder, "Nickname", "hudnick", request)
+						addSwitch(folder, "FPS", "hudfps", request)
+						addSwitch(folder, "Ping", "hudping", request)
+						addSwitch(folder, "Player Count", "hudplayers", request)
+						addSwitch(folder, "Player List", "hudlist", request)
+						addSwitch(folder, "List Only While Holding TAB", "hudtab", request)
+						addSlider(folder, "Text Size", "hudsize", 9, 28, request)
+						addSlider(folder, "Margin", "hudmargin", 0, 200, request)
+						addSwitch(folder, "Background", "hudbg", request)
+						makeColorPicker(folder, "Text Color", "hudtext", { 255, 255, 255 }, request)
+					end)
+
+					-- waypoints ----------------------------------------------------------------------------
+					feature("Waypoints", function()
+						local folder = tab.AddFolder("Waypoints", true)
+						local waypoints = {}
+						local pendingName = ""
+						local counter = 0
+						local MAX_WAYPOINTS = 15
+
+						local function formatTime(seconds)
+							return string.format("%d:%02d", math.floor(seconds / 60), math.floor(seconds % 60))
+						end
+
+						local function removeWaypoint(index)
+							local waypoint = waypoints[index]
+
+							if waypoint then
+								pcall(function()
+									waypoint.gui:Destroy()
+									waypoint.attachment:Destroy()
+								end)
+
+								table.remove(waypoints, index)
+							end
+						end
+
+						local function clearAll()
+							for index = #waypoints, 1, -1 do
+								removeWaypoint(index)
+							end
+
+							connections:Cancel("customwaypoints")
+						end
+
+						local function update()
+							local char = localPlayer.Character
+							local root = char and char:FindFirstChild("HumanoidRootPart")
+							local expire = math.clamp(num("wpexpire", 0), 0, 60) * 60
+
+							for index = #waypoints, 1, -1 do
+								local waypoint = waypoints[index]
+								local elapsed = os.clock() - waypoint.created
+
+								if expire > 0 and elapsed >= expire then
+									removeWaypoint(index)
+								else
+									local text = formatTime(elapsed)
+
+									if cust.wpdistance == true and root then
+										text = math.floor((waypoint.attachment.WorldPosition - root.Position).Magnitude) .. " studs  -  " .. text
+									end
+
+									waypoint.info.Text = text
+								end
+							end
+
+							if #waypoints == 0 then
+								connections:Cancel("customwaypoints")
+							end
+						end
+
+						local function addWaypoint()
+							local char = localPlayer.Character
+							local root = char and char:FindFirstChild("HumanoidRootPart")
+
+							if not root then
+								ui.Notify("Waypoints", "Character not found")
+								return
+							end
+
+							if #waypoints >= MAX_WAYPOINTS then
+								ui.Notify("Waypoints", "Waypoint limit reached (" .. MAX_WAYPOINTS .. ")")
+								return
+							end
+
+							counter += 1
+							local name = pendingName ~= "" and pendingName or ("Waypoint " .. counter)
+							local color = rgbOf("wp", 255, 200, 60)
+
+							local attachment = Instance.new("Attachment")
+							attachment.Name = "AtlasWaypoint"
+							attachment.Parent = workspace.Terrain
+							attachment.WorldPosition = root.Position
+
+							local gui = Instance.new("BillboardGui")
+							gui.Name = "AtlasWaypointGui"
+							gui.Adornee = attachment
+							gui.AlwaysOnTop = true
+							gui.Size = UDim2.new(0, 170, 0, 46)
+							gui.StudsOffset = Vector3.new(0, 2, 0)
+							gui.ResetOnSpawn = false
+
+							local dot = Instance.new("Frame")
+							dot.BorderSizePixel = 0
+							dot.BackgroundColor3 = color
+							dot.AnchorPoint = Vector2.new(0.5, 0)
+							dot.Position = UDim2.new(0.5, 0, 0, 0)
+							dot.Size = UDim2.new(0, 10, 0, 10)
+							addCorner(dot, UDim.new(1, 0))
+							dot.Parent = gui
+
+							local title = Instance.new("TextLabel")
+							title.BackgroundTransparency = 1
+							title.Position = UDim2.new(0, 0, 0, 12)
+							title.Size = UDim2.new(1, 0, 0, 16)
+							title.Font = Enum.Font.GothamBold
+							title.TextSize = 14
+							title.TextColor3 = color
+							title.TextStrokeTransparency = 0.4
+							title.Text = name
+							title.Parent = gui
+
+							local info = Instance.new("TextLabel")
+							info.BackgroundTransparency = 1
+							info.Position = UDim2.new(0, 0, 0, 28)
+							info.Size = UDim2.new(1, 0, 0, 14)
+							info.Font = Enum.Font.GothamMedium
+							info.TextSize = 12
+							info.TextColor3 = Color3.fromRGB(235, 235, 235)
+							info.TextStrokeTransparency = 0.5
+							info.Text = "0:00"
+							info.Parent = gui
+
+							gui.Parent = ScreenGui.Parent
+							waypoints[#waypoints + 1] = { attachment = attachment, gui = gui, info = info, created = os.clock() }
+
+							if not connections:Get("customwaypoints") then
+								local elapsed = 0
+
+								connections:Add("customwaypoints", RunService.Heartbeat:Connect(function(dt)
+									elapsed += dt
+
+									if elapsed >= 0.25 then
+										elapsed = 0
+										pcall(update)
+									end
+								end))
+							end
+
+							update()
+						end
+
+						cleanups[#cleanups + 1] = clearAll
+
+						folder.AddTextBox("Waypoint name (optional)", function(text)
+							pendingName = type(text) == "string" and string.sub(text, 1, 24) or ""
+						end)
+
+						folder.AddButton("Add Waypoint Here", addWaypoint)
+
+						folder.AddButton("Remove Last", function()
+							removeWaypoint(#waypoints)
+						end)
+
+						folder.AddButton("Clear All", clearAll)
+						makeColorPicker(folder, "Marker Color", "wp", { 255, 200, 60 }, nil)
+						addSwitch(folder, "Show Distance", "wpdistance", nil)
+						addSlider(folder, "Auto Remove (min, 0 = never)", "wpexpire", 0, 60, nil)
+					end)
+
+					-- animations -----------------------------------------------------------------------------
+					feature("Animations", function()
+						local folder = tab.AddFolder("Animations", true)
+						local busy = false
+						local watched = setmetatable({}, weak)
+						local counter = 0
+
+						local function duration()
+							return math.clamp(num("animspeed", 220), 80, 800) / 1000
+						end
+
+						local function getScale(object)
+							local scale = object:FindFirstChild("AtlasPop")
+
+							if not scale then
+								scale = Instance.new("UIScale")
+								scale.Name = "AtlasPop"
+								scale.Parent = object
+							end
+
+							return scale
+						end
+
+						-- the script window: pops in and out when toggled with the round button
+						state.customToggle = function(nextVisible)
+							if cust.animmenu ~= true then
+								return false
+							end
+
+							if busy then
+								return true
+							end
+
+							busy = true
+
+							local window = mobileToggleButton
+							local scale = getScale(window)
+							local basePos = window.Position
+							local size = window.AbsoluteSize
+							local small = 0.9
+
+							local function shifted()
+								return UDim2.new(basePos.X.Scale, basePos.X.Offset + size.X * (1 - small) / 2, basePos.Y.Scale, basePos.Y.Offset + size.Y * (1 - small) / 2)
+							end
+
+							if nextVisible then
+								local info = TweenInfo.new(duration(), Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+								scale.Scale = small
+								window.Position = shifted()
+								window.Visible = true
+
+								local tween = TweenService:Create(scale, info, { Scale = 1 })
+								TweenService:Create(window, info, { Position = basePos }):Play()
+
+								tween.Completed:Once(function()
+									window.Position = basePos
+									busy = false
+								end)
+
+								tween:Play()
+							else
+								local info = TweenInfo.new(duration(), Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+								local tween = TweenService:Create(scale, info, { Scale = small })
+								TweenService:Create(window, info, { Position = shifted() }):Play()
+
+								tween.Completed:Once(function()
+									window.Visible = false
+									scale.Scale = 1
+									window.Position = basePos
+									busy = false
+								end)
+
+								tween:Play()
+							end
+
+							return true
+						end
+
+						cleanups[#cleanups + 1] = function()
+							state.customToggle = nil
+						end
+
+						-- the game's own menus: pop in when they become visible
+						local function pop(object)
+							if cust.animgame ~= true or not object.Visible then
+								return
+							end
+
+							local scale = getScale(object)
+							scale.Scale = 0.9
+							TweenService:Create(scale, TweenInfo.new(duration(), Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+						end
+
+						local function watch(object)
+							if not object or watched[object] or not object:IsA("GuiObject") then
+								return
+							end
+
+							watched[object] = true
+							counter += 1
+
+							connections:Add("customanim" .. counter, object:GetPropertyChangedSignal("Visible"):Connect(function()
+								if object.Visible then
+									pop(object)
+								end
+							end))
+						end
+
+						task.spawn(function()
+							local ok = pcall(function()
+								local gui = localPlayer:WaitForChild("PlayerGui"):WaitForChild("ScreenGui", 15)
+
+								if not gui then
+									return
+								end
+
+								local menus = gui:WaitForChild("Menus", 10)
+
+								if menus then
+									watch(menus)
+									local children = menus:FindFirstChild("Children")
+
+									if children then
+										for _, child in ipairs(children:GetChildren()) do
+											watch(child)
+										end
+									end
+								end
+
+								for _, name in ipairs({ "RewardsPopUp", "BeePopUp", "QuantityBox", "QuestionBox", "ChallengeInfo" }) do
+									watch(gui:FindFirstChild(name))
+								end
+							end)
+
+							if not ok then
+								warn("Customization: could not hook the game's menus")
+							end
+						end)
+
+						addSwitch(folder, "Script Menu Animation", "animmenu", nil, {
+							Tooltip = "Pop animation when the script window is shown or hidden with the round button.",
+						})
+						addSwitch(folder, "Game Menu Animation", "animgame", nil, {
+							Tooltip = "Pop animation for the game's menus and pop-ups (inventory, settings, rewards...).",
+						})
+						addSlider(folder, "Duration (ms)", "animspeed", 80, 800, nil)
+					end)
 
 					----------------------------------------------------------------
 					-- start theming: scan what exists and watch for new elements
@@ -69218,6 +69677,10 @@ more accurate dodging]],
 					end))
 
 					requestApply()
+
+					for _, request in ipairs(requests) do
+						request()
+					end
 				end
 
 				local ok, err = pcall(buildCustomization, controls.customization)
@@ -70198,6 +70661,261 @@ Are you sure you want to enable it?]])
 
 				detectedFolder.Toggle(true, true)
 			end
+
+			-- ===================== FARM STATS TAB (+1% = X% farm) =====================
+			do
+				local fs = controls.farmstats
+				local fsGather = fs.AddFolder("Gather: +1% = ?")
+				local fsHoney = fs.AddFolder("Honey / Convert: +1% = ?", true)
+				local fsCrit = fs.AddFolder("Crits (approx.)", true)
+				local fsOther = fs.AddFolder("Other stats")
+				local fsTools = fs.AddFolder("Tools")
+
+				-- kind: "mult" = percent multiplier (base 100%), "flat" = number as is, "chance" = percent chance (base 0%)
+				-- keys: possible ModifierCaches names (matched case-insensitively, spaces/symbols ignored)
+				local defs = {
+					-- gather
+					{ "Pollen", "Pollen", "mult", "gather" },
+					{ "White Pollen", "WhitePollen", "mult", "gather" },
+					{ "Red Pollen", "RedPollen", "mult", "gather" },
+					{ "Blue Pollen", "BluePollen", "mult", "gather" },
+					{ "Tool Pollen", "ToolPollen", "mult", "gather" },
+					{ "Bee Gather Pollen", "BeeGatherPollen", "mult", "gather" },
+					{ "Bee Ability Pollen", "BeeAbilityPollen", "mult", "gather" },
+					{ "Bomb Pollen", "BombPollen", "mult", "gather" },
+					{ "Buzz Bomb Pollen", "BuzzBombPollen", "mult", "gather" },
+					{ "Red Bomb Pollen", "RedBombPollen", "mult", "gather" },
+					{ "Blue Bomb Pollen", "BlueBombPollen", "mult", "gather" },
+					{ "Bubble Pollen", "BubblePollen", "mult", "gather" },
+					{ "Flame Pollen", "FlamePollen", "mult", "gather" },
+					{ "Bee Ability Rate", "BeeAbilityRate", "mult", "gather" },
+					{ "Loot Luck", "LootLuck", "mult", "gather" },
+					{ "Goo", "Goo", "mult", "gather" },
+					-- honey / convert
+					{ "Convert Rate", "ConvertRate", "mult", "honey" },
+					{ "Convert Rate At Hive", "ConvertRateAtHive", "mult", "honey" },
+					{ "Honey Per Pollen", "HoneyPerPollen", "mult", "honey" },
+					{ "Honey At Hive", "HoneyAtHive", "mult", "honey" },
+					{ "Honey From Tokens", "HoneyFromTokens", "mult", "honey" },
+					{ "Capacity Multiplier", "CapacityMultiplier", "mult", "honey" },
+					{ "White Field Capacity", "WhiteFieldCapacity", "mult", "honey" },
+					{ "Red Field Capacity", "RedFieldCapacity", "mult", "honey" },
+					{ "Blue Field Capacity", "BlueFieldCapacity", "mult", "honey" },
+					{ "Attack Multiplier", "AttackMultiplier", "mult", "honey" },
+					{ "Bonus Convert Amount", "BonusConvertAmount", "flat", "honey" },
+					-- crits
+					{ "Critical Chance", "CriticalChance", "chance", "crit" },
+					{ "Critical Power", "CriticalPower", "mult", "crit" },
+					{ "Super-Crit Chance", "SuperCritChance", "chance", "crit" },
+					{ "Super-Crit Power", "SuperCritPower", "mult", "crit" },
+					-- other
+					{ "Instant Conversion", "InstantConversion", "chance", "other" },
+					{ "Instant White Conv", "InstantWhiteConversion|InstantWhiteConv", "chance", "other" },
+					{ "Instant Red Conv", "InstantRedConversion|InstantRedConv", "chance", "other" },
+					{ "Instant Blue Conv", "InstantBlueConversion|InstantBlueConv", "chance", "other" },
+					{ "Instant Bomb Conv", "InstantBombConversion|InstantBombConv", "chance", "other" },
+					{ "Instant Flame Conv", "InstantFlameConversion|InstantFlameConv", "chance", "other" },
+					{ "Movespeed", "PlayerMovespeed|Movespeed", "flat", "other" },
+					{ "Jump Power", "PlayerJumpPower|JumpPower", "flat", "other" },
+					{ "Defense", "Defense", "chance", "other" },
+					{ "Bond From Treats", "BondFromTreats", "mult", "other" },
+					{ "Bond From Battle", "BondFromBattle", "mult", "other" },
+					{ "Goo Conversion", "GooConversion", "chance", "other" },
+					{ "Bee Attack", "BeeAttack", "flat", "other" },
+					{ "Red Attack", "RedAttack", "flat", "other" },
+					{ "Blue Attack", "BlueAttack", "flat", "other" },
+					{ "Colorless Attack", "ColorlessAttack", "flat", "other" },
+					{ "Convert Total", "ConvertTotal", "flat", "other" },
+					{ "Gather Total", "GatherTotal", "flat", "other" },
+					{ "Attack Total", "AttackTotal", "flat", "other" },
+				}
+
+				local function norm(s)
+					return (string.lower(tostring(s)):gsub("[^%w]", ""))
+				end
+
+				-- read the stat from the game's own stat cache (includes amulets, beequips, bees, stickers, gear, buffs...)
+				local function readCache(keysStr)
+					local ok, mods = pcall(function()
+						return gameApi:Cache({ "ModifierCaches", "Value" })
+					end)
+					if not ok or type(mods) ~= "table" then
+						return nil
+					end
+					local byNorm = {}
+					for k in pairs(mods) do
+						byNorm[norm(k)] = k
+					end
+					for key in string.gmatch(keysStr, "[^|]+") do
+						local real = byNorm[norm(key)]
+						if real then
+							local entry = mods[real]
+							if type(entry) == "table" then
+								entry = entry._
+							end
+							if type(entry) == "number" then
+								return entry
+							end
+						end
+					end
+					return nil
+				end
+
+				-- fallback: read the number from the in-game Stats window text ("Pollen:   100%")
+				local guiCache, guiCacheTime = {}, 0
+				local function readGui(label)
+					if os.clock() - guiCacheTime > 5 then
+						guiCache = {}
+						guiCacheTime = os.clock()
+						pcall(function()
+							for _, obj in ipairs(localPlayer.PlayerGui:GetDescendants()) do
+								if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and string.sub(obj.Text, -1) == ":" then
+									local name = norm(obj.Text)
+									if not guiCache[name] and obj.Parent then
+										for _, sib in ipairs(obj.Parent:GetChildren()) do
+											if sib ~= obj and (sib:IsA("TextLabel") or sib:IsA("TextButton")) then
+												local num = tonumber((string.match(sib.Text, "^%s*(%-?[%d%.]+)%s*%%?%s*$")))
+												if num then
+													guiCache[name] = { num, string.find(sib.Text, "%%") ~= nil }
+													break
+												end
+											end
+										end
+									end
+								end
+							end
+						end)
+					end
+					return guiCache[norm(label .. ":")]
+				end
+
+				-- returns value in "display units": percent for mult/chance, number for flat
+				local function getStat(def)
+					local label, keys, kind = def[1], def[2], def[3]
+					local raw = readCache(keys)
+					if raw ~= nil then
+						if kind == "flat" then
+							return raw
+						end
+						return raw * 100
+					end
+					local g = readGui(label)
+					if g then
+						return g[1]
+					end
+					return nil
+				end
+
+				local rows = {}
+				local folderOf = { gather = fsGather, honey = fsHoney, crit = fsCrit, other = fsOther }
+				for _, def in ipairs(defs) do
+					rows[def[1]] = { def = def, label = folderOf[def[4]].AddLabel(def[1] .. ": ...") }
+				end
+
+				local function fmt(n, d)
+					return string.format("%." .. (d or 2) .. "f", n)
+				end
+
+				local toolLabels = {
+					white = fsTools.AddLabel("..."),
+					red = fsTools.AddLabel("..."),
+					blue = fsTools.AddLabel("..."),
+					beeW = fsTools.AddLabel("..."),
+					beeR = fsTools.AddLabel("..."),
+					beeB = fsTools.AddLabel("..."),
+					crit = fsTools.AddLabel("..."),
+				}
+
+				local function refresh()
+					local v = {}
+					for name, row in pairs(rows) do
+						local def = row.def
+						local val = getStat(def)
+						v[name] = val
+						if val == nil then
+							row.label.Text = name .. ": n/a"
+						elseif def[3] == "mult" then
+							if val > 0 then
+								row.label.Text = string.format("%s: %s%%  | +1%% = +%s%%", name, fmt(val, 1), fmt(100 / val, 3))
+							else
+								row.label.Text = string.format("%s: %s%%", name, fmt(val, 1))
+							end
+						elseif def[3] == "chance" then
+							row.label.Text = string.format("%s: %s%%", name, fmt(val, 2))
+						else
+							row.label.Text = string.format("%s: %s", name, fmt(val, 2))
+						end
+					end
+
+					-- crit: expected multiplier E = 1 + c*(P-1) + sc*(SP-1), approximation for tool/bee hits
+					local c, P = (v["Critical Chance"] or 0) / 100, (v["Critical Power"] or 100) / 100
+					local sc, SP = (v["Super-Crit Chance"] or 0) / 100, (v["Super-Crit Power"] or 100) / 100
+					local E = 1 + c * (P - 1) + sc * (SP - 1)
+					if E > 0 then
+						rows["Critical Chance"].label.Text = string.format("Critical Chance: %s%%  | +1%% = +%s%%", fmt(c * 100, 2), fmt(0.01 * (P - 1) / E * 100, 3))
+						rows["Critical Power"].label.Text = string.format("Critical Power: %s%%  | +1%% = +%s%%", fmt(P * 100, 1), fmt(c * 0.01 / E * 100, 3))
+						rows["Super-Crit Chance"].label.Text = string.format("Super-Crit Chance: %s%%  | +1%% = +%s%%", fmt(sc * 100, 2), fmt(0.01 * (SP - 1) / E * 100, 3))
+						rows["Super-Crit Power"].label.Text = string.format("Super-Crit Power: %s%%  | +1%% = +%s%%", fmt(SP * 100, 1), fmt(sc * 0.01 / E * 100, 3))
+					end
+					toolLabels.crit.Text = "Avg crit multiplier: x" .. fmt(E, 3)
+
+					-- total multipliers by field colour
+					local base = (v["Pollen"] or 100) / 100
+					local tool = (v["Tool Pollen"] or 100) / 100
+					local bee = (v["Bee Gather Pollen"] or 100) / 100
+					local col = {
+						white = (v["White Pollen"] or 100) / 100,
+						red = (v["Red Pollen"] or 100) / 100,
+						blue = (v["Blue Pollen"] or 100) / 100,
+					}
+					toolLabels.white.Text = "Tool, white field: x" .. fmt(base * col.white * tool * E, 2)
+					toolLabels.red.Text = "Tool, red field: x" .. fmt(base * col.red * tool * E, 2)
+					toolLabels.blue.Text = "Tool, blue field: x" .. fmt(base * col.blue * tool * E, 2)
+					toolLabels.beeW.Text = "Bees, white field: x" .. fmt(base * col.white * bee, 2)
+					toolLabels.beeR.Text = "Bees, red field: x" .. fmt(base * col.red * bee, 2)
+					toolLabels.beeB.Text = "Bees, blue field: x" .. fmt(base * col.blue * bee, 2)
+				end
+
+				fsTools.AddButton("Refresh now", function()
+					guiCacheTime = 0
+					pcall(refresh)
+				end)
+
+				-- prints every stat key the game has, so keys can be fixed if some row shows n/a
+				fsTools.AddButton("Dump stat keys to console", function()
+					local ok, mods = pcall(function()
+						return gameApi:Cache({ "ModifierCaches", "Value" })
+					end)
+					if not ok or type(mods) ~= "table" then
+						return ui.Notify("Farm Stats", "ModifierCaches not available")
+					end
+					local out = {}
+					for k, entry in pairs(mods) do
+						local val = type(entry) == "table" and entry._ or entry
+						table.insert(out, tostring(k) .. " = " .. tostring(val))
+					end
+					table.sort(out)
+					local text = table.concat(out, "\n")
+					print(text)
+					if setclipboard then
+						pcall(setclipboard, text)
+					end
+					ui.Notify("Farm Stats", "Stat keys printed (and copied if supported)")
+				end)
+
+				threads:Add("farmstats", function()
+					while true do
+						pcall(refresh)
+						task.wait(2)
+					end
+				end)
+
+				fsGather.Toggle(true, true)
+				fsHoney.Toggle(true, true)
+				fsCrit.Toggle(true, true)
+				fsTools.Toggle(true, true)
+			end
+			-- ===================== END FARM STATS TAB =====================
 
 			return
 		end
