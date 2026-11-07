@@ -642,47 +642,18 @@ local cfg = {
 		outline = false,
 		outlinethickness = 2,
 		font = "Default",
+		sky = false,
+		skyr = 90, skyg = 170, skyb = 255,
+		skygradient = false,
+		sky2r = 40, sky2g = 100, sky2b = 220,
+		skyclearhaze = true,
+		skyhidebodies = false,
+		skytint = false,
+		skyfog = false,
+		skyfogend = 1500,
+		skylocktime = false,
+		skytime = 12,
 		recent = "5E5E5E,8A8A88,5D4079,457A78,5E7A43,FF0000",
-		fxmotion = false, fxmotionpower = 40,
-		fxbloom = false, fxbloompower = 50,
-		fxrays = false, fxrayspower = 40,
-		fxquality = true,
-		cc = false, ccbrightness = 0, cccontrast = 0, ccsaturation = 0,
-		cctintr = 255, cctintg = 255, cctintb = 255,
-		gfxq = false, gfxqlevel = 10, gfxshadows = false,
-		particles = false, particleamount = 50,
-		fov = false, fovstep = 14, resolution = "Off",
-		sky = false, skyr = 90, skyg = 170, skyb = 255,
-		skyhidebodies = false, skytint = false,
-		timemode = "Game Default",
-		fog = false, fogr = 180, fogg = 200, fogb = 220, fogdensity = 30,
-		weather = "Off", weatherintensity = 50,
-		trail = false, trailr = 90, trailg = 170, trailb = 255,
-		trail2r = 170, trail2g = 90, trail2b = 255,
-		traillife = 6, trailwidth = 10, trailtrans = 20,
-		cursor = false, cursorstyle = "Dot", cursorr = 255, cursorg = 255, cursorb = 255,
-		cursorsize = 16, cursoroutline = true, cursorrainbow = false,
-		toolol = false, toololr = 90, toololg = 170, toololb = 255,
-		toolpos = false, toolx = 0, tooly = 0, toolz = 0, toolrx = 0,
-		hud = false, hudstyle = "Card", hudsize = 14,
-		hudaccr = 90, hudaccg = 170, hudaccb = 255,
-		hudtextr = 255, hudtextg = 255, hudtextb = 255,
-		hudsmart = true, hudtab = false,
-		hudw_name = true, hudx_name = 10, hudy_name = 10,
-		hudw_nick = false, hudx_nick = 10, hudy_nick = 55,
-		hudw_fps = true, hudx_fps = 10, hudy_fps = 100,
-		hudw_ping = true, hudx_ping = 10, hudy_ping = 145,
-		hudw_players = false, hudx_players = 10, hudy_players = 190,
-		hudw_list = false, hudx_list = 10, hudy_list = 235,
-		hudw_honey = false, hudx_honey = 10, hudy_honey = 280,
-		hudw_rate = false, hudx_rate = 10, hudy_rate = 325,
-		hudw_pollen = false, hudx_pollen = 10, hudy_pollen = 370,
-		hudw_session = false, hudx_session = 10, hudy_session = 415,
-		hudw_clock = false, hudx_clock = 10, hudy_clock = 460,
-		hudw_coords = false, hudx_coords = 10, hudy_coords = 505,
-		wpr = 255, wpg = 200, wpb = 60, wpexpire = 0, wpdistance = true,
-		animwindow = false, animtabs = false, animgame = false,
-		animstyle = "Pop", animspeed = "Normal", menukey = "RightShift",
 	},
 }
 
@@ -2263,14 +2234,10 @@ do
 
 		ImageButton2.MouseButton1Click:Connect(function()
 			state.mobiletoggle = mobileToggleButton.Visible
-			local nextVisible = not mobileToggleButton.Visible
-
-			if not (state.customToggle and state.customToggle(nextVisible)) then
-				mobileToggleButton.Visible = nextVisible
-			end
+			mobileToggleButton.Visible = not mobileToggleButton.Visible
 
 			if cfg.misc.console then
-				logger.toggle(nextVisible)
+				logger.toggle(mobileToggleButton.Visible)
 			end
 		end)
 	end
@@ -63840,6 +63807,1527 @@ do
 		state.stop = stop or nil
 	end)
 
+	-- ==================== MAP TELEPORT v3 (Home tab) ====================
+	-- Full-screen top-down map in its own GUI.
+	--   Flat view : the real parts of the world painted from above (always works, like a map app)
+	--   3D view   : a ViewportFrame with a scaled copy of the world, seen from above
+	--   Overlay   : grid, field areas, BSS field icons, shop markers, Gummy Room (sky)
+	-- Drag (any mouse button / finger) = move the map | wheel / pinch / +- = zoom
+	-- Click a marker or the map = teleport (or select first, see "Click" button) | M / Esc = close
+	controls.maptp = (function()
+		local GuiService = getService("GuiService")
+		local ContextActionService = getService("ContextActionService")
+		local Players = getService("Players")
+
+		-- ---- places that are not on the ground: { "Name", Vector3.new(x, y, z) } ----
+		local SKY_MARKERS = {
+			{ "Gummy Room", Vector3.new(269, 25270, -746) },
+		}
+		-- ---- your own markers: { "Name", Vector3.new(x, y, z) } -----------------------
+		-- (or at runtime: controls.maptp.AddMarker("Name", Vector3.new(x, y, z)))
+		local CUSTOM_MARKERS = {
+			-- { "My Spot", Vector3.new(0, 60, 0) },
+		}
+
+		-- Bee Swarm Simulator's own field icons (same assets the game uses for field boosts)
+		local FIELD_ICONS = {
+			["Dandelion Field"] = "rbxassetid://2908769047",
+			["Sunflower Field"] = "rbxassetid://2908769405",
+			["Mushroom Field"] = "rbxassetid://2908769124",
+			["Clover Field"] = "rbxassetid://2908768973",
+			["Blue Flower Field"] = "rbxassetid://2908768899",
+			["Bamboo Field"] = "rbxassetid://2908768829",
+			["Spider Field"] = "rbxassetid://2908769301",
+			["Strawberry Field"] = "rbxassetid://2908769330",
+			["Pineapple Patch"] = "rbxassetid://2908769153",
+			["Stump Field"] = "rbxassetid://2908769372",
+			["Cactus Field"] = "rbxassetid://2908768937",
+			["Pumpkin Patch"] = "rbxassetid://2908769220",
+			["Pine Tree Forest"] = "rbxassetid://2908769190",
+			["Rose Field"] = "rbxassetid://2908818982",
+			["Mountain Top Field"] = "rbxassetid://2908769086",
+			["Coconut Field"] = "rbxassetid://2908769010",
+			["Pepper Patch"] = "http://www.roblox.com/asset/?id=3835712489",
+		}
+
+		local mapCfg = { speed = 12, instant = false }
+
+		local MAX_FLAT_PARTS = 3200 -- parts painted in the flat view (lower on weak devices)
+		local MAX_3D_PARTS = 3500 -- parts copied into the 3D view
+		local SCALE_3D = 0.2 -- the 3D copy is shrunk so the camera is never far from it
+		local PLANE_Y = 60 -- reference ground height for pan / zoom maths
+		local MIN_SPAN = 110 -- closest zoom (studs visible vertically)
+		local MAX_SPAN = 2600 -- farthest zoom
+		local MIN_CAM_Y = 450 -- the top-down camera never goes lower than this
+		local WIDE_FOV = 70
+		local TAP_SLOP = 8 -- pixels of movement that still count as a click
+		local GRID_LINES = 90
+		local FULL_LABEL_SPAN = 1100 -- below this zoom field markers show their full name
+		local PLACE_SPAN = 900 -- below this zoom shop markers appear
+		local BOUNDS_MARGIN = 260 -- how far outside the outermost marker the map extends
+
+		-- top-level workspace folders that are not worth drawing (dynamic / tiny / invisible)
+		local SKIP_TOP = {
+			Camera = true, Terrain = true, FlowerZones = true, Particles = true, Collectibles = true,
+			Flowers = true, Sprouts = true, Planters = true, NPCBees = true, Monsters = true, Bees = true,
+			PlayerFlames = true, Balloons = true, Clouds = true, Happenings = true, ["Invisible Walls"] = true,
+			Territories = true, Paths = true, HiddenStickers = true, Leaderboards = true, Honey = true,
+			Goo = true, Gadgets = true, NPCs = true, Stations = true, HiveDeco = true, RetroEvent = true,
+			TheGamesEvent = true, TheGames_WideBanners = true,
+		}
+		-- children of a cloned part that are worth keeping in the 3D view
+		local KEEP_CHILD = {
+			Decal = true, Texture = true, SpecialMesh = true, BlockMesh = true,
+			CylinderMesh = true, FileMesh = true, SurfaceAppearance = true,
+		}
+
+		local M = {
+			isOpen = false,
+			mode = "flat", -- flat | 3d
+			confirm = false, -- false: a click teleports at once, true: click selects, button teleports
+			cx = 0,
+			cz = 0,
+			span = 1500,
+			maxSpan = MAX_SPAN,
+			camY = 1000,
+			fov = 70,
+			tanHalf = 0.7,
+			W = 1280,
+			H = 720,
+			points = {},
+			pointBounds = nil,
+			markers = {},
+			zones = {},
+			gridLines = {},
+			gridUsed = 0,
+			conns = {},
+			moveId = 0,
+			candidates = {},
+			scanState = "idle", -- idle | loading | ready | error
+			paintState = "idle", -- idle | loading | ready | empty | error
+			paintProgress = 0,
+			paintCount = 0,
+			cloneState = "idle", -- idle | loading | ready | empty | error
+			cloneProgress = 0,
+			cloneMade = 0,
+			scale3d = 1,
+			errorText = "",
+			target = nil,
+			targetLabel = "",
+			message = "",
+			messageUntil = 0,
+			lastStatus = "",
+			renderErr = nil,
+			cvx = nil,
+			cvy = nil,
+			cvk = nil,
+		}
+		local saved = {}
+		local drag = {
+			active = false, moved = false, canTap = false, input = nil,
+			start = Vector2.new(0, 0), anchor = Vector2.new(0, 0), pinching = false, pinchSpan = nil,
+		}
+		local gui, baseBg, flatHolder, canvasPos, canvas, paintLayer, canvasScale
+		local viewport, vpCamera, worldModel
+		local gridLayer, zoneLayer, cover, markerLayer
+		local statusLabel, viewButton, instantButton, confirmButton, goButton, youDot, pin
+		local goTo, close
+
+		-- ------------------------------------------------------------- helpers
+		local function new(class, props, parent)
+			local inst = Instance.new(class)
+			for key, value in pairs(props) do
+				inst[key] = value
+			end
+			inst.Parent = parent
+			return inst
+		end
+
+		local function makeButton(parent, text, width, color)
+			local button = new("TextButton", {
+				Text = text,
+				Size = UDim2.new(0, width, 0, 30),
+				BackgroundColor3 = color or Color3.fromRGB(44, 44, 54),
+				TextColor3 = Color3.new(1, 1, 1),
+				Font = Enum.Font.GothamSemibold,
+				TextSize = 14,
+				BorderSizePixel = 0,
+				AutoButtonColor = true,
+			}, parent)
+			new("UICorner", { CornerRadius = UDim.new(0, 6) }, button)
+			return button
+		end
+
+		local function setStatus(text, seconds)
+			M.message = text
+			M.messageUntil = os.clock() + (seconds or 4)
+		end
+
+		-- ----------------------------------------------------- view / camera maths
+		-- `span` = studs visible vertically at height PLANE_Y. Far away the top-down
+		-- camera goes up (fov 70); close up it stays high and narrows the fov instead.
+		local function computeView()
+			local size = workspace.CurrentCamera.ViewportSize
+			M.W = math.max(size.X, 1)
+			M.H = math.max(size.Y, 1)
+			local fov = WIDE_FOV
+			local dist = M.span / (2 * math.tan(math.rad(fov / 2)))
+			local camY = dist + PLANE_Y
+			if camY < MIN_CAM_Y then
+				camY = MIN_CAM_Y
+				dist = camY - PLANE_Y
+				fov = math.max(2, math.deg(2 * math.atan(M.span / (2 * dist))))
+			end
+			M.camY = camY
+			M.fov = fov
+			M.tanHalf = math.tan(math.rad(fov / 2))
+		end
+
+		-- world position -> screen pixels (x, y) and pixels-per-stud at that height.
+		-- Flat view ignores height (like a map), 3D view uses real perspective.
+		local function project(pos)
+			local height = PLANE_Y
+			if M.mode == "3d" then
+				height = pos.Y
+			end
+			local depth = math.max(M.camY - height, 1)
+			local k = (M.H / 2) / (M.tanHalf * depth)
+			return M.W / 2 + (pos.X - M.cx) * k, M.H / 2 + (pos.Z - M.cz) * k, k
+		end
+
+		-- the area where the map exists: around the outermost markers
+		local function getBounds()
+			local b = M.pointBounds
+			if b then
+				return b.minX - BOUNDS_MARGIN, b.maxX + BOUNDS_MARGIN, b.minZ - BOUNDS_MARGIN, b.maxZ + BOUNDS_MARGIN
+			end
+			return -1500, 1500, -1500, 1500
+		end
+
+		local function clampView()
+			local minX, maxX, minZ, maxZ = getBounds()
+			M.cx = math.clamp(M.cx, minX, maxX)
+			M.cz = math.clamp(M.cz, minZ, maxZ)
+		end
+
+		local function zoomAt(px, py, factor)
+			local k = M.H / M.span
+			local wx = M.cx + (px - M.W / 2) / k
+			local wz = M.cz + (py - M.H / 2) / k
+			M.span = math.clamp(M.span * factor, MIN_SPAN, M.maxSpan)
+			k = M.H / M.span
+			M.cx = wx - (px - M.W / 2) / k
+			M.cz = wz - (py - M.H / 2) / k
+			clampView()
+		end
+
+		local function fitView()
+			computeView()
+			local minX, maxX, minZ, maxZ = getBounds()
+			M.cx = (minX + maxX) / 2
+			M.cz = (minZ + maxZ) / 2
+			local aspect = M.W / M.H
+			local needZ = (maxZ - minZ) * 1.2
+			local needX = (maxX - minX) / aspect * 1.08
+			local fit = math.max(needZ, needX)
+			M.maxSpan = math.clamp(fit * 1.2, 600, MAX_SPAN)
+			M.span = math.clamp(fit, MIN_SPAN, M.maxSpan)
+		end
+
+		-- ---------------------------------------------------------------- points
+		local function recomputeBounds()
+			local minX, maxX, minZ, maxZ = math.huge, -math.huge, math.huge, -math.huge
+			for _, point in ipairs(M.points) do
+				minX = math.min(minX, point.mapPos.X)
+				maxX = math.max(maxX, point.mapPos.X)
+				minZ = math.min(minZ, point.mapPos.Z)
+				maxZ = math.max(maxZ, point.mapPos.Z)
+			end
+			if minX == math.huge then
+				M.pointBounds = nil
+			else
+				M.pointBounds = { minX = minX, maxX = maxX, minZ = minZ, maxZ = maxZ }
+			end
+		end
+
+		local function skyPoint(name, pos)
+			return {
+				name = name,
+				label = name .. " (sky)",
+				kind = "sky",
+				pos = pos,
+				mapPos = Vector3.new(pos.X, PLANE_Y, pos.Z),
+				offset = Vector3.new(0, 4, 0),
+				instant = true,
+			}
+		end
+
+		local function buildPoints()
+			local list = {}
+			local zones = workspace:FindFirstChild("FlowerZones")
+			if zones then
+				for _, zone in ipairs(zones:GetChildren()) do
+					if zone:IsA("BasePart") then
+						local group = zone:FindFirstChild("ColorGroup")
+						local lift = (zone.Name == "Coconut Field" or zone.Name == "Stump Field") and 16 or 9
+						list[#list + 1] = {
+							name = zone.Name,
+							label = "Field: " .. zone.Name,
+							icon = FIELD_ICONS[zone.Name],
+							kind = "field",
+							pos = zone.Position,
+							mapPos = zone.Position,
+							offset = Vector3.new(0, lift, 0),
+							group = (group and group:IsA("StringValue")) and group.Value or nil,
+							part = zone,
+						}
+					end
+				end
+			end
+			for name, pos in pairs(locations) do
+				if typeof(pos) == "Vector3" and math.abs(pos.Y) < 2000 then
+					local pretty = string.gsub(name, "(%l)(%u)", "%1 %2")
+					list[#list + 1] = {
+						name = pretty, label = pretty, kind = "place",
+						pos = pos, mapPos = pos, offset = Vector3.new(0, 4, 0),
+					}
+				end
+			end
+			for _, entry in ipairs(SKY_MARKERS) do
+				list[#list + 1] = skyPoint(entry[1], entry[2])
+			end
+			for _, entry in ipairs(CUSTOM_MARKERS) do
+				list[#list + 1] = {
+					name = entry[1], label = entry[1], kind = "custom",
+					pos = entry[2], mapPos = entry[2], offset = entry[3] or Vector3.new(0, 4, 0),
+				}
+			end
+			M.points = list
+			recomputeBounds()
+		end
+
+		-- ------------------------------------------------------- picking the ground
+		local function makeParams()
+			local params = RaycastParams.new()
+			params.FilterType = Enum.RaycastFilterType.Exclude
+			params.RespectCanCollide = true
+			local list = {}
+			if localPlayer.Character then
+				list[1] = localPlayer.Character
+			end
+			params.FilterDescendantsInstances = list
+			return params
+		end
+
+		-- topmost solid, visible surface straight below (x, z)
+		local function downCast(x, z, params)
+			local origin = Vector3.new(x, 900, z)
+			for _ = 1, 10 do
+				local result = workspace:Raycast(origin, Vector3.new(0, -1800, 0), params)
+				if not result then
+					return nil
+				end
+				local inst = result.Instance
+				if inst == workspace.Terrain or inst.Transparency < 0.95 then
+					return result.Position
+				end
+				local list = params.FilterDescendantsInstances
+				list[#list + 1] = inst -- invisible wall: look through it
+				params.FilterDescendantsInstances = list
+			end
+			return nil
+		end
+
+		-- only places that really have ground are valid teleport targets
+		local function findGround(x, z)
+			local minX, maxX, minZ, maxZ = getBounds()
+			if x < minX or x > maxX or z < minZ or z > maxZ then
+				return nil, "Outside the map"
+			end
+			local params = makeParams()
+			local hit = downCast(x, z, params)
+			if hit then
+				return hit
+			end
+			for _, radius in ipairs({ 6, 12, 22 }) do
+				for index = 0, 7 do
+					local angle = index * math.pi / 4
+					hit = downCast(x + math.cos(angle) * radius, z + math.sin(angle) * radius, params)
+					if hit then
+						return hit
+					end
+				end
+			end
+			return nil, "Nothing to land on there"
+		end
+
+		-- world x / z under a screen pixel
+		local function pickXZ(p)
+			if M.mode == "flat" then
+				local k0 = M.H / M.span
+				return M.cx + (p.X - M.W / 2) / k0, M.cz + (p.Y - M.H / 2) / k0
+			end
+			local ndcX = (p.X - M.W / 2) / (M.H / 2)
+			local ndcY = (p.Y - M.H / 2) / (M.H / 2)
+			local origin = Vector3.new(M.cx, M.camY, M.cz)
+			local direction = Vector3.new(ndcX * M.tanHalf, -1, ndcY * M.tanHalf)
+			local result = workspace:Raycast(origin, direction.Unit * 4000, makeParams())
+			if result then
+				return result.Position.X, result.Position.Z
+			end
+			local t = M.camY - PLANE_Y
+			return origin.X + direction.X * t, origin.Z + direction.Z * t
+		end
+
+		-- ------------------------------------------------------------- teleporting
+		local function teleport(dest, instant)
+			local char = localPlayer.Character
+			local root = char and char:FindFirstChild("HumanoidRootPart")
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			if not root or not hum or hum.Health <= 0 then
+				ui.Notify("Map Teleport", "Character is not available")
+				return
+			end
+
+			-- pause the autofarm, otherwise it would walk us straight back to the field
+			if cfg.autofarm.enabled and not state.stop then
+				pcall(function()
+					controls["Stop Everything"].Set(true)
+				end)
+				ui.Notify("Map Teleport", "Autofarm paused (Stop Everything is ON)")
+			end
+
+			M.moveId = M.moveId + 1
+			local myId = M.moveId
+
+			task.spawn(function()
+				if workspace.StreamingEnabled then
+					pcall(function()
+						localPlayer:RequestStreamAroundAsync(dest, 3)
+					end)
+					if M.moveId ~= myId then
+						return
+					end
+				end
+
+				if instant then
+					root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+					root.CFrame = CFrame.new(dest) * root.CFrame.Rotation
+					return
+				end
+
+				-- same technique the farm uses for Tween movement (AlignPosition + noclip)
+				for _, child in ipairs(root:GetChildren()) do
+					if child:IsA("AlignPosition") or child:IsA("AlignOrientation") then
+						child:Destroy()
+					end
+				end
+
+				local speed = mapCfg.speed
+				if speed > 12 and _G.unlocktween ~= true then
+					speed = 12
+				end
+				speed = math.max(speed, 1) * 10 -- studs per second
+				local travelTime = (root.Position - dest).Magnitude / speed
+
+				local alignPosition = Instance.new("AlignPosition")
+				alignPosition.Mode = Enum.PositionAlignmentMode.OneAttachment
+				alignPosition.Attachment0 = root.RootAttachment
+				alignPosition.Responsiveness = 20
+				alignPosition.MaxForce = math.huge
+				alignPosition.MaxVelocity = speed
+				alignPosition.Position = dest
+				alignPosition.Parent = root
+
+				local alignOrientation = Instance.new("AlignOrientation")
+				alignOrientation.Attachment0 = root.RootAttachment
+				alignOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
+				alignOrientation.RigidityEnabled = true
+				alignOrientation.CFrame = root.CFrame
+				alignOrientation.Parent = root
+
+				hum:ChangeState(Enum.HumanoidStateType.Physics)
+
+				local noclip = RunService.PreSimulation:Connect(function()
+					for _, part in ipairs(char:GetDescendants()) do
+						if part:IsA("BasePart") and part.CanCollide then
+							part.CanCollide = false
+						end
+					end
+				end)
+
+				local started = os.clock()
+				while M.moveId == myId and hum.Health > 0 and root.Parent do
+					if (root.Position - dest).Magnitude <= 4 then
+						break
+					end
+					if os.clock() - started > travelTime + 3 then
+						break
+					end
+					RunService.Heartbeat:Wait()
+				end
+
+				alignPosition:Destroy()
+				alignOrientation:Destroy()
+				noclip:Disconnect()
+				if M.moveId == myId and hum.Health > 0 then
+					hum:ChangeState(Enum.HumanoidStateType.Freefall)
+				end
+			end)
+		end
+
+		goTo = function(dest, label, forceInstant)
+			close()
+			local instant = mapCfg.instant or forceInstant == true
+			local suffix = ""
+			if forceInstant and not mapCfg.instant then
+				suffix = " (instant, too far to fly)"
+			end
+			ui.Notify("Map Teleport", (instant and "Teleporting to " or "Flying to ") .. label .. suffix)
+			teleport(dest, instant)
+		end
+
+		local function onTap(p)
+			local x, z = pickXZ(p)
+			local hit, why = findGround(x, z)
+			if not hit then
+				setStatus((why or "No ground") .. " - pick a spot on the map", 4)
+				return
+			end
+			local dest = hit + Vector3.new(0, 5, 0)
+			local label = string.format("%.0f, %.0f", hit.X, hit.Z)
+			if M.confirm then
+				M.target = dest
+				M.targetLabel = label
+				setStatus("Selected " .. label .. " - press Teleport", 6)
+			else
+				goTo(dest, label)
+			end
+		end
+
+		-- ------------------------------------------------- world scan / paint / 3D
+		-- 1) find the big, visible, anchored parts of the world (sorted by size)
+		local function scanThread()
+			local list = {}
+			local seen = 0
+
+			local function consider(inst)
+				seen = seen + 1
+				if seen % 2500 == 0 then
+					RunService.Heartbeat:Wait()
+				end
+				if not inst:IsA("BasePart") or inst:IsA("Terrain") then
+					return
+				end
+				if not inst.Anchored or inst.Transparency > 0.9 then
+					return
+				end
+				local size = inst.Size
+				local flat = math.max(size.X, size.Z)
+				if flat > 3000 or (flat < 4 and size.Y < 10) then
+					return
+				end
+				local y = inst.Position.Y
+				if y - size.Y / 2 > 320 or y + size.Y / 2 < -60 then
+					return
+				end
+				list[#list + 1] = { inst, size.X * size.Z + 0.5 * size.Y * (size.X + size.Z) }
+			end
+
+			for _, top in ipairs(workspace:GetChildren()) do
+				local skip = SKIP_TOP[top.Name]
+				if not skip and top:IsA("Model") then
+					if top:FindFirstChildOfClass("Humanoid") or Players:GetPlayerFromCharacter(top) then
+						skip = true
+					end
+				end
+				if not skip then
+					consider(top)
+					for _, descendant in ipairs(top:GetDescendants()) do
+						consider(descendant)
+					end
+				end
+			end
+
+			table.sort(list, function(a, b)
+				return a[2] > b[2]
+			end)
+			M.candidates = list
+		end
+
+		-- 2) flat view: paint every part as a coloured rectangle seen from above
+		local function paintThread()
+			M.paintState = "loading"
+			M.paintProgress = 0
+			local rects = {}
+			local count = math.min(#M.candidates, MAX_FLAT_PARTS)
+			for i = 1, count do
+				local part = M.candidates[i][1]
+				if part.Parent then
+					local x, y, z, r00, r01, r02, r10, r11, r12, r20, r21, r22 = part.CFrame:GetComponents()
+					local size = part.Size
+					local w, d, rot
+					if math.abs(r11) > 0.9 then
+						w, d, rot = size.X, size.Z, math.deg(math.atan2(r20, r00))
+					else
+						w = math.abs(r00) * size.X + math.abs(r01) * size.Y + math.abs(r02) * size.Z
+						d = math.abs(r20) * size.X + math.abs(r21) * size.Y + math.abs(r22) * size.Z
+						rot = 0
+					end
+					local halfHeight = (math.abs(r10) * size.X + math.abs(r11) * size.Y + math.abs(r12) * size.Z) / 2
+					rects[#rects + 1] = {
+						x = x, z = z, w = math.max(w, 1), d = math.max(d, 1),
+						rot = rot, top = y + halfHeight, color = part.Color,
+					}
+				end
+				if i % 400 == 0 then
+					RunService.Heartbeat:Wait()
+				end
+			end
+
+			-- lowest first, so higher things are painted over lower ones
+			table.sort(rects, function(a, b)
+				return a.top < b.top
+			end)
+
+			local total = #rects
+			for i = 1, total do
+				local rect = rects[i]
+				local shade = math.clamp(rect.top / 300, 0, 1)
+				new("Frame", {
+					AnchorPoint = Vector2.new(0.5, 0.5),
+					Position = UDim2.fromOffset(rect.x, rect.z),
+					Size = UDim2.fromOffset(rect.w, rect.d),
+					Rotation = rect.rot,
+					BackgroundColor3 = rect.color:Lerp(Color3.new(1, 1, 1), shade * 0.25),
+					BorderSizePixel = 0,
+				}, paintLayer)
+				if i % 150 == 0 then
+					M.paintProgress = i / total
+					M.paintCount = i
+					RunService.Heartbeat:Wait()
+				end
+			end
+			M.paintCount = total
+			M.paintProgress = 1
+			M.paintState = total > 0 and "ready" or "empty"
+		end
+
+		local function startScan()
+			if M.scanState ~= "idle" then
+				return
+			end
+			M.scanState = "loading"
+			task.spawn(function()
+				local ok, err = pcall(scanThread)
+				if not ok then
+					M.scanState = "error"
+					M.errorText = tostring(err)
+					return
+				end
+				M.scanState = "ready"
+				local ok2, err2 = pcall(paintThread)
+				if not ok2 then
+					M.paintState = "error"
+					M.errorText = tostring(err2)
+				end
+			end)
+		end
+
+		-- 3) 3D view: copy the biggest parts into the ViewportFrame, then shrink the copy
+		local function cloneThread()
+			M.cloneState = "loading"
+			M.cloneProgress = 0
+			local total = math.min(#M.candidates, MAX_3D_PARTS)
+			local made = 0
+			for i = 1, total do
+				local part = M.candidates[i][1]
+				if part.Parent then
+					local ok, clone = pcall(function()
+						local wasArchivable = part.Archivable
+						part.Archivable = true -- some games block cloning; this is only a client-side flag
+						local copy = part:Clone()
+						part.Archivable = wasArchivable
+						return copy
+					end)
+					if ok and clone then
+						for _, child in ipairs(clone:GetChildren()) do
+							if not KEEP_CHILD[child.ClassName] then
+								child:Destroy()
+							end
+						end
+						clone.Anchored = true
+						clone.Parent = worldModel
+						made = made + 1
+					end
+				end
+				if i % 100 == 0 then
+					M.cloneProgress = i / total
+					M.cloneMade = made
+					RunService.Heartbeat:Wait()
+				end
+			end
+			M.cloneMade = made
+			M.cloneProgress = 1
+
+			if made == 0 then
+				M.cloneState = "empty"
+				return
+			end
+			-- shrinking keeps every distance small, so nothing is lost to the camera's clip planes
+			local ok = pcall(function()
+				worldModel.WorldPivot = CFrame.new(0, 0, 0)
+				worldModel:ScaleTo(SCALE_3D)
+			end)
+			M.scale3d = ok and SCALE_3D or 1
+			M.cloneState = "ready"
+		end
+
+		local function startClone()
+			if M.cloneState ~= "idle" then
+				return
+			end
+			M.cloneState = "loading"
+			startScan()
+			task.spawn(function()
+				while M.scanState == "idle" or M.scanState == "loading" do
+					RunService.Heartbeat:Wait()
+				end
+				if M.scanState == "error" then
+					M.cloneState = "error"
+					return
+				end
+				local ok, err = pcall(cloneThread)
+				if not ok then
+					M.cloneState = "error"
+					M.errorText = tostring(err)
+				end
+			end)
+		end
+
+		local function rebuildWorld()
+			if M.scanState == "loading" or M.paintState == "loading" or M.cloneState == "loading" then
+				setStatus("Still building - wait a moment", 3)
+				return
+			end
+			paintLayer:ClearAllChildren()
+			worldModel:Destroy()
+			worldModel = new("Model", { Name = "World" }, viewport)
+			M.candidates = {}
+			M.scanState = "idle"
+			M.paintState = "idle"
+			M.cloneState = "idle"
+			M.scale3d = 1
+			startScan()
+			if M.mode == "3d" then
+				startClone()
+			end
+		end
+
+		-- ------------------------------------------------------------ 2D overlay
+		local function groupColor(group)
+			if group == "Blue" then
+				return Color3.fromRGB(80, 130, 255)
+			elseif group == "Red" then
+				return Color3.fromRGB(255, 90, 90)
+			end
+			return Color3.fromRGB(235, 235, 240)
+		end
+
+		local function addZoneRect(point)
+			local part = point.part
+			if not part then
+				return
+			end
+			local color = groupColor(point.group)
+			local right = part.CFrame.RightVector
+			local rect = new("Frame", {
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				BackgroundColor3 = color,
+				BackgroundTransparency = 0.78,
+				BorderSizePixel = 0,
+				Size = UDim2.fromOffset(10, 10),
+				Rotation = math.deg(math.atan2(right.Z, right.X)),
+			}, zoneLayer)
+			new("UIStroke", { Color = color, Thickness = 1.5, Transparency = 0.2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, rect)
+			M.zones[#M.zones + 1] = { rect = rect, pos = part.Position, sx = part.Size.X, sz = part.Size.Z }
+		end
+
+		local function addMarkerButton(point)
+			local accent = groupColor(point.group)
+			if point.kind == "place" then
+				accent = Color3.fromRGB(240, 170, 60)
+			elseif point.kind == "sky" then
+				accent = Color3.fromRGB(255, 120, 200)
+			elseif point.kind == "custom" then
+				accent = Color3.fromRGB(170, 120, 255)
+			end
+
+			-- pill: [icon] [Field: Name]   (the name is hidden when zoomed far out)
+			local button = new("TextButton", {
+				Text = "",
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Size = UDim2.fromOffset(0, 30),
+				AutomaticSize = Enum.AutomaticSize.X,
+				BackgroundColor3 = Color3.fromRGB(24, 26, 32),
+				BackgroundTransparency = 0.04,
+				BorderSizePixel = 0,
+				AutoButtonColor = true,
+				Visible = false,
+			}, markerLayer)
+			new("UICorner", { CornerRadius = UDim.new(0, 15) }, button)
+			new("UIStroke", { Color = accent, Thickness = 1.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, button)
+			local padding = new("UIPadding", { PaddingLeft = UDim.new(0, 4), PaddingRight = UDim.new(0, 4) }, button)
+			new("UIListLayout", {
+				FillDirection = Enum.FillDirection.Horizontal,
+				VerticalAlignment = Enum.VerticalAlignment.Center,
+				SortOrder = Enum.SortOrder.LayoutOrder,
+				Padding = UDim.new(0, 6),
+			}, button)
+
+			if point.icon then
+				new("ImageLabel", {
+					LayoutOrder = 1,
+					BackgroundTransparency = 1,
+					Size = UDim2.fromOffset(22, 22),
+					Image = point.icon,
+					ScaleType = Enum.ScaleType.Fit,
+				}, button)
+			else
+				local holder = new("Frame", { LayoutOrder = 1, BackgroundTransparency = 1, Size = UDim2.fromOffset(22, 22) }, button)
+				local dot = new("Frame", {
+					AnchorPoint = Vector2.new(0.5, 0.5),
+					Position = UDim2.fromScale(0.5, 0.5),
+					Size = UDim2.fromOffset(12, 12),
+					BackgroundColor3 = accent,
+					BorderSizePixel = 0,
+				}, holder)
+				new("UICorner", { CornerRadius = UDim.new(1, 0) }, dot)
+			end
+
+			local nameLabel = new("TextLabel", {
+				LayoutOrder = 2,
+				BackgroundTransparency = 1,
+				AutomaticSize = Enum.AutomaticSize.X,
+				Size = UDim2.fromOffset(0, 22),
+				Text = point.label,
+				TextColor3 = Color3.new(1, 1, 1),
+				Font = Enum.Font.GothamBold,
+				TextSize = 13,
+				Visible = false,
+			}, button)
+
+			button.MouseButton1Click:Connect(function()
+				goTo(point.pos + point.offset, point.label, point.instant)
+			end)
+			button.MouseEnter:Connect(function()
+				setStatus(string.format("%s   (%.0f, %.0f)", point.label, point.pos.X, point.pos.Z), 2.5)
+			end)
+
+			M.markers[#M.markers + 1] = {
+				button = button,
+				padding = padding,
+				nameLabel = nameLabel,
+				kind = point.kind,
+				mapPos = point.mapPos,
+				full = nil,
+			}
+		end
+
+		local function setMarkerFull(marker, full)
+			if marker.full == full then
+				return
+			end
+			marker.full = full
+			marker.nameLabel.Visible = full
+			marker.padding.PaddingRight = UDim.new(0, full and 12 or 4)
+		end
+
+		local function gridStep()
+			local s = M.span
+			if s <= 250 then
+				return 25
+			elseif s <= 600 then
+				return 50
+			elseif s <= 1300 then
+				return 100
+			elseif s <= 2600 then
+				return 250
+			end
+			return 500
+		end
+
+		local function updateGrid()
+			local step = gridStep()
+			local k0 = M.H / M.span
+			local halfW = (M.W / 2) / k0
+			local halfH = M.span / 2
+			local used = 0
+			local limit = #M.gridLines
+
+			local x = math.floor((M.cx - halfW) / step) * step
+			while x <= M.cx + halfW and used < limit do
+				used = used + 1
+				local line = M.gridLines[used]
+				line.Position = UDim2.fromOffset(M.W / 2 + (x - M.cx) * k0, 0)
+				line.Size = UDim2.fromOffset(1, M.H)
+				line.Visible = true
+				x = x + step
+			end
+			local z = math.floor((M.cz - halfH) / step) * step
+			while z <= M.cz + halfH and used < limit do
+				used = used + 1
+				local line = M.gridLines[used]
+				line.Position = UDim2.fromOffset(0, M.H / 2 + (z - M.cz) * k0)
+				line.Size = UDim2.fromOffset(M.W, 1)
+				line.Visible = true
+				z = z + step
+			end
+			for i = used + 1, M.gridUsed do
+				M.gridLines[i].Visible = false
+			end
+			M.gridUsed = used
+		end
+
+		local function updateOverlay()
+			for _, zone in ipairs(M.zones) do
+				local px, py, k = project(zone.pos)
+				zone.rect.Position = UDim2.fromOffset(px, py)
+				zone.rect.Size = UDim2.fromOffset(zone.sx * k, zone.sz * k)
+			end
+
+			for _, marker in ipairs(M.markers) do
+				local visible = false
+				if marker.kind ~= "place" or M.span <= PLACE_SPAN then
+					local px, py = project(marker.mapPos)
+					if px > -140 and px < M.W + 140 and py > -40 and py < M.H + 40 then
+						marker.button.Position = UDim2.fromOffset(px, py)
+						visible = true
+					end
+				end
+				if visible then
+					setMarkerFull(marker, marker.kind ~= "field" or M.span <= FULL_LABEL_SPAN)
+				end
+				marker.button.Visible = visible
+			end
+
+			local char = localPlayer.Character
+			local root = char and char:FindFirstChild("HumanoidRootPart")
+			if root and root.Position.Y < 2000 then
+				local px, py = project(root.Position)
+				youDot.Position = UDim2.fromOffset(px, py)
+				youDot.Visible = true
+			else
+				youDot.Visible = false
+			end
+
+			if M.confirm and M.target then
+				local px, py = project(M.target)
+				pin.Position = UDim2.fromOffset(px, py)
+				pin.Visible = true
+			else
+				pin.Visible = false
+			end
+
+			updateGrid()
+		end
+
+		local function statusText()
+			if M.scanState == "error" or M.paintState == "error" then
+				return "Map error: " .. string.sub(M.errorText, 1, 70)
+			end
+			if M.mode == "3d" then
+				if M.cloneState == "loading" then
+					return string.format("3D view: copying the world %.0f%%", M.cloneProgress * 100)
+				elseif M.cloneState == "ready" then
+					return string.format("3D view: %d parts", M.cloneMade)
+				elseif M.cloneState == "empty" then
+					return "3D view: nothing to copy - use Flat"
+				elseif M.cloneState == "error" then
+					return "3D error: " .. string.sub(M.errorText, 1, 70)
+				end
+				return "3D view: preparing"
+			end
+			if M.scanState ~= "ready" then
+				return "Map: scanning the world..."
+			elseif M.paintState == "loading" then
+				return string.format("Map: drawing %.0f%%", M.paintProgress * 100)
+			elseif M.paintState == "ready" then
+				return string.format("Map: %d parts drawn", M.paintCount)
+			elseif M.paintState == "empty" then
+				return "Map: no parts found - markers only"
+			end
+			return "Map: preparing"
+		end
+
+		local function refreshButtons()
+			viewButton.Text = M.mode == "flat" and "View: Flat" or "View: 3D"
+			if mapCfg.instant then
+				instantButton.Text = "Instant"
+				instantButton.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
+			else
+				instantButton.Text = "Fly"
+				instantButton.BackgroundColor3 = Color3.fromRGB(40, 110, 70)
+			end
+			confirmButton.Text = M.confirm and "Click: Select" or "Click: Go"
+			goButton.Visible = M.confirm
+		end
+
+		local function applyMode()
+			flatHolder.Visible = M.mode == "flat"
+			viewport.Visible = M.mode == "3d"
+			M.cvx, M.cvy, M.cvk = nil, nil, nil
+			if M.mode == "3d" then
+				startClone()
+			end
+			refreshButtons()
+		end
+
+		-- -------------------------------------------------------------- per frame
+		local function vpPos(input)
+			if input.UserInputType == Enum.UserInputType.Touch then
+				return Vector2.new(input.Position.X, input.Position.Y) + GuiService:GetGuiInset()
+			end
+			return UserInputService:GetMouseLocation()
+		end
+
+		local function dragStillDown()
+			local input = drag.input
+			if not input then
+				return false
+			end
+			if input.UserInputType == Enum.UserInputType.Touch then
+				return input.UserInputState ~= Enum.UserInputState.End and input.UserInputState ~= Enum.UserInputState.Cancel
+			end
+			return UserInputService:IsMouseButtonPressed(input.UserInputType)
+		end
+
+		local function endDrag()
+			if not drag.active then
+				return
+			end
+			local wasTap = drag.canTap and not drag.moved and not drag.pinching
+			local at = drag.start
+			drag.active = false
+			drag.input = nil
+			if wasTap then
+				onTap(at)
+			end
+		end
+
+		local function step(dt)
+			computeView()
+
+			-- dragging is polled every frame, so it does not depend on input events
+			if drag.active then
+				if dragStillDown() then
+					local p = vpPos(drag.input)
+					if not drag.moved and (p - drag.start).Magnitude > TAP_SLOP then
+						drag.moved = true
+					end
+					if drag.moved and not drag.pinching then
+						local k0 = M.H / M.span
+						M.cx = M.cx - (p.X - drag.anchor.X) / k0
+						M.cz = M.cz - (p.Y - drag.anchor.Y) / k0
+						clampView()
+						drag.anchor = p
+					end
+				else
+					endDrag()
+				end
+			end
+
+			-- keyboard pan / zoom
+			local dx, dz = 0, 0
+			if UserInputService:IsKeyDown(Enum.KeyCode.A) or UserInputService:IsKeyDown(Enum.KeyCode.Left) then
+				dx = dx - 1
+			end
+			if UserInputService:IsKeyDown(Enum.KeyCode.D) or UserInputService:IsKeyDown(Enum.KeyCode.Right) then
+				dx = dx + 1
+			end
+			if UserInputService:IsKeyDown(Enum.KeyCode.W) or UserInputService:IsKeyDown(Enum.KeyCode.Up) then
+				dz = dz - 1
+			end
+			if UserInputService:IsKeyDown(Enum.KeyCode.S) or UserInputService:IsKeyDown(Enum.KeyCode.Down) then
+				dz = dz + 1
+			end
+			if dx ~= 0 or dz ~= 0 then
+				M.cx = M.cx + dx * M.span * 0.6 * dt
+				M.cz = M.cz + dz * M.span * 0.6 * dt
+				clampView()
+			end
+			if UserInputService:IsKeyDown(Enum.KeyCode.E) then
+				zoomAt(M.W / 2, M.H / 2, 0.3 ^ dt)
+			elseif UserInputService:IsKeyDown(Enum.KeyCode.Q) then
+				zoomAt(M.W / 2, M.H / 2, (1 / 0.3) ^ dt)
+			end
+			computeView()
+
+			-- flat view: move / scale the painted canvas (two property writes, however many parts)
+			if M.mode == "flat" then
+				local k0 = M.H / M.span
+				local px = M.W / 2 - M.cx * k0
+				local py = M.H / 2 - M.cz * k0
+				if px ~= M.cvx or py ~= M.cvy then
+					canvasPos.Position = UDim2.fromOffset(px, py)
+					M.cvx, M.cvy = px, py
+				end
+				if k0 ~= M.cvk then
+					canvasScale.Scale = k0
+					M.cvk = k0
+				end
+			else
+				local s = M.scale3d
+				vpCamera.FieldOfView = M.fov
+				vpCamera.CFrame = CFrame.new(M.cx * s, M.camY * s, M.cz * s) * CFrame.Angles(-math.pi / 2, 0, 0)
+			end
+
+			updateOverlay()
+
+			local text
+			if os.clock() < M.messageUntil then
+				text = M.message
+			else
+				local mouse = UserInputService:GetMouseLocation()
+				local k0 = M.H / M.span
+				text = string.format(
+					"x %.0f  z %.0f   |   %s",
+					M.cx + (mouse.X - M.W / 2) / k0,
+					M.cz + (mouse.Y - M.H / 2) / k0,
+					statusText()
+				)
+			end
+			if text ~= M.lastStatus then
+				M.lastStatus = text
+				statusLabel.Text = text
+			end
+		end
+
+		local function onRender(dt)
+			local ok, err = pcall(step, dt)
+			if not ok and not M.renderErr then
+				M.renderErr = tostring(err)
+				setStatus("Map error: " .. M.renderErr, 60)
+			end
+		end
+
+		-- ---------------------------------------------------------------- input
+		local function onWheel(input)
+			if input.UserInputType == Enum.UserInputType.MouseWheel then
+				local mouse = UserInputService:GetMouseLocation()
+				zoomAt(mouse.X, mouse.Y, input.Position.Z > 0 and 0.8 or 1.25)
+			end
+		end
+
+		local function onPinch(positions, scale, _, pinchState)
+			if pinchState == Enum.UserInputState.Begin then
+				drag.pinching = true
+				drag.moved = true
+				drag.pinchSpan = M.span
+			elseif pinchState == Enum.UserInputState.Change then
+				if drag.pinchSpan and positions[1] and positions[2] then
+					local center = (positions[1] + positions[2]) / 2 + GuiService:GetGuiInset()
+					zoomAt(center.X, center.Y, (drag.pinchSpan / scale) / M.span)
+				end
+			else
+				drag.pinching = false
+				drag.pinchSpan = nil
+			end
+		end
+
+		local function onKey(input)
+			if input.KeyCode == Enum.KeyCode.M or input.KeyCode == Enum.KeyCode.Escape then
+				close()
+			end
+		end
+
+		-- ------------------------------------------------------------------ GUI
+		local function build()
+			if gui then
+				return
+			end
+			buildPoints()
+			local full = UDim2.fromScale(1, 1)
+
+			gui = new("ScreenGui", {
+				Name = "AtlasMapTeleport",
+				ResetOnSpawn = false,
+				DisplayOrder = 1000,
+				ScreenInsets = Enum.ScreenInsets.None,
+				ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+				Enabled = false,
+			}, gethui and gethui() or getService("CoreGui"))
+
+			baseBg = new("Frame", { Name = "Base", Size = full, BackgroundColor3 = Color3.fromRGB(30, 38, 33), BorderSizePixel = 0, ZIndex = 1 }, gui)
+
+			-- flat view: canvasPos (moves) > canvas (UIScale = zoom) > paintLayer (parts, 1 stud = 1 unit)
+			flatHolder = new("Frame", { Name = "FlatView", Size = full, BackgroundTransparency = 1, ZIndex = 2 }, gui)
+			canvasPos = new("Frame", { Name = "Mover", Size = UDim2.fromOffset(0, 0), BackgroundTransparency = 1 }, flatHolder)
+			canvas = new("Frame", { Name = "Canvas", Size = UDim2.fromOffset(0, 0), BackgroundTransparency = 1 }, canvasPos)
+			canvasScale = new("UIScale", { Scale = 1 }, canvas)
+			paintLayer = new("Frame", { Name = "Paint", Size = UDim2.fromOffset(0, 0), BackgroundTransparency = 1 }, canvas)
+
+			-- 3D view
+			viewport = new("ViewportFrame", {
+				Name = "World3D",
+				Size = full,
+				BackgroundColor3 = Color3.fromRGB(26, 36, 30),
+				BorderSizePixel = 0,
+				Ambient = Color3.fromRGB(200, 200, 200),
+				LightColor = Color3.fromRGB(120, 120, 120),
+				LightDirection = Vector3.new(-0.4, -1, -0.3),
+				Visible = false,
+				ZIndex = 2,
+			}, gui)
+			vpCamera = new("Camera", { FieldOfView = 70 }, viewport)
+			viewport.CurrentCamera = vpCamera
+			worldModel = new("Model", { Name = "World" }, viewport)
+
+			-- overlay layers
+			gridLayer = new("Frame", { Name = "Grid", BackgroundTransparency = 1, Size = full, ZIndex = 3 }, gui)
+			zoneLayer = new("Frame", { Name = "Zones", BackgroundTransparency = 1, Size = full, ZIndex = 4 }, gui)
+			cover = new("Frame", { Name = "Cover", BackgroundTransparency = 1, Size = full, Active = true, ZIndex = 5 }, gui)
+			markerLayer = new("Frame", { Name = "Markers", BackgroundTransparency = 1, Size = full, ZIndex = 6 }, gui)
+
+			for i = 1, GRID_LINES do
+				M.gridLines[i] = new("Frame", {
+					BackgroundColor3 = Color3.new(1, 1, 1),
+					BackgroundTransparency = 0.9,
+					BorderSizePixel = 0,
+					Visible = false,
+				}, gridLayer)
+			end
+
+			for _, point in ipairs(M.points) do
+				if point.kind == "field" then
+					addZoneRect(point)
+				end
+				addMarkerButton(point)
+			end
+
+			youDot = new("Frame", {
+				Name = "You",
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Size = UDim2.fromOffset(16, 16),
+				BackgroundColor3 = Color3.fromRGB(60, 220, 120),
+				BorderSizePixel = 0,
+				ZIndex = 8,
+				Visible = false,
+			}, markerLayer)
+			new("UICorner", { CornerRadius = UDim.new(1, 0) }, youDot)
+			new("UIStroke", { Color = Color3.new(1, 1, 1), Thickness = 2 }, youDot)
+
+			pin = new("Frame", {
+				Name = "Pin",
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Size = UDim2.fromOffset(18, 18),
+				BackgroundColor3 = Color3.fromRGB(235, 64, 52),
+				BorderSizePixel = 0,
+				ZIndex = 8,
+				Visible = false,
+			}, markerLayer)
+			new("UICorner", { CornerRadius = UDim.new(1, 0) }, pin)
+			new("UIStroke", { Color = Color3.new(1, 1, 1), Thickness = 2 }, pin)
+
+			cover.InputBegan:Connect(function(input)
+				local t = input.UserInputType
+				local isMouse = t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.MouseButton2 or t == Enum.UserInputType.MouseButton3
+				if isMouse or t == Enum.UserInputType.Touch then
+					if drag.active then
+						return
+					end
+					drag.active = true
+					drag.moved = false
+					drag.canTap = t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch
+					drag.input = input
+					drag.start = vpPos(input)
+					drag.anchor = drag.start
+				end
+			end)
+
+			-- top bar
+			local topBar = new("Frame", {
+				Name = "Top",
+				Size = UDim2.new(1, 0, 0, 46),
+				BackgroundColor3 = Color3.fromRGB(18, 18, 24),
+				BackgroundTransparency = 0.08,
+				BorderSizePixel = 0,
+				Active = true,
+				ZIndex = 10,
+			}, gui)
+			new("TextLabel", {
+				BackgroundTransparency = 1,
+				Position = UDim2.fromOffset(14, 0),
+				Size = UDim2.new(0, 130, 1, 0),
+				Text = "Map Teleport",
+				TextColor3 = Color3.new(1, 1, 1),
+				Font = Enum.Font.GothamBold,
+				TextSize = 16,
+				TextXAlignment = Enum.TextXAlignment.Left,
+			}, topBar)
+			local buttons = new("Frame", { BackgroundTransparency = 1, Size = full }, topBar)
+			new("UIListLayout", {
+				FillDirection = Enum.FillDirection.Horizontal,
+				HorizontalAlignment = Enum.HorizontalAlignment.Right,
+				VerticalAlignment = Enum.VerticalAlignment.Center,
+				Padding = UDim.new(0, 6),
+			}, buttons)
+			new("UIPadding", { PaddingRight = UDim.new(0, 10) }, buttons)
+
+			viewButton = makeButton(buttons, "View: Flat", 96, Color3.fromRGB(52, 84, 160))
+			local overviewButton = makeButton(buttons, "Overview", 78)
+			local meButton = makeButton(buttons, "Me", 46)
+			local rebuildButton = makeButton(buttons, "Rebuild", 70)
+			local zoomOutButton = makeButton(buttons, "-", 34)
+			local zoomInButton = makeButton(buttons, "+", 34)
+			local closeButton = makeButton(buttons, "X", 34, Color3.fromRGB(150, 50, 50))
+
+			viewButton.MouseButton1Click:Connect(function()
+				M.mode = M.mode == "flat" and "3d" or "flat"
+				applyMode()
+			end)
+			overviewButton.MouseButton1Click:Connect(fitView)
+			meButton.MouseButton1Click:Connect(function()
+				local char = localPlayer.Character
+				local root = char and char:FindFirstChild("HumanoidRootPart")
+				if root then
+					M.cx = root.Position.X
+					M.cz = root.Position.Z
+					M.span = math.min(M.span, 450)
+					clampView()
+				end
+			end)
+			rebuildButton.MouseButton1Click:Connect(rebuildWorld)
+			zoomInButton.MouseButton1Click:Connect(function()
+				zoomAt(M.W / 2, M.H / 2, 0.6)
+			end)
+			zoomOutButton.MouseButton1Click:Connect(function()
+				zoomAt(M.W / 2, M.H / 2, 1 / 0.6)
+			end)
+			closeButton.MouseButton1Click:Connect(function()
+				close()
+			end)
+
+			-- bottom bar
+			local bottomBar = new("Frame", {
+				Name = "Bottom",
+				AnchorPoint = Vector2.new(0.5, 1),
+				Position = UDim2.new(0.5, 0, 1, -14),
+				Size = UDim2.new(1, -24, 0, 66),
+				BackgroundColor3 = Color3.fromRGB(18, 18, 24),
+				BackgroundTransparency = 0.08,
+				BorderSizePixel = 0,
+				Active = true,
+				ZIndex = 10,
+			}, gui)
+			new("UICorner", { CornerRadius = UDim.new(0, 10) }, bottomBar)
+			new("UISizeConstraint", { MaxSize = Vector2.new(760, 66) }, bottomBar)
+
+			new("TextLabel", {
+				BackgroundTransparency = 1,
+				Position = UDim2.fromOffset(14, 8),
+				Size = UDim2.new(1, -330, 0, 22),
+				Text = "Click a marker or the map to teleport",
+				TextColor3 = Color3.new(1, 1, 1),
+				Font = Enum.Font.GothamBold,
+				TextSize = 14,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextTruncate = Enum.TextTruncate.AtEnd,
+			}, bottomBar)
+			statusLabel = new("TextLabel", {
+				BackgroundTransparency = 1,
+				Position = UDim2.fromOffset(14, 32),
+				Size = UDim2.new(1, -330, 0, 28),
+				Text = "",
+				TextColor3 = Color3.fromRGB(170, 170, 180),
+				Font = Enum.Font.Gotham,
+				TextSize = 12,
+				TextWrapped = true,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextYAlignment = Enum.TextYAlignment.Top,
+			}, bottomBar)
+
+			local controlsRow = new("Frame", {
+				BackgroundTransparency = 1,
+				AnchorPoint = Vector2.new(1, 0.5),
+				Position = UDim2.new(1, -10, 0.5, 0),
+				Size = UDim2.new(0, 310, 0, 40),
+			}, bottomBar)
+			new("UIListLayout", {
+				FillDirection = Enum.FillDirection.Horizontal,
+				HorizontalAlignment = Enum.HorizontalAlignment.Right,
+				VerticalAlignment = Enum.VerticalAlignment.Center,
+				Padding = UDim.new(0, 6),
+			}, controlsRow)
+
+			confirmButton = makeButton(controlsRow, "Click: Go", 100)
+			instantButton = makeButton(controlsRow, "Fly", 70)
+			goButton = makeButton(controlsRow, "Teleport", 90, Color3.fromRGB(66, 135, 245))
+			confirmButton.Size = UDim2.new(0, 100, 0, 36)
+			instantButton.Size = UDim2.new(0, 70, 0, 36)
+			goButton.Size = UDim2.new(0, 90, 0, 36)
+
+			confirmButton.MouseButton1Click:Connect(function()
+				M.confirm = not M.confirm
+				refreshButtons()
+				if M.confirm then
+					setStatus("Select mode: click the map to drop a pin, then press Teleport", 6)
+				else
+					setStatus("One-click mode: clicking the map teleports at once", 5)
+				end
+			end)
+			instantButton.MouseButton1Click:Connect(function()
+				mapCfg.instant = not mapCfg.instant
+				refreshButtons()
+				if mapCfg.instant then
+					setStatus("Instant teleport can get you detected / reset by the game", 6)
+				else
+					setStatus("Fly mode: moves at the Map Teleport Speed from Home", 5)
+				end
+			end)
+			goButton.MouseButton1Click:Connect(function()
+				if M.target then
+					goTo(M.target, M.targetLabel)
+				else
+					setStatus("Click the map first to drop a pin", 4)
+				end
+			end)
+
+			applyMode()
+		end
+
+		-- ---------------------------------------------------------- open / close
+		local function open()
+			if M.isOpen then
+				return
+			end
+			local ok, err = pcall(build)
+			if not ok then
+				ui.Notify("Map Teleport", "Failed to build the map: " .. tostring(err))
+				return
+			end
+			M.isOpen = true
+			M.renderErr = nil
+			M.lastStatus = ""
+
+			local activated, activateErr = pcall(function()
+				saved.scriptGui = ScreenGui.Enabled
+				saved.mouseBehavior = UserInputService.MouseBehavior
+				saved.mouseIcon = UserInputService.MouseIconEnabled
+				local cam = workspace.CurrentCamera
+				saved.cameraType = cam.CameraType
+				ScreenGui.Enabled = false
+				-- freeze the game's own camera: otherwise it rotates / zooms while we drag the map
+				cam.CameraType = Enum.CameraType.Scriptable
+
+				-- keep the character still and the game camera quiet while browsing the map
+				ContextActionService:BindActionAtPriority("AtlasMapSink", function()
+					return Enum.ContextActionResult.Sink
+				end, false, 3000, Enum.KeyCode.W, Enum.KeyCode.A, Enum.KeyCode.S, Enum.KeyCode.D, Enum.KeyCode.Up, Enum.KeyCode.Down, Enum.KeyCode.Left, Enum.KeyCode.Right, Enum.KeyCode.Space, Enum.KeyCode.Q, Enum.KeyCode.E, Enum.UserInputType.MouseWheel, Enum.UserInputType.MouseButton2, Enum.UserInputType.MouseButton3)
+
+				-- shift-lock would pin the cursor to the screen centre: undo it after everything else ran
+				RunService:BindToRenderStep("AtlasMapMouse", Enum.RenderPriority.Last.Value, function()
+					if UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then
+						UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+					end
+					UserInputService.MouseIconEnabled = true
+				end)
+
+				M.conns[#M.conns + 1] = UserInputService.InputChanged:Connect(onWheel)
+				M.conns[#M.conns + 1] = UserInputService.InputBegan:Connect(onKey)
+				M.conns[#M.conns + 1] = UserInputService.TouchPinch:Connect(onPinch)
+
+				drag.active = false
+				drag.pinching = false
+				gui.Enabled = true
+				fitView()
+				M.conns[#M.conns + 1] = RunService.RenderStepped:Connect(onRender)
+
+				startScan()
+				if M.mode == "3d" then
+					startClone()
+				end
+				if workspace.StreamingEnabled then
+					setStatus("StreamingEnabled is ON: only the loaded part of the world can be drawn", 8)
+				end
+			end)
+			if not activated then
+				ui.Notify("Map Teleport", "Failed to open the map: " .. tostring(activateErr))
+				close()
+			end
+		end
+
+		close = function()
+			if not M.isOpen then
+				return
+			end
+			M.isOpen = false
+			for _, connection in ipairs(M.conns) do
+				connection:Disconnect()
+			end
+			M.conns = {}
+			pcall(function()
+				RunService:UnbindFromRenderStep("AtlasMapMouse")
+			end)
+			pcall(function()
+				ContextActionService:UnbindAction("AtlasMapSink")
+			end)
+			drag.active = false
+			drag.pinching = false
+			gui.Enabled = false
+
+			pcall(function()
+				UserInputService.MouseBehavior = saved.mouseBehavior or Enum.MouseBehavior.Default
+				UserInputService.MouseIconEnabled = saved.mouseIcon ~= false
+			end)
+			local cam = workspace.CurrentCamera
+			local restored = saved.cameraType
+			if restored == nil or restored == Enum.CameraType.Scriptable then
+				restored = Enum.CameraType.Custom
+			end
+			cam.CameraType = restored
+			local hum = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid")
+			if hum then
+				cam.CameraSubject = hum
+			end
+			ScreenGui.Enabled = saved.scriptGui ~= false
+		end
+
+		return {
+			Cfg = mapCfg,
+			Open = open,
+			Close = close,
+			Toggle = function()
+				if M.isOpen then
+					close()
+				else
+					open()
+				end
+			end,
+			Cancel = function()
+				M.moveId = M.moveId + 1
+			end,
+			AddMarker = function(name, pos, offset)
+				local point = {
+					name = name, label = name, kind = "custom",
+					pos = pos, mapPos = pos, offset = offset or Vector3.new(0, 4, 0),
+				}
+				CUSTOM_MARKERS[#CUSTOM_MARKERS + 1] = { name, pos, point.offset }
+				M.points[#M.points + 1] = point
+				recomputeBounds()
+				if gui then
+					addMarkerButton(point)
+				end
+			end,
+		}
+	end)()
+
+	Home.AddHorizontalAlignment()
+	Home.AddButton("Open Map Teleport", controls.maptp.Toggle)
+	Home.AddButton("Cancel Map Teleport", controls.maptp.Cancel)
+	Home.AddSlider("Map Teleport Speed", nil, 1, 12, controls.maptp.Cfg, "speed", { Left = true })
+	-- ==================== END MAP TELEPORT ====================
+
 	Home.Toggle(true)
 end
 
@@ -67099,19 +68587,6 @@ more accurate dodging]],
 							return nil
 						end
 
-						if colorKey(top) == colorKey(horizon) then
-							local path = "atlas/sky_" .. hexOf(top) .. ".png"
-
-							if not isfile(path) then
-								writefile(path, makePng(4, 4, function()
-									return byte(top.R * 255), byte(top.G * 255), byte(top.B * 255)
-								end))
-							end
-
-							local asset = assetFn(path)
-							return { top = asset, bottom = asset, side = asset }
-						end
-
 						local base = "atlas/sky_" .. hexOf(top) .. "_" .. hexOf(horizon)
 						local files = { top = base .. "_top.png", bottom = base .. "_bottom.png", side = base .. "_side.png" }
 						local t = { top.R * 255, top.G * 255, top.B * 255 }
@@ -67156,7 +68631,7 @@ more accurate dodging]],
 					local boxAssets = nil
 					local boxFailed = false
 					local fallbackNotified = false
-					local applied = { tint = false, bodies = false }
+					local applied = { tint = false, fog = false, bodies = false, time = false, haze = false }
 
 					local function captureSky()
 						if skyOrig then
@@ -67169,6 +68644,10 @@ more accurate dodging]],
 						skyOrig = {
 							Ambient = Lighting.Ambient,
 							OutdoorAmbient = Lighting.OutdoorAmbient,
+							ClockTime = Lighting.ClockTime,
+							FogColor = Lighting.FogColor,
+							FogStart = Lighting.FogStart,
+							FogEnd = Lighting.FogEnd,
 						}
 
 						if sky then
@@ -67211,6 +68690,16 @@ more accurate dodging]],
 							Lighting.Ambient = original.Ambient
 							Lighting.OutdoorAmbient = original.OutdoorAmbient
 
+							if not connections:Get("antilag") then
+								Lighting.FogColor = original.FogColor
+								Lighting.FogStart = original.FogStart
+								Lighting.FogEnd = original.FogEnd
+							end
+
+							if applied.time then
+								Lighting.ClockTime = original.ClockTime
+							end
+
 							if createdAtm then
 								createdAtm:Destroy()
 							else
@@ -67239,7 +68728,10 @@ more accurate dodging]],
 						createdAtm = nil
 						createdSky = nil
 						applied.tint = false
+						applied.fog = false
 						applied.bodies = false
+						applied.time = false
+						applied.haze = false
 					end
 
 					local function skyStep()
@@ -67247,7 +68739,8 @@ more accurate dodging]],
 							return
 						end
 
-						local color = rgbOf("sky", 90, 170, 255)
+						local top = rgbOf("sky", 90, 170, 255)
+						local horizon = cust.skygradient == true and rgbOf("sky2", 40, 100, 220) or top
 						local assetFn = getcustomasset or getsynasset
 						local canBox = type(assetFn) == "function" and type(writefile) == "function" and not boxFailed
 						local atm = Lighting:FindFirstChildOfClass("Atmosphere")
@@ -67261,12 +68754,12 @@ more accurate dodging]],
 								createdSky = sky
 							end
 
-							local key = hexOf(color)
+							local key = hexOf(top) .. hexOf(horizon)
 
 							if key ~= boxKey and (not isDragging or os.clock() - lastBuild > 0.5) then
 								lastBuild = os.clock()
 								boxKey = key
-								local ok, assets = pcall(buildSkyAssets, color, color)
+								local ok, assets = pcall(buildSkyAssets, top, horizon)
 
 								if ok and assets then
 									boxAssets = assets
@@ -67283,11 +68776,19 @@ more accurate dodging]],
 								end
 							end
 
-							-- the game's own atmosphere haze would wash the color out, so it is switched off while the sky is custom
+							-- the game's own atmosphere haze would wash the sky out
 							if atm and atm ~= createdAtm then
-								setIf(atm, "Density", 0)
-								setIf(atm, "Haze", 0)
-								setIf(atm, "Glare", 0)
+								if cust.skyclearhaze ~= false then
+									setIf(atm, "Density", 0)
+									setIf(atm, "Haze", 0)
+									setIf(atm, "Glare", 0)
+									applied.haze = true
+								elseif applied.haze and skyOrig.atm then
+									atm.Density = skyOrig.atm.Density
+									atm.Haze = skyOrig.atm.Haze
+									atm.Glare = skyOrig.atm.Glare
+									applied.haze = false
+								end
 							end
 						else
 							if not fallbackNotified then
@@ -67302,8 +68803,8 @@ more accurate dodging]],
 								createdAtm = atm
 							end
 
-							setIf(atm, "Color", color)
-							setIf(atm, "Decay", color)
+							setIf(atm, "Color", horizon)
+							setIf(atm, "Decay", top)
 							setIf(atm, "Density", 0.8)
 							setIf(atm, "Offset", 1)
 							setIf(atm, "Glare", 0)
@@ -67325,13 +68826,35 @@ more accurate dodging]],
 
 						-- ambient tint
 						if cust.skytint == true then
-							setIf(Lighting, "OutdoorAmbient", skyOrig.OutdoorAmbient:Lerp(color, 0.5))
-							setIf(Lighting, "Ambient", skyOrig.Ambient:Lerp(color, 0.35))
+							setIf(Lighting, "OutdoorAmbient", skyOrig.OutdoorAmbient:Lerp(top, 0.5))
+							setIf(Lighting, "Ambient", skyOrig.Ambient:Lerp(top, 0.35))
 							applied.tint = true
 						elseif applied.tint then
 							Lighting.OutdoorAmbient = skyOrig.OutdoorAmbient
 							Lighting.Ambient = skyOrig.Ambient
 							applied.tint = false
+						end
+
+						-- fog (skipped while Anti Lag is controlling the fog)
+						if cust.skyfog == true and not connections:Get("antilag") then
+							setIf(Lighting, "FogColor", horizon)
+							setIf(Lighting, "FogStart", 0)
+							setIf(Lighting, "FogEnd", math.clamp(num("skyfogend", 1500), 100, 10000))
+							applied.fog = true
+						elseif applied.fog then
+							if not connections:Get("antilag") then
+								Lighting.FogColor = skyOrig.FogColor
+								Lighting.FogStart = skyOrig.FogStart
+								Lighting.FogEnd = skyOrig.FogEnd
+							end
+
+							applied.fog = false
+						end
+
+						-- time of day
+						if cust.skylocktime == true then
+							setIf(Lighting, "ClockTime", math.clamp(num("skytime", 12), 0, 24))
+							applied.time = true
 						end
 					end
 
@@ -67835,10 +69358,6 @@ more accurate dodging]],
 							setColor(r, g, b)
 						end
 
-						api.Quiet = function(r, g, b)
-							setColor(r, g, b, true)
-						end
-
 						api.Redraw = function()
 							setColor(num(prefix .. "r", defaults[1]), num(prefix .. "g", defaults[2]), num(prefix .. "b", defaults[3]), true)
 						end
@@ -67885,32 +69404,18 @@ more accurate dodging]],
 						requestApply()
 					end
 
-					local PRESET_NAMES = {
-						"Default", "Crimson", "Emerald", "Violet", "Sunset", "Ocean", "Rose", "Mono", "Midnight",
-						"Winter", "Spring", "Summer", "Autumn",
-						"Minimal Graphite", "Minimal Slate", "Minimal Mocha", "Minimal Mint",
-					}
+					local PRESET_NAMES = { "Default", "Crimson", "Emerald", "Violet", "Sunset", "Ocean", "Rose", "Mono", "Midnight" }
 
-					-- accent/accent2: menu colors, bg/bgend/panel: backgrounds,
-					-- feat: color used by trail/cursor/outline/HUD/waypoints, sky: sky color
 					local PRESETS = {
-						Default = { accent = { 41, 74, 122 }, accent2 = { 70, 110, 180 }, gradient = false, bg = { 21, 22, 23 }, bgend = { 30, 34, 48 }, bggradient = false, panel = { 42, 42, 42 }, feat = { 90, 170, 255 }, sky = { 90, 170, 255 } },
-						Crimson = { accent = { 160, 30, 45 }, accent2 = { 255, 90, 70 }, gradient = true, bg = { 22, 18, 19 }, bgend = { 40, 16, 22 }, bggradient = true, panel = { 44, 36, 38 }, feat = { 255, 90, 70 }, sky = { 150, 35, 45 } },
-						Emerald = { accent = { 20, 130, 85 }, accent2 = { 70, 210, 140 }, gradient = true, bg = { 16, 22, 20 }, bgend = { 14, 40, 32 }, bggradient = true, panel = { 34, 44, 40 }, feat = { 70, 210, 140 }, sky = { 60, 170, 120 } },
-						Violet = { accent = { 100, 50, 175 }, accent2 = { 210, 90, 230 }, gradient = true, bg = { 20, 17, 26 }, bgend = { 38, 20, 60 }, bggradient = true, panel = { 40, 36, 52 }, feat = { 210, 90, 230 }, sky = { 120, 80, 200 } },
-						Sunset = { accent = { 230, 80, 60 }, accent2 = { 250, 175, 60 }, gradient = true, bg = { 24, 19, 20 }, bgend = { 60, 28, 30 }, bggradient = true, panel = { 48, 38, 38 }, feat = { 250, 175, 60 }, sky = { 255, 130, 70 } },
-						Ocean = { accent = { 15, 105, 165 }, accent2 = { 40, 210, 205 }, gradient = true, bg = { 15, 20, 26 }, bgend = { 12, 40, 56 }, bggradient = true, panel = { 32, 42, 52 }, feat = { 40, 210, 205 }, sky = { 40, 150, 210 } },
-						Rose = { accent = { 200, 60, 115 }, accent2 = { 255, 150, 180 }, gradient = true, bg = { 24, 18, 22 }, bgend = { 50, 22, 40 }, bggradient = true, panel = { 48, 36, 44 }, feat = { 255, 150, 180 }, sky = { 255, 160, 200 } },
-						Mono = { accent = { 85, 85, 90 }, accent2 = { 170, 170, 180 }, gradient = true, bg = { 18, 18, 18 }, bgend = { 30, 30, 30 }, bggradient = false, panel = { 36, 36, 36 }, feat = { 200, 200, 210 }, sky = { 120, 125, 140 } },
-						Midnight = { accent = { 55, 60, 170 }, accent2 = { 125, 80, 230 }, gradient = true, bg = { 8, 8, 14 }, bgend = { 18, 12, 36 }, bggradient = true, panel = { 22, 22, 32 }, feat = { 125, 80, 230 }, sky = { 20, 25, 70 } },
-						Winter = { accent = { 70, 130, 190 }, accent2 = { 180, 225, 255 }, gradient = true, bg = { 16, 22, 30 }, bgend = { 30, 48, 66 }, bggradient = true, panel = { 34, 46, 60 }, feat = { 170, 220, 255 }, sky = { 170, 205, 235 } },
-						Spring = { accent = { 80, 160, 90 }, accent2 = { 240, 150, 190 }, gradient = true, bg = { 18, 24, 19 }, bgend = { 34, 52, 38 }, bggradient = true, panel = { 36, 48, 38 }, feat = { 150, 225, 120 }, sky = { 150, 210, 245 } },
-						Summer = { accent = { 225, 140, 40 }, accent2 = { 60, 175, 225 }, gradient = true, bg = { 26, 22, 16 }, bgend = { 58, 46, 24 }, bggradient = true, panel = { 52, 44, 34 }, feat = { 255, 200, 70 }, sky = { 80, 175, 255 } },
-						Autumn = { accent = { 185, 90, 35 }, accent2 = { 235, 160, 60 }, gradient = true, bg = { 24, 18, 14 }, bgend = { 54, 30, 18 }, bggradient = true, panel = { 48, 38, 30 }, feat = { 235, 140, 50 }, sky = { 215, 140, 80 } },
-						["Minimal Graphite"] = { accent = { 72, 74, 80 }, accent2 = { 110, 112, 120 }, gradient = false, bg = { 18, 18, 19 }, bgend = { 24, 24, 26 }, bggradient = false, panel = { 32, 32, 34 }, feat = { 170, 172, 180 }, sky = { 60, 62, 70 } },
-						["Minimal Slate"] = { accent = { 70, 92, 118 }, accent2 = { 96, 120, 148 }, gradient = false, bg = { 17, 20, 24 }, bgend = { 24, 28, 34 }, bggradient = false, panel = { 30, 35, 42 }, feat = { 150, 175, 205 }, sky = { 85, 105, 130 } },
-						["Minimal Mocha"] = { accent = { 112, 92, 76 }, accent2 = { 140, 118, 98 }, gradient = false, bg = { 20, 18, 17 }, bgend = { 28, 25, 23 }, bggradient = false, panel = { 38, 34, 32 }, feat = { 200, 170, 140 }, sky = { 120, 100, 85 } },
-						["Minimal Mint"] = { accent = { 58, 112, 102 }, accent2 = { 84, 140, 128 }, gradient = false, bg = { 17, 21, 20 }, bgend = { 24, 30, 28 }, bggradient = false, panel = { 30, 38, 36 }, feat = { 140, 205, 190 }, sky = { 95, 150, 140 } },
+						Default = { accent = { 41, 74, 122 }, accent2 = { 70, 110, 180 }, gradient = false, bg = { 21, 22, 23 }, bgend = { 30, 34, 48 }, bggradient = false, panel = { 42, 42, 42 } },
+						Crimson = { accent = { 160, 30, 45 }, accent2 = { 255, 90, 70 }, gradient = true, bg = { 22, 18, 19 }, bgend = { 40, 16, 22 }, bggradient = true, panel = { 44, 36, 38 } },
+						Emerald = { accent = { 20, 130, 85 }, accent2 = { 70, 210, 140 }, gradient = true, bg = { 16, 22, 20 }, bgend = { 14, 40, 32 }, bggradient = true, panel = { 34, 44, 40 } },
+						Violet = { accent = { 100, 50, 175 }, accent2 = { 210, 90, 230 }, gradient = true, bg = { 20, 17, 26 }, bgend = { 38, 20, 60 }, bggradient = true, panel = { 40, 36, 52 } },
+						Sunset = { accent = { 230, 80, 60 }, accent2 = { 250, 175, 60 }, gradient = true, bg = { 24, 19, 20 }, bgend = { 60, 28, 30 }, bggradient = true, panel = { 48, 38, 38 } },
+						Ocean = { accent = { 15, 105, 165 }, accent2 = { 40, 210, 205 }, gradient = true, bg = { 15, 20, 26 }, bgend = { 12, 40, 56 }, bggradient = true, panel = { 32, 42, 52 } },
+						Rose = { accent = { 200, 60, 115 }, accent2 = { 255, 150, 180 }, gradient = true, bg = { 24, 18, 22 }, bgend = { 50, 22, 40 }, bggradient = true, panel = { 48, 36, 44 } },
+						Mono = { accent = { 85, 85, 90 }, accent2 = { 170, 170, 180 }, gradient = true, bg = { 18, 18, 18 }, bgend = { 30, 30, 30 }, bggradient = false, panel = { 36, 36, 36 } },
+						Midnight = { accent = { 55, 60, 170 }, accent2 = { 125, 80, 230 }, gradient = true, bg = { 8, 8, 14 }, bgend = { 18, 12, 36 }, bggradient = true, panel = { 22, 22, 32 } },
 					}
 
 					local function applyPreset(name)
@@ -67930,27 +69435,29 @@ more accurate dodging]],
 						requestApply()
 					end
 
-					local SKY_NAMES = { "Clear Blue", "Sunset", "Pink", "Night", "Toxic", "Blood Moon", "Ocean", "Overcast", "Lavender" }
+					local SKY_NAMES = { "Clear Blue", "Sunset", "Pink Dream", "Night", "Toxic", "Blood Moon", "Ocean" }
 
 					local SKY_PRESETS = {
-						["Clear Blue"] = { 90, 170, 255 },
-						Sunset = { 255, 130, 70 },
-						Pink = { 255, 160, 210 },
-						Night = { 15, 20, 50 },
-						Toxic = { 110, 230, 70 },
-						["Blood Moon"] = { 170, 20, 30 },
-						Ocean = { 40, 170, 210 },
-						Overcast = { 150, 155, 165 },
-						Lavender = { 160, 140, 230 },
+						["Clear Blue"] = { { 70, 140, 235 }, { 150, 205, 255 } },
+						Sunset = { { 90, 50, 140 }, { 255, 130, 70 } },
+						["Pink Dream"] = { { 150, 110, 255 }, { 255, 160, 210 } },
+						Night = { { 5, 5, 20 }, { 25, 35, 80 } },
+						Toxic = { { 20, 90, 40 }, { 130, 235, 80 } },
+						["Blood Moon"] = { { 40, 0, 10 }, { 190, 30, 40 } },
+						Ocean = { { 10, 60, 130 }, { 70, 200, 215 } },
 					}
 
 					local function applySkyPreset(name)
-						local color = SKY_PRESETS[name]
+						local preset = SKY_PRESETS[name]
 
-						if color then
-							setPicker("sky", color)
-							setSwitch("skyenabled", true)
+						if not preset then
+							return
 						end
+
+						setPicker("sky", preset[1])
+						setPicker("sky2", preset[2])
+						setSwitch("skygradient", true)
+						setSwitch("skyenabled", true)
 					end
 
 					local function randomizeTheme()
@@ -68060,2368 +69567,103 @@ more accurate dodging]],
 					----------------------------------------------------------------
 					-- controls
 					----------------------------------------------------------------
-					----------------------------------------------------------------
-					-- shared helpers for the visual features
-					----------------------------------------------------------------
-					local Players = getService("Players")
-					local Stats = getService("Stats")
-					local cleanups = {}
-					local requests = {}
-					local overlay = nil
-					local needsQuality = false
-					local graphicsRequest = nil
+					local Presets = tab.AddFolder("Theme Presets")
+					local Accent = tab.AddFolder("Accent Color")
+					local Background = tab.AddFolder("Background")
+					local Window = tab.AddFolder("Window", true)
+					local SkyFolder = tab.AddFolder("Sky", true)
 
-					-- 2D overlay (HUD, cursor)
-					local function getOverlay()
-						if overlay and overlay.Parent then
-							return overlay
-						end
-
-						overlay = Instance.new("ScreenGui")
-						overlay.Name = "AtlasOverlay"
-						overlay.ResetOnSpawn = false
-						overlay.IgnoreGuiInset = true
-						overlay.ScreenInsets = Enum.ScreenInsets.None
-						overlay.DisplayOrder = 2000000000
-						overlay.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-						overlay.Parent = ScreenGui.Parent
-						return overlay
-					end
-
-					local function debounce(callback)
-						local queued = false
-
-						return function()
-							if queued then
-								return
-							end
-
-							queued = true
-
-							task.defer(function()
-								queued = false
-								local ok, err = pcall(callback)
-
-								if not ok then
-									warn("Customization: " .. tostring(err))
-								end
-							end)
-						end
-					end
-
-					local function feature(name, builder)
-						local ok, err = pcall(builder)
-
-						if not ok then
-							warn("Customization (" .. name .. "): " .. tostring(err))
-						end
-					end
-
-					local function addSwitch(folder, text, key, callback, options)
-						local switch = folder.AddSwitch(text, callback, "customization", key, options)
-						switches[key] = switch
-						return switch
-					end
-
-					local function addSlider(folder, text, key, min, max, callback, decimal)
-						local slider = folder.AddSlider(text, callback, min, max, "customization", key, { Left = true, Decimal = decimal })
-						sliders[key] = slider
-						return slider
-					end
-
-					local function addDropdown(folder, text, items, key, callback)
-						return folder.AddDropdown(text, items, nil, function(value)
-							cust[key] = value
-							callback()
-						end, "customization", key)
-					end
-
-					local unloading = false
-
-					local function on(key)
-						return cust[key] == true and not unloading
-					end
-
-					ScreenGui.Destroying:Connect(function()
-						unloading = true
-
-						for _, cleanup in ipairs(cleanups) do
-							pcall(cleanup)
-						end
-
-						if overlay then
-							pcall(function()
-								overlay:Destroy()
-							end)
-						end
-					end)
-
-					-- one preset that recolors the menu and every feature
-					local function applyEverything(name)
-						local preset = PRESETS[name]
-
-						if not preset then
-							return
-						end
-
-						applyPreset(name)
-
-						local function quiet(prefix, color)
-							local picker = pickers[prefix]
-
-							if picker then
-								picker.Quiet(color[1], color[2], color[3])
-							end
-						end
-
-						local sky = preset.sky
-						local fog = { math.floor(sky[1] * 0.6 + 255 * 0.4), math.floor(sky[2] * 0.6 + 255 * 0.4), math.floor(sky[3] * 0.6 + 255 * 0.4) }
-
-						quiet("trail", preset.feat)
-						quiet("trail2", preset.accent2)
-						quiet("cursor", preset.feat)
-						quiet("toolol", preset.feat)
-						quiet("hudacc", preset.feat)
-						quiet("wp", preset.feat)
-						quiet("sky", sky)
-						quiet("fog", fog)
-						saveConfig()
-
-						for _, request in ipairs(requests) do
-							request()
-						end
-
-						ui.Notify("Customization", "Preset applied: " .. name)
-					end
-
-					----------------------------------------------------------------
-					-- LEFT COLUMN: menu + screen
-					----------------------------------------------------------------
-					local ThemeFolder = tab.AddFolder("Menu Theme")
-
-					ThemeFolder.AddDropdown("Menu Preset", PRESET_NAMES, nil, function(name)
+					Presets.AddDropdown("Preset", PRESET_NAMES, nil, function(name)
 						applyPreset(name)
 					end)
 
-					ThemeFolder.AddDropdown("Everything Preset", PRESET_NAMES, nil, function(name)
-						applyEverything(name)
-					end)
+					Presets.AddButton("Random Colors", randomizeTheme)
+					Presets.AddButton("Reset Menu Style", resetTheme)
+					Presets.AddButton("Copy Theme To Clipboard", exportTheme)
+					Presets.AddTextBox("Paste theme here", importTheme, nil, nil, { Clear = true })
+					Presets.Toggle(true, true)
 
-					ThemeFolder.AddLabel("Everything = menu + all features")
-					makeColorPicker(ThemeFolder, "Main Color", "accent", { 41, 74, 122 }, requestApply)
-					switches.gradient = ThemeFolder.AddSwitch("Gradient", requestApply, "customization", "gradient")
-					makeColorPicker(ThemeFolder, "Gradient Color", "grad", { 70, 110, 180 }, function()
+					Accent.AddLabel("Click a circle to choose a color")
+					makeColorPicker(Accent, "Main Color", "accent", { 41, 74, 122 }, requestApply)
+					switches.gradient = Accent.AddSwitch("Use Gradient", requestApply, "customization", "gradient")
+					makeColorPicker(Accent, "Gradient Color", "grad", { 70, 110, 180 }, function()
 						if cust.gradient ~= true then
 							setSwitch("gradient", true)
 						end
 
 						requestApply()
 					end)
-					makeColorPicker(ThemeFolder, "Window Color", "bg", { 21, 22, 23 }, requestApply)
-					makeColorPicker(ThemeFolder, "Panel Color", "panel", { 42, 42, 42 }, requestApply)
-					ThemeFolder.AddButton("Reset Menu Style", resetTheme)
-					ThemeFolder.Toggle(true, true)
+					sliders.gradrotation = Accent.AddSlider("Gradient Angle", requestApply, 0, 360, "customization", "gradrotation", { Left = true })
+					switches.gradanimated = Accent.AddSwitch("Animate Gradient", requestApply, "customization", "gradanimated")
+					switches.rainbow = Accent.AddSwitch("Rainbow Mode", requestApply, "customization", "rainbow")
+					Accent.Toggle(true, true)
 
-					local ExtrasFolder = tab.AddFolder("Menu Extras")
-					sliders.gradrotation = ExtrasFolder.AddSlider("Gradient Angle", requestApply, 0, 360, "customization", "gradrotation", { Left = true })
-					switches.gradanimated = ExtrasFolder.AddSwitch("Animate Gradient", requestApply, "customization", "gradanimated")
-					switches.rainbow = ExtrasFolder.AddSwitch("Rainbow Mode", requestApply, "customization", "rainbow")
-					switches.bggradient = ExtrasFolder.AddSwitch("Background Gradient", requestApply, "customization", "bggradient")
-					makeColorPicker(ExtrasFolder, "Background End", "bgend", { 30, 34, 48 }, function()
+					makeColorPicker(Background, "Window Color", "bg", { 21, 22, 23 }, requestApply)
+					switches.bggradient = Background.AddSwitch("Use Gradient", requestApply, "customization", "bggradient")
+					makeColorPicker(Background, "Gradient Color", "bgend", { 30, 34, 48 }, function()
 						if cust.bggradient ~= true then
 							setSwitch("bggradient", true)
 						end
 
 						requestApply()
 					end)
-					sliders.bgrotation = ExtrasFolder.AddSlider("Background Angle", requestApply, 0, 360, "customization", "bgrotation", { Left = true })
-					sliders.windowtransparency = ExtrasFolder.AddSlider("Window Transparency", requestApply, 0, 90, "customization", "windowtransparency", { Left = true })
-					sliders.paneltransparency = ExtrasFolder.AddSlider("Panel Transparency", requestApply, 0, 90, "customization", "paneltransparency", { Left = true })
-					switches.outline = ExtrasFolder.AddSwitch("Glowing Outline", requestApply, "customization", "outline")
-					sliders.outlinethickness = ExtrasFolder.AddSlider("Outline Size", requestApply, 1, 6, "customization", "outlinethickness", { Left = true })
+					sliders.bgrotation = Background.AddSlider("Gradient Angle", requestApply, 0, 360, "customization", "bgrotation", { Left = true })
+					makeColorPicker(Background, "Panel Color", "panel", { 42, 42, 42 }, requestApply)
+					Background.Toggle(true, true)
 
-					fontDropdown = ExtrasFolder.AddDropdown("Font", FONTS, nil, function()
+					sliders.windowtransparency = Window.AddSlider("Window Transparency", requestApply, 0, 90, "customization", "windowtransparency", { Left = true })
+					sliders.paneltransparency = Window.AddSlider("Panel Transparency", requestApply, 0, 90, "customization", "paneltransparency", { Left = true })
+					switches.outline = Window.AddSwitch("Glowing Outline", requestApply, "customization", "outline")
+					sliders.outlinethickness = Window.AddSlider("Outline Size", requestApply, 1, 6, "customization", "outlinethickness", { Left = true })
+
+					fontDropdown = Window.AddDropdown("Font", FONTS, nil, function()
 						requestApply()
 					end, "customization", "font")
 
-					ExtrasFolder.AddButton("Random Colors", randomizeTheme)
-					ExtrasFolder.AddButton("Copy Theme To Clipboard", exportTheme)
-					ExtrasFolder.AddTextBox("Paste theme here", importTheme, nil, nil, { Clear = true })
+					Window.Toggle(true, true)
 
-					-- post processing -------------------------------------------------
-					feature("Effects", function()
-						local folder = tab.AddFolder("Effects")
-						local motionBlur = nil
-						local lastLook = nil
-						local lastPos = nil
-						local blurSize = 0
+					switches.skyenabled = SkyFolder.AddSwitch("Enable Custom Sky", setSky, "customization", "sky", {
+						Tooltip = "Client-side only. Picking a sky color turns this on automatically.",
+					})
 
-						local function ensure(class, name)
-							local inst = Lighting:FindFirstChild(name)
-
-							if inst and inst.ClassName ~= class then
-								inst:Destroy()
-								inst = nil
-							end
-
-							if not inst then
-								inst = Instance.new(class)
-								inst.Name = name
-								inst.Parent = Lighting
-							end
-
-							return inst
-						end
-
-						-- blur that follows how fast the camera turns and moves, eased so it fades in and out smoothly
-						local function motionStep(dt)
-							local camera = workspace.CurrentCamera
-
-							if not camera or not motionBlur or dt <= 0 then
-								return
-							end
-
-							local look = camera.CFrame.LookVector
-							local pos = camera.CFrame.Position
-							local target = 0
-
-							if lastLook then
-								local angle = math.deg(math.acos(math.clamp(look:Dot(lastLook), -1, 1)))
-								target = (angle / dt) * 0.035 + ((pos - lastPos).Magnitude / dt) * 0.03
-							end
-
-							lastLook = look
-							lastPos = pos
-
-							target = math.clamp(target * math.clamp(num("fxmotionpower", 40), 1, 100) / 50, 0, 30)
-							blurSize = blurSize + (target - blurSize) * (1 - math.exp(-dt * 10))
-							motionBlur.Size = blurSize
-						end
-
-						local function apply()
-							local bloom = Lighting:FindFirstChild("AtlasBloom")
-
-							if on("fxbloom") then
-								local power = math.clamp(num("fxbloompower", 50), 1, 100)
-								bloom = ensure("BloomEffect", "AtlasBloom")
-								bloom.Enabled = true
-								bloom.Intensity = power / 40
-								bloom.Size = 12 + power * 0.4
-								bloom.Threshold = 1 - power * 0.006
-							elseif bloom then
-								bloom.Enabled = false
-							end
-
-							local rays = Lighting:FindFirstChild("AtlasRays")
-
-							if on("fxrays") then
-								rays = ensure("SunRaysEffect", "AtlasRays")
-								rays.Enabled = true
-								rays.Intensity = math.clamp(num("fxrayspower", 40), 1, 100) / 100
-								rays.Spread = 0.8
-							elseif rays then
-								rays.Enabled = false
-							end
-
-							if on("fxmotion") then
-								motionBlur = ensure("BlurEffect", "AtlasMotionBlur")
-								motionBlur.Enabled = true
-
-								if not connections:Get("custommotion") then
-									lastLook = nil
-									lastPos = nil
-									blurSize = 0
-
-									connections:Add("custommotion", RunService.RenderStepped:Connect(function(dt)
-										pcall(motionStep, dt)
-									end))
-								end
-							else
-								connections:Cancel("custommotion")
-								local blur = Lighting:FindFirstChild("AtlasMotionBlur")
-
-								if blur then
-									blur.Size = 0
-									blur.Enabled = false
-								end
-							end
-
-							needsQuality = (on("fxmotion") or on("fxbloom") or on("fxrays")) and cust.fxquality ~= false
-
-							if graphicsRequest then
-								graphicsRequest()
-							end
-						end
-
-						local request = debounce(apply)
-						requests[#requests + 1] = request
-
-						cleanups[#cleanups + 1] = function()
-							connections:Cancel("custommotion")
-							needsQuality = false
-
-							for _, name in ipairs({ "AtlasMotionBlur", "AtlasBloom", "AtlasRays" }) do
-								local effect = Lighting:FindFirstChild(name)
-
-								if effect then
-									effect:Destroy()
-								end
-							end
-
-							if graphicsRequest then
-								graphicsRequest()
-							end
-						end
-
-						addSwitch(folder, "Motion Blur", "fxmotion", request, {
-							Tooltip = "Blurs the screen while the camera turns or moves fast, and fades smoothly back to sharp.",
-						})
-						addSlider(folder, "Motion Blur Strength", "fxmotionpower", 1, 100, request)
-						addSwitch(folder, "Bloom (glow)", "fxbloom", request)
-						addSlider(folder, "Bloom Strength", "fxbloompower", 1, 100, request)
-						addSwitch(folder, "Sun Rays", "fxrays", request)
-						addSlider(folder, "Sun Rays Strength", "fxrayspower", 1, 100, request)
-						addSwitch(folder, "Fix On Low Graphics", "fxquality", request, {
-							Tooltip = "Bloom and Sun Rays need a higher graphics level (Anti Lag sets the lowest). This raises it while an effect is on.",
-						})
+					SkyFolder.AddDropdown("Sky Preset", SKY_NAMES, nil, function(name)
+						applySkyPreset(name)
 					end)
 
-					-- color correction ------------------------------------------------
-					feature("Color Correction", function()
-						local folder = tab.AddFolder("Color Correction")
-
-						local function apply()
-							local effect = Lighting:FindFirstChild("AtlasColorCorrection")
-
-							if not on("cc") then
-								if effect then
-									effect.Enabled = false
-								end
-
-								return
-							end
-
-							if not effect then
-								effect = Instance.new("ColorCorrectionEffect")
-								effect.Name = "AtlasColorCorrection"
-								effect.Parent = Lighting
-							end
-
-							effect.Enabled = true
-							effect.Brightness = math.clamp(num("ccbrightness", 0), -100, 100) / 100
-							effect.Contrast = math.clamp(num("cccontrast", 0), -100, 100) / 100
-							effect.Saturation = math.clamp(num("ccsaturation", 0), -100, 100) / 100
-							effect.TintColor = rgbOf("cctint", 255, 255, 255)
+					makeColorPicker(SkyFolder, "Sky Top", "sky", { 90, 170, 255 }, function()
+						if cust.sky ~= true then
+							setSwitch("skyenabled", true)
+						end
+					end)
+					switches.skygradient = SkyFolder.AddSwitch("Two-Color Sky", nil, "customization", "skygradient")
+					makeColorPicker(SkyFolder, "Sky Horizon", "sky2", { 40, 100, 220 }, function()
+						if cust.skygradient ~= true then
+							setSwitch("skygradient", true)
 						end
 
-						local request = debounce(apply)
-						requests[#requests + 1] = request
-
-						cleanups[#cleanups + 1] = function()
-							local effect = Lighting:FindFirstChild("AtlasColorCorrection")
-
-							if effect then
-								effect:Destroy()
-							end
+						if cust.sky ~= true then
+							setSwitch("skyenabled", true)
 						end
+					end)
+					switches.skyhidebodies = SkyFolder.AddSwitch("Hide Sun/Moon/Stars", nil, "customization", "skyhidebodies")
+					switches.skyclearhaze = SkyFolder.AddSwitch("Remove Game Haze", nil, "customization", "skyclearhaze", {
+						Tooltip = "Turns off the game's atmosphere haze so your sky colors are not washed out.",
+					})
+					switches.skytint = SkyFolder.AddSwitch("Tint World Lighting", nil, "customization", "skytint")
+					switches.skyfog = SkyFolder.AddSwitch("Colored Fog", nil, "customization", "skyfog")
+					sliders.skyfogend = SkyFolder.AddSlider("Fog Distance", nil, 100, 10000, "customization", "skyfogend", { Left = true })
 
-						local CC_NAMES = { "Default", "Vivid", "Cinematic", "Warm", "Cool", "Black & White", "Night" }
+					switches.skylocktime = SkyFolder.AddSwitch("Lock Time Of Day", nil, "customization", "skylocktime", {
+						Tooltip = "Changes Lighting.ClockTime. Features that detect night (fireflies, memory match) will see this time.",
+					})
 
-						local CC_PRESETS = {
-							Default = { 0, 0, 0, { 255, 255, 255 } },
-							Vivid = { 0, 15, 35, { 255, 255, 255 } },
-							Cinematic = { -5, 25, -10, { 240, 235, 225 } },
-							Warm = { 3, 5, 10, { 255, 225, 190 } },
-							Cool = { 0, 5, 0, { 200, 225, 255 } },
-							["Black & White"] = { 0, 10, -100, { 255, 255, 255 } },
-							Night = { -15, 10, -20, { 150, 170, 255 } },
-						}
+					sliders.skytime = SkyFolder.AddSlider("Time Of Day", nil, 0, 24, "customization", "skytime", { Left = true, Decimal = true })
 
-						addSwitch(folder, "Enable", "cc", request)
-
-						folder.AddDropdown("Preset", CC_NAMES, nil, function(name)
-							local preset = CC_PRESETS[name]
-
-							if preset then
-								setSlider("ccbrightness", preset[1])
-								setSlider("cccontrast", preset[2])
-								setSlider("ccsaturation", preset[3])
-								setPicker("cctint", preset[4])
-								setSwitch("cc", true)
-								request()
-							end
-						end)
-
-						addSlider(folder, "Brightness", "ccbrightness", -100, 100, request)
-						addSlider(folder, "Contrast", "cccontrast", -100, 100, request)
-						addSlider(folder, "Saturation", "ccsaturation", -100, 100, request)
-						makeColorPicker(folder, "Tint", "cctint", { 255, 255, 255 }, request)
+					SkyFolder.AddButton("Reset Sky", function()
+						setSwitch("skyenabled", false)
 					end)
 
-					-- graphics + particles ---------------------------------------------
-					feature("Graphics", function()
-						local folder = tab.AddFolder("Graphics")
-						local rendering = nil
-
-						pcall(function()
-							rendering = settings().Rendering
-						end)
-
-						local origQuality = nil
-						local origShadows = nil
-						local emitters = setmetatable({}, weak)
-						local scanned = false
-
-						local function factor()
-							if on("particles") then
-								return math.clamp(num("particleamount", 50), 0, 100) / 100
-							end
-
-							return 1
-						end
-
-						local function applyEmitter(emitter)
-							local base = emitter:GetAttribute("AtlasRate0")
-
-							if type(base) == "number" then
-								emitter.Rate = base * factor()
-							end
-						end
-
-						local function trackEmitter(emitter)
-							if emitter:GetAttribute("AtlasOwn") then
-								return
-							end
-
-							if type(emitter:GetAttribute("AtlasRate0")) ~= "number" then
-								emitter:SetAttribute("AtlasRate0", emitter.Rate)
-							end
-
-							emitters[emitter] = true
-							applyEmitter(emitter)
-						end
-
-						local function apply()
-							-- quality level (also lifted for effects that need it)
-							if rendering then
-								local target = nil
-
-								if on("gfxq") then
-									target = math.clamp(math.floor(num("gfxqlevel", 10)), 1, 21)
-								elseif needsQuality and not connections:Get("antilag") then
-									local ok, current = pcall(function()
-										return rendering.QualityLevel.Value
-									end)
-
-									if ok and current ~= 0 and current < 10 then
-										target = 10
-									end
-								end
-
-								if target then
-									if origQuality == nil then
-										origQuality = rendering.QualityLevel
-									end
-
-									pcall(function()
-										rendering.QualityLevel = Enum.QualityLevel:FromValue(target)
-									end)
-								elseif origQuality ~= nil then
-									pcall(function()
-										rendering.QualityLevel = origQuality
-									end)
-
-									origQuality = nil
-								end
-							end
-
-							-- shadows
-							if on("gfxshadows") then
-								if origShadows == nil then
-									origShadows = Lighting.GlobalShadows
-								end
-
-								Lighting.GlobalShadows = false
-							elseif origShadows ~= nil then
-								Lighting.GlobalShadows = origShadows
-								origShadows = nil
-							end
-
-							-- particles
-							if on("particles") and not scanned then
-								scanned = true
-
-								task.spawn(function()
-									local count = 0
-
-									for _, descendant in ipairs(workspace:GetDescendants()) do
-										if descendant:IsA("ParticleEmitter") then
-											trackEmitter(descendant)
-										end
-
-										count += 1
-
-										if count % 4000 == 0 then
-											task.wait()
-										end
-									end
-								end)
-
-								connections:Add("customemitters", workspace.DescendantAdded:Connect(function(descendant)
-									if descendant:IsA("ParticleEmitter") then
-										task.defer(function()
-											pcall(trackEmitter, descendant)
-										end)
-									end
-								end))
-							else
-								for emitter in pairs(emitters) do
-									applyEmitter(emitter)
-								end
-							end
-						end
-
-						local request = debounce(apply)
-						requests[#requests + 1] = request
-						graphicsRequest = request
-
-						cleanups[#cleanups + 1] = function()
-							apply()
-						end
-
-						addSwitch(folder, "Override Quality", "gfxq", request, {
-							Tooltip = "Forces Roblox's graphics quality level. Lower is faster, higher looks better.",
-						})
-						addSlider(folder, "Quality Level", "gfxqlevel", 1, 21, request)
-						addSwitch(folder, "Disable Shadows", "gfxshadows", request)
-						addSwitch(folder, "Reduce Particles", "particles", request, {
-							Tooltip = "Lowers how many particles the game's effects create.",
-						})
-						addSlider(folder, "Particle Amount (%)", "particleamount", 0, 100, request)
-					end)
-
-					-- camera -------------------------------------------------------------
-					feature("Camera", function()
-						local folder = tab.AddFolder("Camera")
-						local bound = false
-						local origFov = nil
-						local fovLabel = nil
-
-						local RESOLUTIONS = {
-							"Off", "640x480", "720x480", "720x576", "800x600", "1024x768", "1152x864", "1176x664",
-							"1280x720", "1280x768", "1280x800", "1280x960", "1280x1024", "1280x1080", "1360x768",
-							"1366x768", "1440x900", "1440x1080", "1600x900", "1600x1024", "1600x1200", "1680x1050",
-							"1768x992", "1920x1080", "1920x1200", "1920x1440", "2048x1152", "2560x1080", "2560x1440",
-							"2560x1600", "3440x1440", "3840x2160",
-						}
-
-						local function fovDegrees()
-							return math.clamp(math.floor(num("fovstep", 14)), 1, 24) * 5
-						end
-
-						local function targetAspect()
-							local width, height = string.match(tostring(cust.resolution), "^(%d+)x(%d+)$")
-
-							if width and height and tonumber(height) > 0 then
-								return tonumber(width) / tonumber(height)
-							end
-
-							return nil
-						end
-
-						local function step()
-							local camera = workspace.CurrentCamera
-
-							if not camera then
-								return
-							end
-
-							if on("fov") then
-								local fov = fovDegrees()
-
-								if math.abs(camera.FieldOfView - fov) > 0.01 then
-									camera.FieldOfView = fov
-								end
-							end
-
-							local aspect = nil
-
-							if not unloading then
-								aspect = targetAspect()
-							end
-
-							if aspect then
-								local viewport = camera.ViewportSize
-								local scale = math.clamp(aspect / (viewport.X / math.max(viewport.Y, 1)), 0.3, 1.7)
-								camera.CFrame = camera.CFrame * CFrame.new(0, 0, 0, 1, 0, 0, 0, scale, 0, 0, 0, 1)
-							end
-						end
-
-						local function apply()
-							local camera = workspace.CurrentCamera
-							local needed = on("fov") or (not unloading and targetAspect() ~= nil)
-
-							if fovLabel then
-								fovLabel.Text = "Field of view: " .. fovDegrees()
-							end
-
-							if on("fov") then
-								if camera and origFov == nil then
-									origFov = camera.FieldOfView
-								end
-							elseif origFov ~= nil then
-								if camera then
-									camera.FieldOfView = origFov
-								end
-
-								origFov = nil
-							end
-
-							if needed and not bound then
-								bound = true
-
-								RunService:BindToRenderStep("AtlasCamera", Enum.RenderPriority.Camera.Value + 1, function()
-									pcall(step)
-								end)
-							elseif not needed and bound then
-								bound = false
-
-								pcall(function()
-									RunService:UnbindFromRenderStep("AtlasCamera")
-								end)
-							end
-						end
-
-						local request = debounce(apply)
-						requests[#requests + 1] = request
-
-						cleanups[#cleanups + 1] = function()
-							apply()
-						end
-
-						addSwitch(folder, "Custom FOV", "fov", request)
-						fovLabel = folder.AddLabel("Field of view: " .. fovDegrees())
-						addSlider(folder, "FOV Level (1-24)", "fovstep", 1, 24, request)
-						addDropdown(folder, "Screen Resolution", RESOLUTIONS, "resolution", request)
-						folder.AddLabel("Lower aspect ratio = stretched image")
-					end)
-
-					----------------------------------------------------------------
-					-- RIGHT COLUMN: sky, weather, player
-					----------------------------------------------------------------
-					feature("Sky", function()
-						local SkyFolder = tab.AddFolder("Sky", true)
-						local fogOrig = nil
-
-						-- fog works on its own, it does not need the custom sky
-						local function fogStep()
-							if connections:Get("antilag") then
-								return
-							end
-
-							local density = math.clamp(num("fogdensity", 30), 1, 100)
-							local far = 60 + ((100 - density) / 100) ^ 2 * 1940
-							setIf(Lighting, "FogColor", rgbOf("fog", 180, 200, 220))
-							setIf(Lighting, "FogStart", far * 0.15)
-							setIf(Lighting, "FogEnd", far)
-						end
-
-						local function applyFog()
-							if on("fog") then
-								if not fogOrig then
-									fogOrig = { Lighting.FogColor, Lighting.FogStart, Lighting.FogEnd }
-								end
-
-								if not connections:Get("customfog") then
-									connections:Add("customfog", RunService.Heartbeat:Connect(function()
-										pcall(fogStep)
-									end))
-								end
-							else
-								connections:Cancel("customfog")
-
-								if fogOrig then
-									if not connections:Get("antilag") then
-										Lighting.FogColor = fogOrig[1]
-										Lighting.FogStart = fogOrig[2]
-										Lighting.FogEnd = fogOrig[3]
-									end
-
-									fogOrig = nil
-								end
-							end
-						end
-
-						-- time of day: night in BSS is 19:00 to 05:00 on Lighting.ClockTime
-						local function applyTime()
-							local mode = cust.timemode
-
-							if (mode == "Day" or mode == "Night") and not unloading then
-								if not connections:Get("customtime") then
-									connections:Add("customtime", RunService.Heartbeat:Connect(function()
-										local target = cust.timemode == "Night" and 0 or 12
-
-										if math.abs(Lighting.ClockTime - target) > 0.01 then
-											Lighting.ClockTime = target
-										end
-									end))
-								end
-							else
-								connections:Cancel("customtime")
-							end
-						end
-
-						local requestFog = debounce(applyFog)
-						local requestTime = debounce(applyTime)
-						requests[#requests + 1] = requestFog
-						requests[#requests + 1] = requestTime
-
-						cleanups[#cleanups + 1] = function()
-							applyFog()
-							applyTime()
-						end
-
-						switches.skyenabled = SkyFolder.AddSwitch("Enable Custom Sky", setSky, "customization", "sky", {
-							Tooltip = "Replaces the sky with a solid color. Picking a color turns this on automatically.",
-						})
-
-						SkyFolder.AddDropdown("Sky Preset", SKY_NAMES, nil, function(name)
-							applySkyPreset(name)
-						end)
-
-						makeColorPicker(SkyFolder, "Sky Color", "sky", { 90, 170, 255 }, function()
-							if cust.sky ~= true then
-								setSwitch("skyenabled", true)
-							end
-						end)
-
-						addSwitch(SkyFolder, "Hide Sun/Moon/Stars", "skyhidebodies", nil)
-						addSwitch(SkyFolder, "Tint World Lighting", "skytint", nil, {
-							Tooltip = "Mixes the sky color into the world's lighting.",
-						})
-
-						addDropdown(SkyFolder, "Time Of Day (BSS)", { "Game Default", "Day", "Night" }, "timemode", requestTime)
-						SkyFolder.AddLabel("BSS night = 19:00-05:00")
-
-						addSwitch(SkyFolder, "Fog", "fog", requestFog, {
-							Tooltip = "Does not work while Anti Lag is on, because Anti Lag removes the fog.",
-						})
-						makeColorPicker(SkyFolder, "Fog Color", "fog", { 180, 200, 220 }, requestFog)
-						addSlider(SkyFolder, "Fog Density (%)", "fogdensity", 1, 100, requestFog)
-
-						SkyFolder.AddButton("Reset Sky", function()
-							setSwitch("skyenabled", false)
-						end)
-					end)
-
-					-- weather --------------------------------------------------------------
-					feature("Weather", function()
-						local folder = tab.AddFolder("Weather", true)
-						local part = nil
-						local emitter = nil
-						local clouds = nil
-						local cloudsOrig = nil
-						local createdClouds = false
-
-						local function stopParticles()
-							connections:Cancel("customweather")
-
-							if part then
-								part:Destroy()
-							end
-
-							part = nil
-							emitter = nil
-						end
-
-						local function restoreClouds()
-							if clouds then
-								if createdClouds then
-									clouds:Destroy()
-								elseif cloudsOrig then
-									clouds.Cover = cloudsOrig.Cover
-									clouds.Density = cloudsOrig.Density
-									clouds.Color = cloudsOrig.Color
-									clouds.Enabled = cloudsOrig.Enabled
-								end
-							end
-
-							clouds = nil
-							cloudsOrig = nil
-							createdClouds = false
-						end
-
-						local function ensureParticles()
-							if part and part.Parent then
-								return
-							end
-
-							part = Instance.new("Part")
-							part.Name = "AtlasWeather"
-							part.Anchored = true
-							part.CanCollide = false
-							part.CanQuery = false
-							part.CanTouch = false
-							part.Transparency = 1
-							part.Size = Vector3.new(100, 1, 100)
-							part:SetAttribute("AtlasOwn", true)
-							part.Parent = workspace
-
-							emitter = Instance.new("ParticleEmitter")
-							emitter.Name = "AtlasWeatherEmitter"
-							emitter:SetAttribute("AtlasOwn", true)
-							emitter.EmissionDirection = Enum.NormalId.Bottom
-							emitter.LockedToPart = false
-							emitter.Parent = part
-
-							connections:Add("customweather", RunService.Heartbeat:Connect(function()
-								local camera = workspace.CurrentCamera
-
-								if camera and part then
-									part.CFrame = CFrame.new(camera.CFrame.Position + Vector3.new(0, 45, 0))
-								end
-							end))
-						end
-
-						local function configure(mode, intensity)
-							if mode == "Rain" then
-								emitter.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-								emitter.Color = ColorSequence.new(Color3.fromRGB(170, 200, 255))
-								emitter.Size = NumberSequence.new(0.7)
-								emitter.Transparency = NumberSequence.new(0.4)
-								emitter.Lifetime = NumberRange.new(0.55, 0.65)
-								emitter.Speed = NumberRange.new(80, 95)
-								emitter.Acceleration = Vector3.new(0, -30, 0)
-								emitter.SpreadAngle = Vector2.new(1, 1)
-								emitter.Rate = 120 + intensity * 8
-								emitter.Orientation = Enum.ParticleOrientation.VelocityParallel
-								emitter.LightEmission = 0.3
-								emitter.RotSpeed = NumberRange.new(0)
-							else
-								emitter.Texture = "rbxasset://textures/particles/smoke_main.dds"
-								emitter.Color = ColorSequence.new(Color3.new(1, 1, 1))
-								emitter.Size = NumberSequence.new(0.4)
-								emitter.Transparency = NumberSequence.new(0.15)
-								emitter.Lifetime = NumberRange.new(3.5, 4.5)
-								emitter.Speed = NumberRange.new(9, 14)
-								emitter.Acceleration = Vector3.new(0, 0, 0)
-								emitter.SpreadAngle = Vector2.new(25, 25)
-								emitter.Rate = 50 + intensity * 4
-								emitter.Orientation = Enum.ParticleOrientation.FacingCamera
-								emitter.LightEmission = 0.2
-								emitter.RotSpeed = NumberRange.new(-40, 40)
-							end
-						end
-
-						local function applyClouds(intensity)
-							local terrain = workspace.Terrain
-
-							if not clouds or not clouds.Parent then
-								clouds = terrain:FindFirstChildOfClass("Clouds")
-
-								if clouds then
-									cloudsOrig = { Cover = clouds.Cover, Density = clouds.Density, Color = clouds.Color, Enabled = clouds.Enabled }
-									createdClouds = false
-								else
-									clouds = Instance.new("Clouds")
-									clouds.Parent = terrain
-									createdClouds = true
-								end
-							end
-
-							clouds.Enabled = true
-							clouds.Cover = 0.45 + intensity / 200
-							clouds.Density = 0.35 + intensity / 160
-							clouds.Color = Color3.fromRGB(175, 180, 195)
-						end
-
-						local function apply()
-							local mode = unloading and "Off" or cust.weather
-							local intensity = math.clamp(num("weatherintensity", 50), 1, 100)
-
-							if mode == "Rain" or mode == "Snow" then
-								restoreClouds()
-								ensureParticles()
-								configure(mode, intensity)
-							elseif mode == "Overcast" then
-								stopParticles()
-								applyClouds(intensity)
-							else
-								stopParticles()
-								restoreClouds()
-							end
-						end
-
-						local request = debounce(apply)
-						requests[#requests + 1] = request
-
-						cleanups[#cleanups + 1] = function()
-							apply()
-						end
-
-						addDropdown(folder, "Weather", { "Off", "Rain", "Snow", "Overcast" }, "weather", request)
-						addSlider(folder, "Intensity", "weatherintensity", 1, 100, request)
-					end)
-
-					-- trail ------------------------------------------------------------------
-					feature("Trail", function()
-						local folder = tab.AddFolder("Trail", true)
-
-						local function destroyTrail()
-							local char = localPlayer.Character
-							local root = char and char:FindFirstChild("HumanoidRootPart")
-
-							if root then
-								for _, name in ipairs({ "AtlasTrail", "AtlasTrailA", "AtlasTrailB" }) do
-									local object = root:FindFirstChild(name)
-
-									if object then
-										object:Destroy()
-									end
-								end
-							end
-						end
-
-						local function apply()
-							if not on("trail") then
-								connections:Cancel("customtrail")
-								destroyTrail()
-								return
-							end
-
-							local char = localPlayer.Character
-							local root = char and char:FindFirstChild("HumanoidRootPart")
-
-							if root then
-								local width = math.clamp(num("trailwidth", 10), 1, 40) / 10
-								local a0 = root:FindFirstChild("AtlasTrailA")
-								local a1 = root:FindFirstChild("AtlasTrailB")
-								local trail = root:FindFirstChild("AtlasTrail")
-
-								if not a0 then
-									a0 = Instance.new("Attachment")
-									a0.Name = "AtlasTrailA"
-									a0.Parent = root
-								end
-
-								if not a1 then
-									a1 = Instance.new("Attachment")
-									a1.Name = "AtlasTrailB"
-									a1.Parent = root
-								end
-
-								if not trail then
-									trail = Instance.new("Trail")
-									trail.Name = "AtlasTrail"
-									trail.Attachment0 = a0
-									trail.Attachment1 = a1
-									trail.Parent = root
-								end
-
-								a0.Position = Vector3.new(0, width / 2, 0)
-								a1.Position = Vector3.new(0, -width / 2, 0)
-								trail.Color = ColorSequence.new(rgbOf("trail", 90, 170, 255), rgbOf("trail2", 170, 90, 255))
-
-								trail.Transparency = NumberSequence.new({
-									NumberSequenceKeypoint.new(0, math.clamp(num("trailtrans", 20), 0, 100) / 100),
-									NumberSequenceKeypoint.new(1, 1),
-								})
-
-								trail.Lifetime = math.clamp(num("traillife", 6), 1, 30) / 10
-								trail.LightEmission = 0.6
-								trail.FaceCamera = true
-								trail.MinLength = 0.05
-								trail.Enabled = true
-							end
-
-							-- re-attach after respawn
-							if not connections:Get("customtrail") then
-								local elapsed = 0
-
-								connections:Add("customtrail", RunService.Heartbeat:Connect(function(dt)
-									elapsed += dt
-
-									if elapsed >= 0.5 then
-										elapsed = 0
-										pcall(apply)
-									end
-								end))
-							end
-						end
-
-						local request = debounce(apply)
-						requests[#requests + 1] = request
-
-						cleanups[#cleanups + 1] = function()
-							apply()
-						end
-
-						addSwitch(folder, "Enable", "trail", request)
-						makeColorPicker(folder, "Color", "trail", { 90, 170, 255 }, request)
-						makeColorPicker(folder, "End Color", "trail2", { 170, 90, 255 }, request)
-						addSlider(folder, "Length", "traillife", 1, 30, request)
-						addSlider(folder, "Width", "trailwidth", 1, 40, request)
-						addSlider(folder, "Transparency", "trailtrans", 0, 100, request)
-					end)
-
-					-- cursor -------------------------------------------------------------------
-					feature("Cursor", function()
-						local folder = tab.AddFolder("Cursor", true)
-						local frame = nil
-						local originalIcon = nil
-						local tinted = {}
-
-						local STYLES = { "Arrow", "Dot", "Ring", "Target", "Cross", "Crosshair", "Plus", "Diamond", "Square", "X" }
-
-						local function destroy()
-							connections:Cancel("customcursor")
-
-							if frame then
-								frame:Destroy()
-								frame = nil
-							end
-
-							tinted = {}
-
-							if originalIcon ~= nil then
-								pcall(function()
-									UserInputService.MouseIconEnabled = originalIcon
-								end)
-
-								originalIcon = nil
-							end
-						end
-
-						local function paint(color)
-							for _, item in ipairs(tinted) do
-								if item[2] == "bg" then
-									item[1].BackgroundColor3 = color
-								elseif item[2] == "stroke" then
-									item[1].Color = color
-								else
-									item[1].ImageColor3 = color
-								end
-							end
-						end
-
-						local function apply()
-							destroy()
-
-							if not on("cursor") then
-								return
-							end
-
-							if not UserInputService.MouseEnabled then
-								ui.Notify("Cursor", "A mouse is required for the custom cursor")
-								return
-							end
-
-							local size = math.clamp(num("cursorsize", 16), 6, 64)
-							local color = rgbOf("cursor", 255, 255, 255)
-							local style = cust.cursorstyle
-							local outline = cust.cursoroutline == true
-							local thickness = math.max(2, math.floor(size * 0.12))
-
-							frame = Instance.new("Frame")
-							frame.Name = "AtlasCursor"
-							frame.BackgroundTransparency = 1
-							frame.AnchorPoint = Vector2.new(0.5, 0.5)
-							frame.Size = UDim2.new(0, size, 0, size)
-							frame.ZIndex = 1000
-
-							local function box(anchor, position, boxSize, round, rotation)
-								local f = Instance.new("Frame")
-								f.BorderSizePixel = 0
-								f.BackgroundColor3 = color
-								f.AnchorPoint = anchor
-								f.Position = position
-								f.Size = boxSize
-								f.Rotation = rotation or 0
-								f.ZIndex = 1000
-
-								if round then
-									addCorner(f, UDim.new(1, 0))
-								end
-
-								if outline then
-									local stroke = Instance.new("UIStroke")
-									stroke.Thickness = 1
-									stroke.Color = Color3.new(0, 0, 0)
-									stroke.Parent = f
-								end
-
-								f.Parent = frame
-								tinted[#tinted + 1] = { f, "bg" }
-								return f
-							end
-
-							local function hollow(scale, round)
-								local f = Instance.new("Frame")
-								f.BackgroundTransparency = 1
-								f.AnchorPoint = Vector2.new(0.5, 0.5)
-								f.Position = UDim2.new(0.5, 0, 0.5, 0)
-								f.Size = UDim2.new(scale, 0, scale, 0)
-								f.ZIndex = 1000
-
-								if round then
-									addCorner(f, UDim.new(1, 0))
-								end
-
-								local stroke = Instance.new("UIStroke")
-								stroke.Thickness = thickness
-								stroke.Color = color
-								stroke.Parent = f
-								f.Parent = frame
-								tinted[#tinted + 1] = { stroke, "stroke" }
-								return f
-							end
-
-							local center = Vector2.new(0.5, 0.5)
-							local middle = UDim2.new(0.5, 0, 0.5, 0)
-
-							local function arms(gap)
-								local arm = size / 2 - gap
-								box(Vector2.new(0, 0.5), UDim2.new(0, 0, 0.5, 0), UDim2.new(0, arm, 0, thickness))
-								box(Vector2.new(1, 0.5), UDim2.new(1, 0, 0.5, 0), UDim2.new(0, arm, 0, thickness))
-								box(Vector2.new(0.5, 0), UDim2.new(0.5, 0, 0, 0), UDim2.new(0, thickness, 0, arm))
-								box(Vector2.new(0.5, 1), UDim2.new(0.5, 0, 1, 0), UDim2.new(0, thickness, 0, arm))
-							end
-
-							if style == "Arrow" then
-								local arrow = Instance.new("ImageLabel")
-								arrow.BackgroundTransparency = 1
-								arrow.Image = "rbxasset://textures/Cursors/KeyboardMouse/ArrowFarCursor.png"
-								arrow.ImageColor3 = color
-								arrow.AnchorPoint = center
-								arrow.Position = middle
-								arrow.Size = UDim2.new(2.4, 0, 2.4, 0)
-								arrow.ZIndex = 1000
-								arrow.Parent = frame
-								tinted[#tinted + 1] = { arrow, "image" }
-							elseif style == "Ring" then
-								hollow(1, true)
-							elseif style == "Target" then
-								hollow(1, true)
-								box(center, middle, UDim2.new(0.28, 0, 0.28, 0), true)
-							elseif style == "Cross" then
-								arms(size * 0.18)
-							elseif style == "Crosshair" then
-								arms(size * 0.18)
-								box(center, middle, UDim2.new(0, thickness + 1, 0, thickness + 1), true)
-							elseif style == "Plus" then
-								box(center, middle, UDim2.new(1, 0, 0, thickness))
-								box(center, middle, UDim2.new(0, thickness, 1, 0))
-							elseif style == "Diamond" then
-								box(center, middle, UDim2.new(0.62, 0, 0.62, 0), false, 45)
-							elseif style == "Square" then
-								hollow(0.9, false)
-							elseif style == "X" then
-								box(center, middle, UDim2.new(1.2, 0, 0, thickness), false, 45)
-								box(center, middle, UDim2.new(1.2, 0, 0, thickness), false, -45)
-							else
-								box(center, middle, UDim2.new(0.7, 0, 0.7, 0), true)
-							end
-
-							frame.Parent = getOverlay()
-							originalIcon = UserInputService.MouseIconEnabled
-							UserInputService.MouseIconEnabled = false
-
-							connections:Add("customcursor", RunService.RenderStepped:Connect(function()
-								local location = UserInputService:GetMouseLocation()
-								frame.Position = UDim2.new(0, location.X, 0, location.Y)
-
-								if UserInputService.MouseIconEnabled then
-									UserInputService.MouseIconEnabled = false
-								end
-
-								if cust.cursorrainbow == true then
-									paint(Color3.fromHSV((os.clock() * 0.25) % 1, 0.8, 1))
-								end
-							end))
-						end
-
-						local request = debounce(apply)
-						requests[#requests + 1] = request
-
-						cleanups[#cleanups + 1] = function()
-							destroy()
-						end
-
-						addSwitch(folder, "Enable", "cursor", request)
-						addDropdown(folder, "Style", STYLES, "cursorstyle", request)
-						makeColorPicker(folder, "Color", "cursor", { 255, 255, 255 }, request)
-						addSlider(folder, "Size", "cursorsize", 6, 64, request)
-						addSwitch(folder, "Outline", "cursoroutline", request)
-						addSwitch(folder, "Rainbow", "cursorrainbow", request)
-					end)
-
-					-- tool outline + hand position -------------------------------------------------
-					feature("Tool", function()
-						local folder = tab.AddFolder("Tool", true)
-						local statusLabel = folder.AddLabel("Tool: none")
-						local highlights = {}
-						local toolRef = nil
-						local lastScan = 0
-						local partCount = 0
-
-						local function currentTool()
-							local char = localPlayer.Character
-							return char and char:FindFirstChildOfClass("Tool")
-						end
-
-						local function findGrip()
-							local char = localPlayer.Character
-							return char and char:FindFirstChild("RightGrip", true)
-						end
-
-						local function clearHighlights()
-							for _, highlight in ipairs(highlights) do
-								highlight:Destroy()
-							end
-
-							highlights = {}
-							partCount = 0
-						end
-
-						-- one highlight per visible part, because a Tool is not always highlightable as a whole
-						local function outlineStep(tool)
-							if not on("toolol") or not tool then
-								if #highlights > 0 then
-									clearHighlights()
-									toolRef = nil
-								end
-
-								return
-							end
-
-							local char = localPlayer.Character
-
-							if tool ~= toolRef or os.clock() - lastScan > 1 then
-								toolRef = tool
-								lastScan = os.clock()
-								clearHighlights()
-
-								for _, descendant in ipairs(tool:GetDescendants()) do
-									if descendant:IsA("BasePart") and descendant.Transparency < 0.95 then
-										local highlight = Instance.new("Highlight")
-										highlight.Name = "AtlasToolOutline"
-										highlight.Adornee = descendant
-										highlight.FillTransparency = 1
-										highlight.OutlineTransparency = 0
-										highlight.DepthMode = Enum.HighlightDepthMode.Occluded
-										highlight.Parent = char
-										highlights[#highlights + 1] = highlight
-										partCount += 1
-
-										if partCount >= 12 then
-											break
-										end
-									end
-								end
-							end
-
-							local color = rgbOf("toolol", 90, 170, 255)
-
-							for _, highlight in ipairs(highlights) do
-								if highlight.OutlineColor ~= color then
-									highlight.OutlineColor = color
-									highlight.FillColor = color
-								end
-							end
-						end
-
-						local function gripStep()
-							local weld = findGrip()
-
-							if not weld then
-								return
-							end
-
-							local base = weld:GetAttribute("AtlasBaseC0")
-
-							if on("toolpos") then
-								if typeof(base) ~= "CFrame" then
-									base = weld.C0
-									weld:SetAttribute("AtlasBaseC0", base)
-								end
-
-								local offset = CFrame.new(num("toolx", 0) / 25, num("tooly", 0) / 25, num("toolz", 0) / 25)
-								local tilt = CFrame.Angles(math.rad(num("toolrx", 0)), 0, 0)
-								local target = offset * base * tilt
-
-								if weld.C0 ~= target then
-									weld.C0 = target
-								end
-							elseif typeof(base) == "CFrame" then
-								weld.C0 = base
-								weld:SetAttribute("AtlasBaseC0", nil)
-							end
-						end
-
-						local function step()
-							outlineStep(currentTool())
-							gripStep()
-						end
-
-						local function apply()
-							local needed = on("toolol") or on("toolpos")
-
-							if needed and not connections:Get("customtool") then
-								connections:Add("customtool", RunService.RenderStepped:Connect(function()
-									pcall(step)
-								end))
-							end
-
-							pcall(step)
-
-							if not needed then
-								connections:Cancel("customtool")
-							end
-						end
-
-						-- small live status so it is clear what the script sees
-						local statusElapsed = 0
-
-						connections:Add("customtoolstatus", RunService.Heartbeat:Connect(function(dt)
-							statusElapsed += dt
-
-							if statusElapsed < 0.5 then
-								return
-							end
-
-							statusElapsed = 0
-							local tool = currentTool()
-							local text = "No tool equipped"
-
-							if tool then
-								text = tool.Name .. (findGrip() and " (grip ok)" or " (no grip)")
-							end
-
-							if statusLabel.Text ~= text then
-								statusLabel.Text = text
-							end
-						end))
-
-						local request = debounce(apply)
-						requests[#requests + 1] = request
-
-						cleanups[#cleanups + 1] = function()
-							apply()
-							clearHighlights()
-						end
-
-						addSwitch(folder, "Tool Outline", "toolol", request)
-						makeColorPicker(folder, "Outline Color", "toolol", { 90, 170, 255 }, request)
-						addSwitch(folder, "Move Tool In Hand", "toolpos", request, {
-							Tooltip = "Moves the tool you hold. Only you see this.",
-						})
-						addSlider(folder, "Left / Right", "toolx", -100, 100, request)
-						addSlider(folder, "Up / Down", "tooly", -100, 100, request)
-						addSlider(folder, "Forward / Back", "toolz", -100, 100, request)
-						addSlider(folder, "Tilt", "toolrx", -90, 90, request)
-					end)
-
-					-- HUD ------------------------------------------------------------------------------
-					feature("HUD", function()
-						local folder = tab.AddFolder("HUD", true)
-						local widgetFolder = tab.AddFolder("HUD Widgets", true)
-						local widgets = {}
-						local editMode = false
-						local dragging = nil
-						local startClock = os.clock()
-						local startHoney = nil
-						local tabHeld = false
-
-						local WIDGETS = {
-							{ "name", "Script Name", "" },
-							{ "nick", "Nickname", "PLAYER" },
-							{ "fps", "FPS", "FPS" },
-							{ "ping", "Ping", "PING" },
-							{ "players", "Players", "PLAYERS" },
-							{ "list", "Player List", "SERVER" },
-							{ "honey", "Honey", "HONEY" },
-							{ "rate", "Honey Per Hour", "HONEY/H" },
-							{ "pollen", "Pollen", "POLLEN" },
-							{ "session", "Session Time", "SESSION" },
-							{ "clock", "Clock", "TIME" },
-							{ "coords", "Position", "POS" },
-						}
-
-						local POSITION_NAMES = { "Top Left", "Top Center", "Top Right", "Mid Left", "Mid Right", "Bottom Left", "Bottom Center", "Bottom Right" }
-						local STYLES = { "Card", "Pill", "Plain" }
-
-						local function abbr(value)
-							local number = tonumber(value) or 0
-							local suffixes = { "", "K", "M", "B", "T", "Qa", "Qi", "Sx" }
-							local index = 1
-
-							while math.abs(number) >= 1000 and index < #suffixes do
-								number = number / 1000
-								index += 1
-							end
-
-							if index == 1 then
-								return tostring(math.floor(number))
-							end
-
-							return string.format("%.2f%s", number, suffixes[index])
-						end
-
-						local function stat(name)
-							local stats = localPlayer:FindFirstChild("CoreStats")
-							local value = stats and stats:FindFirstChild(name)
-							return value and value.Value or 0
-						end
-
-						local function sessionText()
-							local seconds = math.floor(os.clock() - startClock)
-							return string.format("%d:%02d:%02d", math.floor(seconds / 3600), math.floor(seconds / 60) % 60, seconds % 60)
-						end
-
-						local function destroy()
-							connections:Cancel("customhud")
-
-							for _, widget in pairs(widgets) do
-								widget.frame:Destroy()
-							end
-
-							widgets = {}
-							dragging = nil
-						end
-
-						local function styleStroke(widget)
-							local style = cust.hudstyle
-							local accent = rgbOf("hudacc", 90, 170, 255)
-
-							if editMode then
-								widget.stroke.Color = accent
-								widget.stroke.Thickness = 2
-								widget.stroke.Transparency = 0
-							elseif style == "Pill" then
-								widget.stroke.Color = accent
-								widget.stroke.Thickness = 1.5
-								widget.stroke.Transparency = 0.35
-							elseif style == "Card" then
-								widget.stroke.Color = Color3.new(1, 1, 1)
-								widget.stroke.Thickness = 1
-								widget.stroke.Transparency = 0.9
-							else
-								widget.stroke.Transparency = 1
-							end
-						end
-
-						local function buildWidget(id, label)
-							local style = cust.hudstyle
-							local size = math.clamp(num("hudsize", 14), 10, 26)
-							local accent = rgbOf("hudacc", 90, 170, 255)
-							local textColor = rgbOf("hudtext", 255, 255, 255)
-							local isList = id == "list"
-
-							local frame = Instance.new("Frame")
-							frame.Name = "AtlasHUD_" .. id
-							frame.AutomaticSize = Enum.AutomaticSize.XY
-							frame.Size = UDim2.new(0, 0, 0, 0)
-							frame.Position = UDim2.new(num("hudx_" .. id, 10) / 1000, 0, num("hudy_" .. id, 10) / 1000, 0)
-							frame.BackgroundColor3 = Color3.fromRGB(16, 17, 20)
-							frame.BackgroundTransparency = style == "Plain" and 1 or (style == "Pill" and 0.3 or 0.2)
-							frame.BorderSizePixel = 0
-							frame.Active = editMode
-							frame.ZIndex = 5
-
-							if style == "Card" then
-								addCorner(frame, UDim.new(0, 8))
-							elseif style == "Pill" then
-								addCorner(frame, UDim.new(isList and 0 or 1, isList and 12 or 0))
-							end
-
-							local stroke = Instance.new("UIStroke")
-							stroke.Name = "HudStroke"
-							stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-							stroke.Parent = frame
-
-							local content = Instance.new("Frame")
-							content.Name = "Content"
-							content.BackgroundTransparency = 1
-							content.BorderSizePixel = 0
-							content.AutomaticSize = Enum.AutomaticSize.XY
-							content.Size = UDim2.new(0, 0, 0, 0)
-							content.ZIndex = 6
-							content.Parent = frame
-
-							local padding = Instance.new("UIPadding")
-							padding.PaddingTop = UDim.new(0, style == "Plain" and 1 or 6)
-							padding.PaddingBottom = UDim.new(0, style == "Plain" and 1 or 6)
-							padding.PaddingLeft = UDim.new(0, style == "Card" and 16 or (style == "Plain" and 2 or 12))
-							padding.PaddingRight = UDim.new(0, style == "Plain" and 2 or 12)
-							padding.Parent = content
-
-							if style == "Card" then
-								local bar = Instance.new("Frame")
-								bar.Name = "Accent"
-								bar.BorderSizePixel = 0
-								bar.BackgroundColor3 = accent
-								bar.Position = UDim2.new(0, 6, 0, 6)
-								bar.Size = UDim2.new(0, 3, 1, -12)
-								bar.ZIndex = 6
-								addCorner(bar, UDim.new(0, 2))
-								bar.Parent = frame
-							end
-
-							local layout = Instance.new("UIListLayout")
-							layout.FillDirection = isList and Enum.FillDirection.Vertical or Enum.FillDirection.Horizontal
-							layout.SortOrder = Enum.SortOrder.LayoutOrder
-							layout.VerticalAlignment = Enum.VerticalAlignment.Center
-							layout.Padding = UDim.new(0, isList and 3 or 8)
-							layout.Parent = content
-
-							local function text(order, font, textSize, color)
-								local item = Instance.new("TextLabel")
-								item.BackgroundTransparency = 1
-								item.AutomaticSize = Enum.AutomaticSize.XY
-								item.Size = UDim2.new(0, 0, 0, 0)
-								item.Font = font
-								item.TextSize = textSize
-								item.TextColor3 = color
-								item.TextXAlignment = Enum.TextXAlignment.Left
-								item.TextYAlignment = Enum.TextYAlignment.Center
-								item.LayoutOrder = order
-								item.Text = ""
-								item.ZIndex = 6
-
-								if style == "Plain" then
-									item.TextStrokeColor3 = Color3.new(0, 0, 0)
-									item.TextStrokeTransparency = 0.35
-								end
-
-								item.Parent = content
-								return item
-							end
-
-							if label ~= "" then
-								local title = text(1, Enum.Font.GothamBold, size - 3, accent)
-								title.Text = label
-							end
-
-							local value = text(2, Enum.Font.GothamBold, size, textColor)
-
-							local widget = { id = id, frame = frame, value = value, stroke = stroke }
-							widgets[id] = widget
-							styleStroke(widget)
-
-							frame.InputBegan:Connect(function(input)
-								if editMode and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
-									dragging = { widget = widget, pointer = input.Position, origin = frame.AbsolutePosition }
-									dragging.x = dragging.origin.X
-									dragging.y = dragging.origin.Y
-								end
-							end)
-
-							frame.Parent = getOverlay()
-						end
-
-						local function colorFor(value, good, warn)
-							if value >= good then
-								return Color3.fromRGB(95, 220, 125)
-							elseif value >= warn then
-								return Color3.fromRGB(240, 200, 70)
-							end
-
-							return Color3.fromRGB(240, 90, 90)
-						end
-
-						local function update(fps)
-							local textColor = rgbOf("hudtext", 255, 255, 255)
-							local smart = cust.hudsmart ~= false
-
-							for id, widget in pairs(widgets) do
-								local value = widget.value
-								local color = textColor
-
-								if id == "name" then
-									value.Text = "Atlas BSS"
-								elseif id == "nick" then
-									value.Text = localPlayer.DisplayName
-								elseif id == "fps" then
-									value.Text = tostring(fps)
-
-									if smart then
-										color = colorFor(fps, 50, 30)
-									end
-								elseif id == "ping" then
-									local ping = 0
-
-									pcall(function()
-										ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue() + 0.5)
-									end)
-
-									value.Text = ping .. " ms"
-
-									if smart then
-										color = colorFor(-ping, -80, -150)
-									end
-								elseif id == "players" then
-									value.Text = #Players:GetPlayers() .. " / " .. Players.MaxPlayers
-								elseif id == "list" then
-									local names = {}
-
-									for _, player in ipairs(Players:GetPlayers()) do
-										names[#names + 1] = player.DisplayName
-									end
-
-									table.sort(names)
-
-									local lines = {}
-
-									for i = 1, math.min(#names, 22) do
-										lines[#lines + 1] = names[i]
-									end
-
-									if #names > 22 then
-										lines[#lines + 1] = "+" .. (#names - 22) .. " more"
-									end
-
-									value.Text = table.concat(lines, "\n")
-									widget.frame.Visible = cust.hudtab ~= true or tabHeld
-								elseif id == "honey" then
-									value.Text = abbr(stat("Honey"))
-								elseif id == "rate" then
-									local honey = stat("Honey")
-
-									if not startHoney then
-										startHoney = honey
-									end
-
-									local hours = math.max((os.clock() - startClock) / 3600, 0.01)
-									value.Text = abbr(math.max(0, (honey - startHoney) / hours))
-								elseif id == "pollen" then
-									value.Text = abbr(stat("Pollen")) .. " / " .. abbr(stat("Capacity"))
-								elseif id == "session" then
-									value.Text = sessionText()
-								elseif id == "clock" then
-									value.Text = os.date("%H:%M:%S")
-								elseif id == "coords" then
-									local char = localPlayer.Character
-									local root = char and char:FindFirstChild("HumanoidRootPart")
-
-									if root then
-										local p = root.Position
-										value.Text = math.floor(p.X) .. ", " .. math.floor(p.Y) .. ", " .. math.floor(p.Z)
-									end
-								end
-
-								value.TextColor3 = color
-							end
-						end
-
-						local function build()
-							destroy()
-
-							if not on("hud") then
-								return
-							end
-
-							for _, item in ipairs(WIDGETS) do
-								if cust["hudw_" .. item[1]] == true then
-									buildWidget(item[1], item[3])
-								end
-							end
-
-							local elapsed = 0.4
-							local frames = 0
-
-							connections:Add("customhud", RunService.RenderStepped:Connect(function(dt)
-								elapsed += dt
-								frames += 1
-
-								if elapsed < 0.4 then
-									return
-								end
-
-								local fps = math.floor(frames / elapsed + 0.5)
-								elapsed = 0
-								frames = 0
-								pcall(update, fps)
-							end))
-						end
-
-						local function arrange(corner)
-							task.spawn(function()
-								task.wait()
-
-								local viewport = getOverlay().AbsoluteSize
-								local ordered = {}
-
-								for _, item in ipairs(WIDGETS) do
-									if widgets[item[1]] then
-										ordered[#ordered + 1] = widgets[item[1]]
-									end
-								end
-
-								if #ordered == 0 then
-									return
-								end
-
-								local margin = 14
-								local gap = 6
-								local total = -gap
-
-								for _, widget in ipairs(ordered) do
-									total += widget.frame.AbsoluteSize.Y + gap
-								end
-
-								local top = string.find(corner, "Top") ~= nil
-								local bottom = string.find(corner, "Bottom") ~= nil
-								local left = string.find(corner, "Left") ~= nil
-								local right = string.find(corner, "Right") ~= nil
-								local y = margin
-
-								if bottom then
-									y = viewport.Y - margin - total
-								elseif not top then
-									y = (viewport.Y - total) / 2
-								end
-
-								for _, widget in ipairs(ordered) do
-									local size = widget.frame.AbsoluteSize
-									local x = (viewport.X - size.X) / 2
-
-									if left then
-										x = margin
-									elseif right then
-										x = viewport.X - size.X - margin
-									end
-
-									x = math.clamp(x, 0, math.max(viewport.X - size.X, 0))
-									y = math.clamp(y, 0, math.max(viewport.Y - size.Y, 0))
-									widget.frame.Position = UDim2.new(0, x, 0, y)
-									cust["hudx_" .. widget.id] = math.floor(x / viewport.X * 1000 + 0.5)
-									cust["hudy_" .. widget.id] = math.floor(y / viewport.Y * 1000 + 0.5)
-									y += size.Y + gap
-								end
-
-								saveConfig()
-							end)
-						end
-
-						local request = debounce(build)
-						requests[#requests + 1] = request
-
-						cleanups[#cleanups + 1] = function()
-							destroy()
-						end
-
-						-- dragging (only in edit mode)
-						connections:Add("customhudmove", UserInputService.InputChanged:Connect(function(input)
-							if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-								local viewport = getOverlay().AbsoluteSize
-								local size = dragging.widget.frame.AbsoluteSize
-								local delta = input.Position - dragging.pointer
-								dragging.x = math.clamp(dragging.origin.X + delta.X, 0, math.max(viewport.X - size.X, 0))
-								dragging.y = math.clamp(dragging.origin.Y + delta.Y, 0, math.max(viewport.Y - size.Y, 0))
-								dragging.widget.frame.Position = UDim2.new(0, dragging.x, 0, dragging.y)
-							end
-						end))
-
-						connections:Add("customhudend", UserInputService.InputEnded:Connect(function(input)
-							if dragging and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
-								local viewport = getOverlay().AbsoluteSize
-								cust["hudx_" .. dragging.widget.id] = math.floor(dragging.x / viewport.X * 1000 + 0.5)
-								cust["hudy_" .. dragging.widget.id] = math.floor(dragging.y / viewport.Y * 1000 + 0.5)
-								saveConfig()
-								dragging = nil
-							end
-						end))
-
-						connections:Add("customhudtab1", UserInputService.InputBegan:Connect(function(input)
-							if input.KeyCode == Enum.KeyCode.Tab then
-								tabHeld = true
-
-								if widgets.list and cust.hudtab == true then
-									widgets.list.frame.Visible = true
-								end
-							end
-						end))
-
-						connections:Add("customhudtab2", UserInputService.InputEnded:Connect(function(input)
-							if input.KeyCode == Enum.KeyCode.Tab then
-								tabHeld = false
-
-								if widgets.list and cust.hudtab == true then
-									widgets.list.frame.Visible = false
-								end
-							end
-						end))
-
-						addSwitch(folder, "Enable HUD", "hud", request)
-
-						folder.AddSwitch("Move Widgets (drag them)", function(enabled)
-							editMode = enabled
-
-							for _, widget in pairs(widgets) do
-								widget.frame.Active = enabled
-								styleStroke(widget)
-							end
-
-							if enabled and not on("hud") then
-								ui.Notify("HUD", "Turn on Enable HUD first")
-							end
-						end)
-
-						addDropdown(folder, "Style", STYLES, "hudstyle", request)
-						addSlider(folder, "Text Size", "hudsize", 10, 26, request)
-						makeColorPicker(folder, "Accent Color", "hudacc", { 90, 170, 255 }, request)
-						makeColorPicker(folder, "Text Color", "hudtext", { 255, 255, 255 }, request)
-						addSwitch(folder, "Color FPS / Ping By Value", "hudsmart", nil)
-
-						folder.AddDropdown("Auto Arrange", POSITION_NAMES, nil, function(name)
-							arrange(name)
-						end)
-
-						folder.AddButton("Reset Positions", function()
-							for index, item in ipairs(WIDGETS) do
-								cust["hudx_" .. item[1]] = 10
-								cust["hudy_" .. item[1]] = 10 + (index - 1) * 45
-							end
-
-							saveConfig()
-							request()
-						end)
-
-						for _, item in ipairs(WIDGETS) do
-							addSwitch(widgetFolder, item[2], "hudw_" .. item[1], request)
-						end
-
-						addSwitch(widgetFolder, "List Only While Holding TAB", "hudtab", request)
-					end)
-
-					-- waypoints ----------------------------------------------------------------------------
-					feature("Waypoints", function()
-						local folder = tab.AddFolder("Waypoints", true)
-						local waypoints = {}
-						local pendingName = ""
-						local counter = 0
-						local MAX_WAYPOINTS = 15
-
-						local header = folder.AddLabel("Waypoints (0/" .. MAX_WAYPOINTS .. ")")
-						local box = header.Parent
-
-						local list = Instance.new("ScrollingFrame")
-						list.Name = "WaypointList"
-						list.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-						list.BorderSizePixel = 0
-						list.Size = UDim2.new(1, -15, 0, 112)
-						list.ScrollBarThickness = 3
-						list.CanvasSize = UDim2.new(0, 0, 0, 0)
-						list.AutomaticCanvasSize = Enum.AutomaticSize.Y
-						addCorner(list, UDim.new(0, 4))
-
-						local listPadding = Instance.new("UIPadding")
-						listPadding.PaddingTop = UDim.new(0, 4)
-						listPadding.PaddingBottom = UDim.new(0, 4)
-						listPadding.PaddingLeft = UDim.new(0, 4)
-						listPadding.PaddingRight = UDim.new(0, 4)
-						listPadding.Parent = list
-
-						local listLayout = Instance.new("UIListLayout")
-						listLayout.Padding = UDim.new(0, 2)
-						listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-						listLayout.Parent = list
-						list.Parent = box
-
-						local empty = Instance.new("TextLabel")
-						empty.BackgroundTransparency = 1
-						empty.Size = UDim2.new(1, 0, 0, 22)
-						empty.Font = Enum.Font.GothamMedium
-						empty.TextSize = 12
-						empty.TextColor3 = Color3.fromRGB(150, 150, 158)
-						empty.Text = "No waypoints yet"
-						empty.Parent = list
-
-						local function formatTime(seconds)
-							return string.format("%d:%02d", math.floor(seconds / 60), math.floor(seconds % 60))
-						end
-
-						local function refreshHeader()
-							header.Text = "Waypoints (" .. #waypoints .. "/" .. MAX_WAYPOINTS .. ")"
-							empty.Visible = #waypoints == 0
-						end
-
-						local function removeWaypoint(index)
-							local waypoint = waypoints[index]
-
-							if waypoint then
-								pcall(function()
-									waypoint.gui:Destroy()
-									waypoint.attachment:Destroy()
-									waypoint.row:Destroy()
-								end)
-
-								table.remove(waypoints, index)
-								refreshHeader()
-							end
-						end
-
-						local function clearAll()
-							for index = #waypoints, 1, -1 do
-								removeWaypoint(index)
-							end
-
-							connections:Cancel("customwaypoints")
-						end
-
-						local function update()
-							local char = localPlayer.Character
-							local root = char and char:FindFirstChild("HumanoidRootPart")
-							local expire = math.clamp(num("wpexpire", 0), 0, 60) * 60
-
-							for index = #waypoints, 1, -1 do
-								local waypoint = waypoints[index]
-								local elapsed = os.clock() - waypoint.created
-
-								if expire > 0 and elapsed >= expire then
-									removeWaypoint(index)
-								else
-									local text = formatTime(elapsed)
-
-									if cust.wpdistance == true and root then
-										text = math.floor((waypoint.attachment.WorldPosition - root.Position).Magnitude) .. "m  " .. text
-									end
-
-									waypoint.info.Text = text
-									waypoint.info2.Text = text
-									waypoint.nameLabel.Text = index .. ". " .. waypoint.name
-									waypoint.row.LayoutOrder = index
-								end
-							end
-
-							if #waypoints == 0 then
-								connections:Cancel("customwaypoints")
-							end
-						end
-
-						local function addWaypoint()
-							local char = localPlayer.Character
-							local root = char and char:FindFirstChild("HumanoidRootPart")
-
-							if not root then
-								ui.Notify("Waypoints", "Character not found")
-								return
-							end
-
-							if #waypoints >= MAX_WAYPOINTS then
-								ui.Notify("Waypoints", "Waypoint limit reached (" .. MAX_WAYPOINTS .. ")")
-								return
-							end
-
-							counter += 1
-							local name = pendingName ~= "" and pendingName or ("Waypoint " .. counter)
-							local color = rgbOf("wp", 255, 200, 60)
-
-							local attachment = Instance.new("Attachment")
-							attachment.Name = "AtlasWaypoint"
-							attachment.Parent = workspace.Terrain
-							attachment.WorldPosition = root.Position
-
-							-- in-world marker
-							local gui = Instance.new("BillboardGui")
-							gui.Name = "AtlasWaypointGui"
-							gui.Adornee = attachment
-							gui.AlwaysOnTop = true
-							gui.Size = UDim2.new(0, 170, 0, 46)
-							gui.StudsOffset = Vector3.new(0, 2, 0)
-							gui.ResetOnSpawn = false
-
-							local dot = Instance.new("Frame")
-							dot.BorderSizePixel = 0
-							dot.BackgroundColor3 = color
-							dot.AnchorPoint = Vector2.new(0.5, 0)
-							dot.Position = UDim2.new(0.5, 0, 0, 0)
-							dot.Size = UDim2.new(0, 10, 0, 10)
-							addCorner(dot, UDim.new(1, 0))
-							dot.Parent = gui
-
-							local title = Instance.new("TextLabel")
-							title.BackgroundTransparency = 1
-							title.Position = UDim2.new(0, 0, 0, 12)
-							title.Size = UDim2.new(1, 0, 0, 16)
-							title.Font = Enum.Font.GothamBold
-							title.TextSize = 14
-							title.TextColor3 = color
-							title.TextStrokeTransparency = 0.4
-							title.Text = name
-							title.Parent = gui
-
-							local info = Instance.new("TextLabel")
-							info.BackgroundTransparency = 1
-							info.Position = UDim2.new(0, 0, 0, 28)
-							info.Size = UDim2.new(1, 0, 0, 14)
-							info.Font = Enum.Font.GothamMedium
-							info.TextSize = 12
-							info.TextColor3 = Color3.fromRGB(235, 235, 235)
-							info.TextStrokeTransparency = 0.5
-							info.Text = "0:00"
-							info.Parent = gui
-							gui.Parent = ScreenGui.Parent
-
-							-- row in the menu list
-							local row = Instance.new("Frame")
-							row.BackgroundTransparency = 1
-							row.Size = UDim2.new(1, 0, 0, 22)
-							row.LayoutOrder = #waypoints + 1
-
-							local nameLabel = Instance.new("TextLabel")
-							nameLabel.BackgroundTransparency = 1
-							nameLabel.Position = UDim2.new(0, 2, 0, 0)
-							nameLabel.Size = UDim2.new(1, -112, 1, 0)
-							nameLabel.Font = Enum.Font.GothamMedium
-							nameLabel.TextSize = 12
-							nameLabel.TextColor3 = color
-							nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-							nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-							nameLabel.Text = #waypoints + 1 .. ". " .. name
-							nameLabel.Parent = row
-
-							local info2 = Instance.new("TextLabel")
-							info2.BackgroundTransparency = 1
-							info2.Position = UDim2.new(1, -108, 0, 0)
-							info2.Size = UDim2.new(0, 84, 1, 0)
-							info2.Font = Enum.Font.Gotham
-							info2.TextSize = 11
-							info2.TextColor3 = Color3.fromRGB(165, 165, 172)
-							info2.TextXAlignment = Enum.TextXAlignment.Right
-							info2.Text = "0:00"
-							info2.Parent = row
-
-							local remove = Instance.new("TextButton")
-							remove.AutoButtonColor = false
-							remove.BackgroundColor3 = Color3.fromRGB(70, 40, 44)
-							remove.BorderSizePixel = 0
-							remove.Position = UDim2.new(1, -20, 0.5, -9)
-							remove.Size = UDim2.new(0, 18, 0, 18)
-							remove.Font = Enum.Font.GothamBold
-							remove.TextSize = 12
-							remove.TextColor3 = Color3.fromRGB(240, 140, 140)
-							remove.Text = "x"
-							remove:SetAttribute("AtlasIgnore", true)
-							addCorner(remove, UDim.new(0, 4))
-							remove.Parent = row
-							row.Parent = list
-
-							local waypoint = {
-								name = name,
-								attachment = attachment,
-								gui = gui,
-								info = info,
-								info2 = info2,
-								nameLabel = nameLabel,
-								row = row,
-								created = os.clock(),
-							}
-
-							waypoints[#waypoints + 1] = waypoint
-
-							remove.MouseButton1Click:Connect(function()
-								local index = table.find(waypoints, waypoint)
-
-								if index then
-									removeWaypoint(index)
-								end
-							end)
-
-							refreshHeader()
-
-							if not connections:Get("customwaypoints") then
-								local elapsed = 0
-
-								connections:Add("customwaypoints", RunService.Heartbeat:Connect(function(dt)
-									elapsed += dt
-
-									if elapsed >= 0.25 then
-										elapsed = 0
-										pcall(update)
-									end
-								end))
-							end
-
-							update()
-						end
-
-						cleanups[#cleanups + 1] = clearAll
-
-						folder.AddTextBox("Waypoint name (optional)", function(text)
-							pendingName = type(text) == "string" and string.sub(text, 1, 24) or ""
-						end)
-
-						folder.AddButton("Add Waypoint Here", addWaypoint)
-
-						folder.AddButton("Remove Last", function()
-							removeWaypoint(#waypoints)
-						end)
-
-						folder.AddButton("Clear All", clearAll)
-						makeColorPicker(folder, "Marker Color", "wp", { 255, 200, 60 }, nil)
-						addSwitch(folder, "Show Distance", "wpdistance", nil)
-						addSlider(folder, "Auto Remove (min, 0 = never)", "wpexpire", 0, 60, nil)
-					end)
-
-					-- animations -----------------------------------------------------------------------------
-					feature("Animations", function()
-						local folder = tab.AddFolder("Animations", true)
-						local busy = false
-						local candidates = {}
-						local shownBefore = setmetatable({}, weak)
-						local lastScan = 0
-						local pollElapsed = 0
-
-						local KEYS = { "Off", "RightShift", "RightControl", "Insert", "Delete", "Home", "End", "F6", "F7", "F8", "K", "P" }
-						local SPEEDS = { Fast = 0.15, Normal = 0.25, Slow = 0.4 }
-
-						local function duration()
-							return SPEEDS[cust.animspeed] or 0.25
-						end
-
-						local function getScale(object)
-							local scale = object:FindFirstChild("AtlasPop")
-
-							if not scale then
-								scale = Instance.new("UIScale")
-								scale.Name = "AtlasPop"
-								scale.Parent = object
-							end
-
-							return scale
-						end
-
-						-- show animation for any object
-						local function play(object)
-							if cust.animstyle == "Slide" then
-								local base = object.Position
-								object.Position = base + UDim2.new(0, 0, 0, 24)
-								TweenService:Create(object, TweenInfo.new(duration(), Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = base }):Play()
-							else
-								local scale = getScale(object)
-								scale.Scale = 0.9
-								TweenService:Create(scale, TweenInfo.new(duration(), Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
-							end
-						end
-
-						-- the script window: animated show / hide
-						state.customToggle = function(nextVisible)
-							if not on("animwindow") then
-								return false
-							end
-
-							if busy then
-								return true
-							end
-
-							busy = true
-
-							local window = mobileToggleButton
-							local slide = cust.animstyle == "Slide"
-							local scale = getScale(window)
-							local basePos = window.Position
-							local size = window.AbsoluteSize
-							local small = 0.9
-
-							local function away()
-								if slide then
-									return basePos + UDim2.new(0, 0, 0, 24)
-								end
-
-								return UDim2.new(basePos.X.Scale, basePos.X.Offset + size.X * (1 - small) / 2, basePos.Y.Scale, basePos.Y.Offset + size.Y * (1 - small) / 2)
-							end
-
-							if nextVisible then
-								local info = TweenInfo.new(duration(), slide and Enum.EasingStyle.Quad or Enum.EasingStyle.Back, Enum.EasingDirection.Out)
-								scale.Scale = slide and 1 or small
-								window.Position = away()
-								window.Visible = true
-
-								local tween = TweenService:Create(window, info, { Position = basePos })
-
-								if not slide then
-									TweenService:Create(scale, info, { Scale = 1 }):Play()
-								end
-
-								tween.Completed:Once(function()
-									window.Position = basePos
-									scale.Scale = 1
-									busy = false
-								end)
-
-								tween:Play()
-							else
-								local info = TweenInfo.new(duration(), Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-								local tween = TweenService:Create(window, info, { Position = away() })
-
-								if not slide then
-									TweenService:Create(scale, info, { Scale = small }):Play()
-								end
-
-								tween.Completed:Once(function()
-									window.Visible = false
-									scale.Scale = 1
-									window.Position = basePos
-									busy = false
-								end)
-
-								tween:Play()
-							end
-
-							return true
-						end
-
-						local function toggleWindow()
-							local nextVisible = not mobileToggleButton.Visible
-							state.mobiletoggle = mobileToggleButton.Visible
-
-							if not (state.customToggle and state.customToggle(nextVisible)) then
-								mobileToggleButton.Visible = nextVisible
-							end
-
-							pcall(function()
-								if cfg.misc.console then
-									logger.toggle(nextVisible)
-								end
-							end)
-						end
-
-						connections:Add("custommenukey", UserInputService.InputBegan:Connect(function(input, processed)
-							if processed or cust.menukey == "Off" or UserInputService:GetFocusedTextBox() then
-								return
-							end
-
-							if input.KeyCode.Name == cust.menukey then
-								toggleWindow()
-							end
-						end))
-
-						-- tabs of this script and the game's own menus: animate when they become visible
-						local function isShown(object, root)
-							local current = object
-
-							while current and current ~= root do
-								if current:IsA("GuiObject") then
-									if not current.Visible then
-										return false
-									end
-								elseif current:IsA("ScreenGui") then
-									if not current.Enabled then
-										return false
-									end
-								end
-
-								current = current.Parent
-							end
-
-							return true
-						end
-
-						local function scan()
-							candidates = {}
-							local viewport = getOverlay().AbsoluteSize
-
-							local function consider(object)
-								if object:IsA("GuiObject") and not object:GetAttribute("AtlasIgnore") and object ~= mobileToggleButton and object.Name ~= "PickerPopup" and object.Name ~= "WaypointList" then
-									local size = object.AbsoluteSize
-
-									if size.X >= 180 and size.Y >= 110 and not (size.X >= viewport.X * 0.92 and size.Y >= viewport.Y * 0.92) then
-										candidates[#candidates + 1] = object
-									end
-								end
-							end
-
-							local function walk(parent, depth)
-								for _, child in ipairs(parent:GetChildren()) do
-									if child:IsA("GuiBase2d") or child:IsA("Folder") then
-										consider(child)
-
-										if depth < 3 then
-											walk(child, depth + 1)
-										end
-									end
-								end
-							end
-
-							if on("animgame") then
-								local playerGui = localPlayer:FindFirstChild("PlayerGui")
-
-								if playerGui then
-									for _, gui in ipairs(playerGui:GetChildren()) do
-										if gui:IsA("ScreenGui") and gui ~= ScreenGui then
-											walk(gui, 1)
-										end
-									end
-								end
-							end
-
-							if on("animtabs") then
-								walk(mobileToggleButton, 1)
-							end
-						end
-
-						local function poll()
-							if #candidates == 0 and not (on("animgame") or on("animtabs")) then
-								return
-							end
-
-							local playerGui = localPlayer:FindFirstChild("PlayerGui")
-
-							for _, object in ipairs(candidates) do
-								if object.Parent then
-									local root = object:IsDescendantOf(ScreenGui) and ScreenGui or playerGui
-									local shown = isShown(object, root)
-
-									if shown and shownBefore[object] == false then
-										play(object)
-									end
-
-									shownBefore[object] = shown
-								end
-							end
-						end
-
-						connections:Add("customanimpoll", RunService.Heartbeat:Connect(function(dt)
-							pollElapsed += dt
-
-							if pollElapsed < 0.1 then
-								return
-							end
-
-							pollElapsed = 0
-
-							if os.clock() - lastScan > 2 then
-								lastScan = os.clock()
-								pcall(scan)
-							end
-
-							pcall(poll)
-						end))
-
-						local request = debounce(function()
-							lastScan = 0
-						end)
-
-						requests[#requests + 1] = request
-
-						cleanups[#cleanups + 1] = function()
-							state.customToggle = nil
-							connections:Cancel("customanimpoll")
-							connections:Cancel("custommenukey")
-						end
-
-						addSwitch(folder, "Script Window Animation", "animwindow", nil, {
-							Tooltip = "Animates showing and hiding the script window (menu key or the round toggle button).",
-						})
-						addDropdown(folder, "Show/Hide Key", KEYS, "menukey", function() end)
-						addSwitch(folder, "Script Tab Animation", "animtabs", request)
-						addSwitch(folder, "Game Menu Animation", "animgame", request, {
-							Tooltip = "Animates the game's menus and pop-ups when they open.",
-						})
-						addDropdown(folder, "Style", { "Pop", "Slide" }, "animstyle", function() end)
-						addDropdown(folder, "Speed", { "Fast", "Normal", "Slow" }, "animspeed", function() end)
-					end)
+					SkyFolder.Toggle(true, true)
 
 					----------------------------------------------------------------
 					-- start theming: scan what exists and watch for new elements
@@ -70449,10 +69691,6 @@ more accurate dodging]],
 					end))
 
 					requestApply()
-
-					for _, request in ipairs(requests) do
-						request()
-					end
 				end
 
 				local ok, err = pcall(buildCustomization, controls.customization)
