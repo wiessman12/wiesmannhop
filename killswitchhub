@@ -632,6 +632,7 @@ local cfg = {
 		gradrotation = 0,
 		gradanimated = false,
 		rainbow = false,
+		rainbowspeed = 5,
 		bgr = 0, bgg = 0, bgb = 0,
 		bggradient = false,
 		bgendr = 10, bgendg = 10, bgendb = 12,
@@ -641,6 +642,9 @@ local cfg = {
 		outline = false,
 		outlinethickness = 2,
 		font = "Default",
+		textmode = "Normal",
+		neontext = false,
+		neonnumbers = false,
 		recent = "5E5E5E,8A8A88,5D4079,457A78,5E7A43,FF0000",
 		fxshader = "None", fxshaderpower = 70,
 		fxmotion = false, fxmotionpower = 40,
@@ -661,13 +665,16 @@ local cfg = {
 		trail = false, trailstyle = "Line", trailr = 255, trailg = 140, trailb = 40,
 		trail2r = 255, trail2g = 200, trail2b = 80,
 		traillife = 6, trailwidth = 10, trailtrans = 20,
+		trailrainbow = false, trailrainbowspeed = 5,
 		cursor = false, cursorstyle = "Pointer", cursorr = 255, cursorg = 255, cursorb = 255,
-		cursorsize = 16, cursoroutline = true, cursorrainbow = false,
+		cursorsize = 16, cursoroutline = true, cursorrainbow = false, cursorrainbowspeed = 5,
 		toolol = false, toololr = 255, toololg = 140, toololb = 40, toolhand = "Right Hand",
+		toolrainbow = false, toolrainbowspeed = 5,
 		toolpos = false, toolx = 0, tooly = 0, toolz = 0, toolrx = 0,
 		hud = false, hudstyle = "Card", hudsize = 14,
 		hudaccr = 255, hudaccg = 140, hudaccb = 40,
 		hudtextr = 255, hudtextg = 255, hudtextb = 255,
+		hudrainbow = false, hudrainbowspeed = 5,
 		hudsmart = true, hudtab = false, inspect = "None",
 		hudw_inspect = false, hudx_inspect = 10, hudy_inspect = 550,
 		hudw_name = true, hudx_name = 10, hudy_name = 10,
@@ -683,10 +690,15 @@ local cfg = {
 		hudw_clock = false, hudx_clock = 10, hudy_clock = 460,
 		hudw_coords = false, hudx_coords = 10, hudy_coords = 505,
 		wpr = 255, wpg = 140, wpb = 40, wpexpire = 0, wpdistance = true,
-		itemphysics = false, itemground = false,
+		wpkey = "N", wprainbow = false, wprainbowspeed = 5,
+		itemphysics = false, itemground = true,
+		itemmode = "Flat On Ground", itemfilter = "All Tokens & Abilities",
+		itemtokens = {}, itemoffset = 2, itemtilt = -90, itemyaw = 0,
+		itemscale = 100, itemnofx = true, itemduped = true,
 		hidebeams = false, hidefx = false, hidesky = false, hidenpcs = false, hidetags = false,
 		predplayer = false, predland = false, predmob = false, predr = 255, predg = 140, predb = 40, predlength = 2,
-		dur = false, durrange = 200,
+		predrainbow = false, predrainbowspeed = 5,
+		dur = false, durrange = 200, durtokens = true, durplayers = true, durself = true,
 		animwindow = false, animtabs = false, animgame = false,
 		animstyle = "Pop", animspeed = "Normal", menukey = "RightShift",
 	},
@@ -1642,9 +1654,11 @@ do
 	ImageButton.Parent = Frame
 	local Frame2 = Instance.new("Frame")
 	Frame2.BackgroundColor3 = uicolor
+	Frame2.BackgroundTransparency = 1
 	Frame2.BorderSizePixel = 0
 	Frame2.Position = UDim2.new(0, 0, 0.85, 0)
 	Frame2.Size = UDim2.new(1, 0, 0, 4)
+	Frame2:SetAttribute("AtlasIgnore", true)
 	Frame2.Parent = Frame
 	local TextButton = Instance.new("TextButton")
 	TextButton.AutoButtonColor = false
@@ -1726,9 +1740,11 @@ do
 	local Frame6 = Instance.new("Frame")
 	Frame6.Name = "Frame"
 	Frame6.BackgroundColor3 = color_3
+	Frame6.BackgroundTransparency = 1
 	Frame6.BorderSizePixel = 0
 	Frame6.Position = UDim2.new(0, 0, 0, 18)
 	Frame6.Size = UDim2.new(1, 0, 0, 5)
+	Frame6:SetAttribute("AtlasIgnore", true)
 	Frame6.Parent = Frame4
 	Frame6.Visible = false
 	local Frame7 = Instance.new("Frame")
@@ -1747,8 +1763,8 @@ do
 		TextButton3.ClipsDescendants = true
 		TextButton3.Font = Enum.Font.GothamBold
 		TextButton3.TextColor3 = Color3.new(1, 1, 1)
-		TextButton3.TextSize = 13
-		TextButton3.Size = UDim2.new(0, 91, 0, 20)
+		TextButton3.TextSize = 12
+		TextButton3.Size = UDim2.new(0, 120, 0, 20)
 		uiParts.button = TextButton3
 		local UICorner5 = Instance.new("UICorner")
 		UICorner5.Name = "UICorner"
@@ -1791,11 +1807,11 @@ do
 		local TextLabel3 = Instance.new("TextLabel")
 		TextLabel3.Name = "Title"
 		TextLabel3.BackgroundTransparency = 1
-		TextLabel3.Position = UDim2.new(1.2, 0, 0, 0)
-		TextLabel3.Size = UDim2.new(0, 20, 0, 20)
+		TextLabel3.Position = UDim2.new(0, 28, 0, 0)
+		TextLabel3.Size = UDim2.new(0, 225, 0, 20)
 		TextLabel3.Font = Enum.Font.GothamSemibold
 		TextLabel3.TextColor3 = Color3.new(0.784314, 0.784314, 0.784314)
-		TextLabel3.TextSize = 13
+		TextLabel3.TextSize = 12
 		TextLabel3.TextXAlignment = Enum.TextXAlignment.Left
 		TextLabel3.Parent = TextButton3
 	end
@@ -1831,15 +1847,17 @@ do
 		Frame8.Name = "Dropdown"
 		Frame8.BackgroundTransparency = 1
 		Frame8.BorderSizePixel = 0
-		Frame8.Size = UDim2.new(0, 200, 0, 20)
+		Frame8.Size = UDim2.new(0, 260, 0, 20)
 		uiParts.dropdown = Frame8
 		local TextButton3 = Instance.new("TextButton")
 		TextButton3.AutoButtonColor = false
 		TextButton3.BackgroundColor3 = color_4
 		TextButton3.BorderSizePixel = 0
+		TextButton3.ClipsDescendants = true
 		TextButton3.Font = Enum.Font.GothamBold
 		TextButton3.TextColor3 = Color3.new(0.784314, 0.784314, 0.784314)
-		TextButton3.TextSize = 13
+		TextButton3.TextSize = 12
+		TextButton3.TextTruncate = Enum.TextTruncate.AtEnd
 		TextButton3.TextXAlignment = Enum.TextXAlignment.Left
 		TextButton3.Size = UDim2.new(1, 0, 0, 20)
 		TextButton3.Parent = Frame8
@@ -1890,7 +1908,7 @@ do
 		Frame8.Name = "Slider"
 		Frame8.BackgroundColor3 = color_4
 		Frame8.BorderSizePixel = 0
-		Frame8.Size = UDim2.new(1, -15, 0, 20)
+		Frame8.Size = UDim2.new(1, -15, 0, 24)
 		uiParts.slider = Frame8
 		local UICorner5 = Instance.new("UICorner")
 		UICorner5.Name = "UICorner"
@@ -1905,7 +1923,7 @@ do
 		Frame9.Name = "Indicator"
 		Frame9.BackgroundColor3 = color_5
 		Frame9.BorderSizePixel = 0
-		Frame9.Size = UDim2.new(0, 0, 0, 20)
+		Frame9.Size = UDim2.new(0, 0, 0, 24)
 		Frame9.Parent = Frame8
 		local UICorner6 = Instance.new("UICorner")
 		UICorner6.Name = "UICorner"
@@ -1916,10 +1934,11 @@ do
 		TextLabel3.BackgroundTransparency = 1
 		TextLabel3.Font = Enum.Font.GothamBold
 		TextLabel3.TextColor3 = Color3.new(0.784314, 0.784314, 0.784314)
-		TextLabel3.TextSize = 13
-		TextLabel3.TextXAlignment = Enum.TextXAlignment.Center
-		TextLabel3.Position = UDim2.new(0.5, 0, 0.5, -10)
-		TextLabel3.Size = UDim2.new(0, 0, 0, 20)
+		TextLabel3.TextSize = 12
+		TextLabel3.TextTruncate = Enum.TextTruncate.AtEnd
+		TextLabel3.TextXAlignment = Enum.TextXAlignment.Left
+		TextLabel3.Position = UDim2.new(0, 4, 0, 0)
+		TextLabel3.Size = UDim2.new(1, -54, 0, 15)
 		TextLabel3.Parent = Frame8
 		local TextLabel4 = Instance.new("TextLabel")
 		TextLabel4.Name = "Value"
@@ -1927,9 +1946,9 @@ do
 		TextLabel4.Font = Enum.Font.GothamBold
 		TextLabel4.Text = "0"
 		TextLabel4.TextColor3 = Color3.new(0.784314, 0.784314, 0.784314)
-		TextLabel4.TextSize = 13
-		TextLabel4.Position = UDim2.new(1, -45, 0.5, -10)
-		TextLabel4.Size = UDim2.new(0, 45, 0, 20)
+		TextLabel4.TextSize = 12
+		TextLabel4.Position = UDim2.new(1, -50, 0, 0)
+		TextLabel4.Size = UDim2.new(0, 48, 0, 15)
 		TextLabel4.Parent = Frame8
 	end
 
@@ -2390,9 +2409,12 @@ do
 	local Frame11 = Instance.new("Frame")
 	Frame11.Name = "Divider"
 	Frame11.BackgroundColor3 = Color3.fromRGB(56, 56, 56)
+	Frame11.BackgroundTransparency = 1
 	Frame11.BorderSizePixel = 0
 	Frame11.Position = UDim2.new(0, 0, 0, 28)
-	Frame11.Size = UDim2.new(1, 0, 0, 2)
+	Frame11.Size = UDim2.new(1, 0, 0, 0)
+	Frame11.Visible = false
+	Frame11:SetAttribute("AtlasIgnore", true)
 	Frame11.Parent = ScrollingFrame
 	local UICorner6 = Instance.new("UICorner")
 	UICorner6.CornerRadius = UDim.new(0, 4)
@@ -2572,11 +2594,10 @@ do
 			folderApi.AddButton = function(text, callback, width)
 				table.insert(fieldClones, { text, clone })
 				local clone5 = uiParts.button:Clone()
-
-				if width then
-					clone5.Size = UDim2.new(0, width, 0, 20)
-				end
-
+				local textLen = #tostring(text or "")
+				local autoWidth = math.clamp(math.max(width or 0, math.ceil(textLen * 7.5 + 24), 120), 110, 268)
+				clone5.Size = UDim2.new(0, autoWidth, 0, 20)
+				clone5.TextSize = textLen > 30 and 11 or 12
 				clone5.Text = text
 				clone5.Parent = box
 
@@ -2783,16 +2804,21 @@ do
 				local selected = {}
 				local dropdownApi = {}
 				local clone5 = uiParts.dropdown:Clone()
-
-				if not (not options or not options.Width) then
-					clone5.Size = UDim2.new(0, options.Width, 0, 20)
-				end
+				local dropWidth = options and options.Width or 260
+				clone5.Size = UDim2.new(0, dropWidth, 0, 20)
 
 				local box2 = clone5.Box
 				local objects = box2.Objects
 				local textButton2 = clone5.TextButton
 				local indicator = textButton2.Indicator
-				textButton2.Text = "   " .. dropdownTitle
+
+				local function setHeaderText(str)
+					textButton2.Text = str
+					local len = #tostring(str or "")
+					textButton2.TextSize = len > 36 and 10 or (len > 28 and 11 or 12)
+				end
+
+				setHeaderText("   " .. dropdownTitle)
 				clone5.Parent = box
 				local blacklist = options and options.Blacklist
 				local multiple = options and options.Multiple
@@ -2802,7 +2828,7 @@ do
 
 				if not multiple and not (not configTable or not configTable[configKey]) then
 					local currentValue = configTable[configKey]
-					textButton2.Text = "   " .. dropdownTitle .. ": " .. currentValue
+					setHeaderText("   " .. dropdownTitle .. ": " .. tostring(currentValue))
 
 					if callback then
 						callback(currentValue, currentValue)
@@ -2813,7 +2839,7 @@ do
 					if newValue then
 						if not multiple or not itemsAreKeyed then
 							if not multiple then
-								textButton2.Text = "   " .. dropdownTitle .. ": " .. newValue
+								setHeaderText("   " .. dropdownTitle .. ": " .. tostring(newValue))
 							else
 								for _, itemName in ipairs(items) do
 									local itemValue = newValue[itemName]
@@ -2895,10 +2921,12 @@ do
 					TextButton3.BackgroundTransparency = 1
 					TextButton3.BackgroundColor3 = uicolor
 					TextButton3.BorderSizePixel = 0
+					TextButton3.ClipsDescendants = true
 					TextButton3.Font = Enum.Font.GothamBold
 					TextButton3.Text = isSelected and "   " .. utf8.char(10003) .. selectedIndent .. itemName or indentPrefix .. itemName
 					TextButton3.TextColor3 = Color3.new(0.784314, 0.784314, 0.784314)
-					TextButton3.TextSize = 14
+					TextButton3.TextSize = #tostring(itemName or "") > 28 and 11 or 12
+					TextButton3.TextTruncate = Enum.TextTruncate.AtEnd
 					TextButton3.TextXAlignment = Enum.TextXAlignment.Left
 					TextButton3.Size = UDim2.new(1, 0, 0, 20)
 					TextButton3.Parent = objects
@@ -2919,12 +2947,12 @@ do
 					if not multiple then
 						TextButton3.MouseButton1Click:Connect(function()
 							if not options or not options.Noupdate then
-								textButton2.Text = "   " .. dropdownTitle .. ": " .. itemName
+								setHeaderText("   " .. dropdownTitle .. ": " .. tostring(itemName))
 							end
 
 							isOpen = false
 							objects.CanvasSize = UDim2.new()
-							TweenService:Create(clone5, TweenInfo.new(0.08, Enum.EasingStyle.Linear, Enum.EasingDirection.In), { Size = UDim2.new(0, options and options.Width or 200, 0, 20) }):Play()
+							TweenService:Create(clone5, TweenInfo.new(0.08, Enum.EasingStyle.Linear, Enum.EasingDirection.In), { Size = UDim2.new(0, dropWidth, 0, 20) }):Play()
 							TweenService:Create(indicator, TweenInfo.new(0.08, Enum.EasingStyle.Linear, Enum.EasingDirection.In), { Rotation = isOpen and 90 or -90 }):Play()
 
 							if not isOpen then
@@ -3001,12 +3029,12 @@ do
 				end
 
 				dropdownApi.SetTitle = function(newTitle)
-					textButton2.Text = "   " .. newTitle
 					dropdownTitle = newTitle
+					setHeaderText("   " .. newTitle)
 				end
 
 				dropdownApi.SetValue = function(newValue)
-					textButton2.Text = "   " .. dropdownTitle .. ": " .. newValue
+					setHeaderText("   " .. dropdownTitle .. ": " .. tostring(newValue))
 				end
 
 				dropdownApi.IsVisible = function()
@@ -3033,7 +3061,7 @@ do
 							end
 						end
 
-						TweenService:Create(clone5, TweenInfo.new(0.08, Enum.EasingStyle.Linear, Enum.EasingDirection.In), { Size = UDim2.new(0, options and options.Width or 200, 0, contentHeight + 20) }):Play()
+						TweenService:Create(clone5, TweenInfo.new(0.08, Enum.EasingStyle.Linear, Enum.EasingDirection.In), { Size = UDim2.new(0, dropWidth, 0, contentHeight + 20) }):Play()
 						TweenService:Create(indicator, TweenInfo.new(0.08, Enum.EasingStyle.Linear, Enum.EasingDirection.In), { Rotation = isOpen and 90 or -90 }):Play()
 
 						if not isOpen then
@@ -3235,17 +3263,16 @@ do
 				local lastValue = nil
 				local configTable = configSource and type(configSource) == "string" and cfg[configSource] or configSource
 				local title2 = clone5.Title
-				title2.Text = left and "   " .. sliderTitle or sliderTitle
-
-				if left then
-					title2.TextXAlignment = Enum.TextXAlignment.Left
-					title2.Position = UDim2.new(0, 0, 0.5, -10)
-				end
+				local cleanSliderTitle = tostring(sliderTitle or ""):gsub("^%s+", "")
+				title2.Text = cleanSliderTitle
+				title2.TextXAlignment = Enum.TextXAlignment.Left
+				title2.Position = UDim2.new(0, 4, 0, 0)
+				title2.Size = UDim2.new(1, -54, 0, 15)
 
 				local function v90(v91)
 					local v92 = math.clamp(v91.Position.X - clone5.AbsolutePosition.X, 0, clone5.AbsoluteSize.X)
 					local v93 = minValue + v92 / clone5.AbsoluteSize.X * (maxValue - minValue)
-					TweenService:Create(indicator, TweenInfo.new(0.08, Enum.EasingStyle.Linear, Enum.EasingDirection.In), { Size = UDim2.new(0, v92, 0, 20) }):Play()
+					TweenService:Create(indicator, TweenInfo.new(0.08, Enum.EasingStyle.Linear, Enum.EasingDirection.In), { Size = UDim2.new(0, v92, 0, clone5.Size.Y.Offset) }):Play()
 					local text = decimal and math.round(v93 * 10) / 10 or math.floor(v93)
 					value.Text = text
 					configTable[configKey] = text
@@ -3270,7 +3297,7 @@ do
 					local maxWidth = isDesktop and twoColumn and ImageLabel.AbsoluteSize.X * 0.5 - 47 - 5 - 10 - 15
 					maxWidth = maxWidth or ImageLabel.AbsoluteSize.X - 95 - 5 - 10 - 15
 					local clampedValue = math.clamp(tonumber(newValue) or 0, minValue, maxValue)
-					TweenService:Create(indicator, TweenInfo.new(0.08, Enum.EasingStyle.Linear, Enum.EasingDirection.In), { Size = UDim2.new(0, (clampedValue - minValue) / (maxValue - minValue) * maxWidth, 0, 20) }):Play()
+					TweenService:Create(indicator, TweenInfo.new(0.08, Enum.EasingStyle.Linear, Enum.EasingDirection.In), { Size = UDim2.new(0, (clampedValue - minValue) / (maxValue - minValue) * maxWidth, 0, clone5.Size.Y.Offset) }):Play()
 					local text = decimal and math.round(clampedValue * 10) / 10 or math.floor(clampedValue)
 					value.Text = text
 					configTable[configKey] = text
@@ -3288,7 +3315,7 @@ do
 				end
 
 				sliderApi.SetTitle = function(newTitle)
-					title2.Text = "   " .. newTitle
+					title2.Text = tostring(newTitle or ""):gsub("^%s+", "")
 				end
 
 				if configSource then
@@ -3534,11 +3561,9 @@ do
 					end
 				end
 
-				if not v79 then
-					v79 = measuredHeight
-				end
+				v79 = measuredHeight
 
-				clone4.Frame.Visible = visible2
+				clone4.Frame.Visible = false
 				box.BackgroundTransparency = visible2 and 0.96 or 1
 				box.ClipsDescendants = not visible2
 				v76 = visible2
@@ -3547,31 +3572,33 @@ do
 			end
 
 			folderApi.Refresh = function()
-				if v79 then
-					for k in pairs(dropdowns) do
-						k.Toggle(false)
-					end
+				for k in pairs(dropdowns) do
+					k.Toggle(false)
+				end
 
-					local measuredHeight = 37
+				local measuredHeight = 37
 
-					for _, child in ipairs(box:GetChildren()) do
-						if child.ClassName ~= "UIPadding" then
-							if child.ClassName ~= "UIListLayout" then
-								if child.ClassName ~= "UICorner" then
-									if child.Visible then
-										if child.Name ~= "Dropdown" then
-											measuredHeight += child.Size.Y.Offset + 4
-										else
-											measuredHeight += 24
-										end
+				for _, child in ipairs(box:GetChildren()) do
+					if child.ClassName ~= "UIPadding" then
+						if child.ClassName ~= "UIListLayout" then
+							if child.ClassName ~= "UICorner" then
+								if child.Visible then
+									if child.Name ~= "Dropdown" then
+										measuredHeight += child.Size.Y.Offset + 4
+									else
+										measuredHeight += 24
 									end
 								end
 							end
 						end
 					end
+				end
 
-					v79 = measuredHeight
-					TweenService:Create(clone4, TweenInfo.new(0, Enum.EasingStyle.Linear, Enum.EasingDirection.In), { Size = v76 and UDim2.new(1, 0, 0, measuredHeight) or v }):Play()
+				v79 = measuredHeight
+				if v76 then
+					TweenService:Create(clone4, TweenInfo.new(0.05, Enum.EasingStyle.Linear, Enum.EasingDirection.In), { Size = UDim2.new(1, 0, 0, measuredHeight) }):Play()
+				else
+					clone4.Size = UDim2.new(1, 0, 0, 23)
 				end
 			end
 
@@ -66651,6 +66678,8 @@ more accurate dodging]],
 					local switches = {}
 					local pickers = {}
 					local fontDropdown = nil
+					local textModeDropdown = nil
+					local rainbowHue = 0
 
 					local registry = {
 						accent = setmetatable({}, weak),
@@ -66664,6 +66693,7 @@ more accurate dodging]],
 					local texts = setmetatable({}, weak)
 					local gradients = setmetatable({}, weak)
 					local FONTS = { "Default", "Gotham", "Ubuntu", "Code", "Arcade", "Nunito", "Highway", "SciFi" }
+					local TEXT_MODES = { "Normal", "Neon" }
 
 					----------------------------------------------------------------
 					-- helpers
@@ -66722,6 +66752,7 @@ more accurate dodging]],
 					-- original palette of the menu -> role
 					local ROLE_BY_KEY = {
 						[colorKey(Color3.fromRGB(41, 74, 122))] = "accent",
+						[colorKey(Color3.fromRGB(56, 56, 56))] = "accent",
 						[colorKey(Color3.fromRGB(21, 22, 23))] = "bg",
 						[colorKey(Color3.fromRGB(30, 30, 30))] = "bg2",
 						[colorKey(Color3.fromRGB(42, 42, 42))] = "panel",
@@ -66738,7 +66769,7 @@ more accurate dodging]],
 						local accent2 = rgbOf("grad", 255, 170, 60)
 
 						if cust.rainbow == true then
-							local hue = (os.clock() * 0.08) % 1
+							local hue = rainbowHue % 1
 							accent = Color3.fromHSV(hue, 0.7, 0.9)
 							accent2 = Color3.fromHSV((hue + 0.18) % 1, 0.7, 0.9)
 						end
@@ -66892,6 +66923,14 @@ more accurate dodging]],
 						button.TextTransparency = 1
 						roundUp(button, UDim.new(1, 0))
 
+						local title = button:FindFirstChild("Title")
+						if title then
+							title.Position = UDim2.new(0, 40, 0, -1)
+							title.Size = UDim2.new(0, 215, 0, 20)
+							title.TextSize = 12
+							title.TextTruncate = Enum.TextTruncate.AtEnd
+						end
+
 						local knob = button:FindFirstChild("Knob")
 
 						if not knob then
@@ -66934,6 +66973,7 @@ more accurate dodging]],
 
 						frame:SetAttribute("AtlasIgnore", true)
 						frame.BackgroundTransparency = 1
+						frame.Size = UDim2.new(1, -15, 0, 24)
 
 						local indicator = frame.Indicator
 						indicator.BackgroundTransparency = 1
@@ -66995,16 +67035,18 @@ more accurate dodging]],
 						local value = frame:FindFirstChild("Value")
 
 						if title then
+							title.Text = tostring(title.Text or ""):gsub("^%s+", "")
 							title.TextXAlignment = Enum.TextXAlignment.Left
-							title.Position = UDim2.new(0, 2, 0, -4)
-							title.Size = UDim2.new(0, 0, 0, 16)
+							title.Position = UDim2.new(0, 2, 0, 0)
+							title.Size = UDim2.new(1, -54, 0, 15)
 							title.TextSize = 12
+							title.TextTruncate = Enum.TextTruncate.AtEnd
 						end
 
 						if value then
 							value.TextXAlignment = Enum.TextXAlignment.Right
-							value.Position = UDim2.new(1, -48, 0, -4)
-							value.Size = UDim2.new(0, 46, 0, 16)
+							value.Position = UDim2.new(1, -50, 0, 0)
+							value.Size = UDim2.new(0, 48, 0, 15)
 							value.TextSize = 12
 						end
 
@@ -67019,7 +67061,20 @@ more accurate dodging]],
 							end
 
 							if value then
-								value.TextColor3 = pal.accent
+								local neonNums = (cust.textmode == "Neon" or cust.neontext == true) and cust.neonnumbers == true
+								local glowStroke = value:FindFirstChild("AtlasGlowStroke")
+								if neonNums then
+									value.TextColor3 = pal.accent
+									value.TextStrokeColor3 = Color3.new(1, 1, 1)
+									value.TextStrokeTransparency = 0.82
+								else
+									if glowStroke then
+										glowStroke:Destroy()
+									end
+									value.TextColor3 = Color3.fromRGB(245, 245, 250)
+									value.TextStrokeColor3 = Color3.new(0, 0, 0)
+									value.TextStrokeTransparency = 0.45
+								end
 							end
 						end
 
@@ -67027,32 +67082,59 @@ more accurate dodging]],
 						refresh()
 					end
 
-					-- bright white text with a soft glow
+					-- configurable Normal vs Neon text styling (keeps numbers readable against themed backgrounds)
 					local function glowText(inst)
-						if inst:GetAttribute("AtlasGlow") then
-							return
+						if not inst:GetAttribute("AtlasGlowInit") then
+							local color = inst.TextColor3
+							if color.R < 0.62 and color.G < 0.62 and color.B < 0.62 then
+								return
+							end
+							inst:SetAttribute("AtlasGlowInit", true)
 						end
 
-						inst:SetAttribute("AtlasGlow", true)
-						local color = inst.TextColor3
+						local textStr = tostring(inst.Text or "")
+						local isNumeric = inst.Name == "Value" or inst.Name == "Level" or (textStr ~= "" and string.match(textStr, "^[%s%d%.%%%-%+/:]+$") ~= nil)
+						local neonEnabled = (cust.textmode == "Neon" or cust.neontext == true)
+						local useNeon = neonEnabled and (not isNumeric or cust.neonnumbers == true)
+						local stroke = inst:FindFirstChild("AtlasGlowStroke")
 
-						if color.R < 0.62 and color.G < 0.62 and color.B < 0.62 then
-							return
-						end
+						if useNeon then
+							if inst.Name ~= "Value" then
+								inst.TextColor3 = Color3.fromRGB(250, 250, 252)
+							end
 
-						inst.TextColor3 = Color3.fromRGB(250, 250, 252)
-
-						if inst.TextSize >= 12 then
-							local stroke = Instance.new("UIStroke")
-							stroke.Name = "AtlasGlowStroke"
-							stroke.Thickness = 2
-							stroke.Transparency = 0.9
-							stroke.Color = Color3.new(1, 1, 1)
-							stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
-							stroke.Parent = inst
+							if inst.TextSize >= 12 then
+								if not stroke then
+									stroke = Instance.new("UIStroke")
+									stroke.Name = "AtlasGlowStroke"
+									stroke.Thickness = 2
+									stroke.Transparency = 0.88
+									stroke.Color = Color3.new(1, 1, 1)
+									stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+									stroke.Parent = inst
+								end
+								inst.TextStrokeTransparency = 1
+							else
+								if stroke then
+									stroke:Destroy()
+								end
+								inst.TextStrokeColor3 = Color3.new(1, 1, 1)
+								inst.TextStrokeTransparency = 0.85
+							end
 						else
-							inst.TextStrokeColor3 = Color3.new(1, 1, 1)
-							inst.TextStrokeTransparency = 0.85
+							if stroke then
+								stroke:Destroy()
+							end
+
+							if isNumeric then
+								inst.TextColor3 = Color3.fromRGB(245, 245, 250)
+								inst.TextStrokeColor3 = Color3.new(0, 0, 0)
+								inst.TextStrokeTransparency = 0.45
+							else
+								inst.TextColor3 = Color3.fromRGB(238, 238, 242)
+								inst.TextStrokeColor3 = Color3.new(0, 0, 0)
+								inst.TextStrokeTransparency = 0.78
+							end
 						end
 					end
 
@@ -67175,13 +67257,23 @@ more accurate dodging]],
 
 					local function step(dt)
 						acc += dt
+						local rSpeed = math.clamp(num("rainbowspeed", 5), 1, 20)
+						rainbowHue = (rainbowHue + dt * rSpeed * 0.035) % 1
 
-						if cust.rainbow == true and acc >= 0.07 then
+						if cust.rainbow == true and acc >= 0.05 then
 							acc = 0
 							local pal = palette()
 
 							for inst in pairs(registry.accent) do
 								styleInstance(inst, "accent", pal)
+							end
+
+							for _, refresh in pairs(switchSkins) do
+								refresh(true)
+							end
+
+							for _, refresh in pairs(sliderSkins) do
+								refresh()
 							end
 
 							applyOutline(pal)
@@ -67222,6 +67314,7 @@ more accurate dodging]],
 
 						for inst in pairs(texts) do
 							styleText(inst)
+							glowText(inst)
 						end
 
 						for _, refresh in pairs(switchSkins) do
@@ -68617,9 +68710,16 @@ more accurate dodging]],
 						setSlider("windowtransparency", 0)
 						setSlider("paneltransparency", 0)
 						setSlider("outlinethickness", 2)
+						setSlider("rainbowspeed", 5)
 						setSwitch("gradanimated", false)
 						setSwitch("rainbow", false)
 						setSwitch("outline", false)
+						setSwitch("neontext", false)
+						setSwitch("neonnumbers", false)
+						cust.textmode = "Normal"
+						if textModeDropdown then
+							textModeDropdown.SetValue("Normal")
+						end
 						setFont("Default")
 						requestApply()
 					end
@@ -68633,10 +68733,10 @@ more accurate dodging]],
 						panelr = { 0, 255 }, panelg = { 0, 255 }, panelb = { 0, 255 },
 						gradrotation = { 0, 360 }, bgrotation = { 0, 360 },
 						windowtransparency = { 0, 90 }, paneltransparency = { 0, 90 },
-						outlinethickness = { 1, 6 },
+						outlinethickness = { 1, 6 }, rainbowspeed = { 1, 20 },
 					}
 
-					local THEME_FLAG = { gradient = true, bggradient = true, gradanimated = true, outline = true, rainbow = true }
+					local THEME_FLAG = { gradient = true, bggradient = true, gradanimated = true, outline = true, rainbow = true, neontext = true, neonnumbers = true }
 
 					local function exportTheme()
 						local out = {}
@@ -68872,7 +68972,15 @@ more accurate dodging]],
 					local ExtrasFolder = tab.AddFolder("Menu Extras")
 					sliders.gradrotation = ExtrasFolder.AddSlider("Gradient Angle", requestApply, 0, 360, "customization", "gradrotation", { Left = true })
 					switches.gradanimated = ExtrasFolder.AddSwitch("Animate Gradient", requestApply, "customization", "gradanimated")
-					switches.rainbow = ExtrasFolder.AddSwitch("Rainbow Mode", requestApply, "customization", "rainbow")
+					switches.rainbow = ExtrasFolder.AddSwitch("Rainbow Mode", function(v)
+						if sliders.rainbowspeed then
+							sliders.rainbowspeed.SetVisible(v == true)
+							ExtrasFolder.Refresh()
+						end
+						requestApply()
+					end, "customization", "rainbow")
+					sliders.rainbowspeed = ExtrasFolder.AddSlider("Rainbow Speed", requestApply, 1, 20, "customization", "rainbowspeed", { Left = true })
+					sliders.rainbowspeed.SetVisible(cust.rainbow == true)
 					switches.bggradient = ExtrasFolder.AddSwitch("Background Gradient", requestApply, "customization", "bggradient")
 					makeColorPicker(ExtrasFolder, "Background End", "bgend", { 10, 10, 12 }, function()
 						if cust.bggradient ~= true then
@@ -68885,13 +68993,53 @@ more accurate dodging]],
 					sliders.menutransparency = ExtrasFolder.AddSlider("Menu Transparency", requestApply, 0, 80, "customization", "menutransparency", { Left = true })
 					sliders.outlinethickness = ExtrasFolder.AddSlider("Outline Size", requestApply, 1, 6, "customization", "outlinethickness", { Left = true })
 
-					fontDropdown = ExtrasFolder.AddDropdown("Font", FONTS, nil, function()
-						requestApply()
-					end, "customization", "font")
-
 					ExtrasFolder.AddButton("Random Colors", randomizeTheme)
 					ExtrasFolder.AddButton("Copy Theme To Clipboard", exportTheme)
 					ExtrasFolder.AddTextBox("Paste theme here", importTheme, nil, nil, { Clear = true })
+
+					-- dedicated Font & Text folder (Normal vs Neon font + readable numbers)
+					local FontFolder = tab.AddFolder("Font & Text")
+					FontFolder.AddLabel("Switch between Normal and Neon text")
+
+					local syncingTextMode = false
+					textModeDropdown = FontFolder.AddDropdown("Text Style", TEXT_MODES, nil, function(mode)
+						if syncingTextMode then
+							return
+						end
+						syncingTextMode = true
+						local isNeon = (mode == "Neon")
+						cust.textmode = isNeon and "Neon" or "Normal"
+						cust.neontext = isNeon
+						if switches.neontext then
+							switches.neontext.Set(isNeon)
+						end
+						saveConfig()
+						syncingTextMode = false
+						requestApply()
+					end, "customization", "textmode")
+
+					switches.neontext = FontFolder.AddSwitch("Neon Text (Glow)", function(isNeon)
+						if syncingTextMode then
+							return
+						end
+						syncingTextMode = true
+						cust.neontext = isNeon == true
+						cust.textmode = isNeon and "Neon" or "Normal"
+						if textModeDropdown then
+							textModeDropdown.SetValue(cust.textmode)
+						end
+						saveConfig()
+						syncingTextMode = false
+						requestApply()
+					end, "customization", "neontext")
+
+					switches.neonnumbers = FontFolder.AddSwitch("Neon On Numbers", function()
+						requestApply()
+					end, "customization", "neonnumbers")
+
+					fontDropdown = FontFolder.AddDropdown("Font Family", FONTS, nil, function()
+						requestApply()
+					end, "customization", "font")
 
 					-- post processing -------------------------------------------------
 					feature("Effects", function()
@@ -69463,46 +69611,490 @@ more accurate dodging]],
 						folder.AddLabel("Narrower ratio = stretched image")
 					end)
 
-					-- world: item physics + things Anti Lag does not remove --------------------------
+					-- shared tool & token helpers --------------------------------------------------------
+					local KNOWN_COLLECTORS = {
+						["Scooper"] = true, ["Rake"] = true, ["Clippers"] = true, ["Magnet"] = true,
+						["Vacuum"] = true, ["Super-Scooper"] = true, ["Pulsar"] = true, ["Electro-Magnet"] = true,
+						["Scissors"] = true, ["Honey Dipper"] = true, ["Bubble Wand"] = true, ["Scythe"] = true,
+						["Golden Rake"] = true, ["Spark Staff"] = true, ["Porcelain Dipper"] = true, ["Petal Wand"] = true,
+						["Tide Popper"] = true, ["Dark Scythe"] = true, ["Gummyballer"] = true, ["Sticker-Seeker"] = true,
+					}
+
+					pcall(function()
+						local shops = workspace:FindFirstChild("Shops")
+						if shops then
+							for _, s in ipairs(shops:GetDescendants()) do
+								if s.Name == "Category" and s:IsA("StringValue") and s.Value == "Collector" and s.Parent then
+									local itemVal = s.Parent:FindFirstChild("Item")
+									if itemVal and itemVal:IsA("StringValue") and itemVal.Value ~= "" then
+										KNOWN_COLLECTORS[itemVal.Value] = true
+									end
+								end
+							end
+						end
+					end)
+
+					local BODY_LIMBS = {
+						HumanoidRootPart = true, Head = true, Torso = true, UpperTorso = true, LowerTorso = true,
+						RightHand = true, LeftHand = true, ["Right Arm"] = true, ["Left Arm"] = true,
+						["Right Leg"] = true, ["Left Leg"] = true,
+						RightUpperArm = true, RightLowerArm = true, LeftUpperArm = true, LeftLowerArm = true,
+						RightUpperLeg = true, RightLowerLeg = true, LeftUpperLeg = true, LeftLowerLeg = true,
+						RightFoot = true, LeftFoot = true,
+					}
+
+					local HAND_NAMES = {
+						RightHand = true, LeftHand = true, ["Right Arm"] = true, ["Left Arm"] = true,
+						RightLowerArm = true, LeftLowerArm = true,
+					}
+
+					local function isAccessoryOnBody(inst, char)
+						local curr = inst
+						while curr and curr ~= char do
+							if curr:IsA("Accessory") then
+								local handle = curr:FindFirstChild("Handle")
+								if handle then
+									for _, child in ipairs(handle:GetChildren()) do
+										if child:IsA("Attachment") and not string.find(child.Name, "Grip") then
+											return true
+										end
+									end
+								end
+								return not KNOWN_COLLECTORS[curr.Name]
+							end
+							curr = curr.Parent
+						end
+						return false
+					end
+
+					local function topContainerInChar(part, char)
+						local curr = part
+						while curr.Parent and curr.Parent ~= char do
+							curr = curr.Parent
+						end
+						return curr
+					end
+
+					local function findEquippedTool(char, player)
+						if not char then
+							return nil
+						end
+
+						-- 1. Standard Roblox Tool instance
+						local stdTool = char:FindFirstChildOfClass("Tool")
+						if stdTool then
+							return stdTool
+						end
+
+						-- 2. Known BSS collector model/part in character
+						for _, child in ipairs(char:GetChildren()) do
+							if KNOWN_COLLECTORS[child.Name] and (child:IsA("Model") or child:IsA("BasePart") or child:IsA("Accessory") or child:IsA("Folder")) then
+								return child
+							end
+						end
+
+						-- 3. Any object welded/connected to the character's hands/arms
+						for _, handName in ipairs({ "RightHand", "LeftHand", "Right Arm", "Left Arm", "RightLowerArm", "LeftLowerArm" }) do
+							local hand = char:FindFirstChild(handName)
+							if hand then
+								local rightGrip = hand:FindFirstChild("RightGrip") or hand:FindFirstChild("LeftGrip")
+								if rightGrip and rightGrip:IsA("JointInstance") then
+									local other = (rightGrip.Part0 == hand) and rightGrip.Part1 or rightGrip.Part0
+									if other and other:IsDescendantOf(char) and not BODY_LIMBS[other.Name] then
+										return topContainerInChar(other, char)
+									end
+								end
+							end
+						end
+
+						for _, desc in ipairs(char:GetDescendants()) do
+							if desc:IsA("JointInstance") or desc:IsA("WeldConstraint") then
+								local p0, p1 = desc.Part0, desc.Part1
+								if p0 and p1 then
+									local handPart = HAND_NAMES[p0.Name] and p0 or (HAND_NAMES[p1.Name] and p1 or nil)
+									local otherPart = (handPart == p0) and p1 or (handPart == p1 and p0 or nil)
+									if handPart and otherPart and otherPart:IsDescendantOf(char) and not BODY_LIMBS[otherPart.Name] and not isAccessoryOnBody(otherPart, char) then
+										return topContainerInChar(otherPart, char)
+									end
+								end
+							end
+						end
+
+						-- 4. Fallback for localPlayer using gameApi cache if available
+						if (not player or player == localPlayer) and gameApi and gameApi.Cache then
+							local ok, cachedName = pcall(function()
+								return gameApi:Cache("EquippedCollector")
+							end)
+							if ok and type(cachedName) == "string" and cachedName ~= "" then
+								local found = char:FindFirstChild(cachedName, true)
+								if found then
+									return topContainerInChar(found, char)
+								end
+							end
+						end
+
+						return nil
+					end
+
+					local function findToolGrip(char, tool)
+						if not char then
+							return nil, false
+						end
+						tool = tool or findEquippedTool(char, localPlayer)
+
+						local rg = char:FindFirstChild("RightGrip", true) or char:FindFirstChild("LeftGrip", true)
+						if rg and rg:IsA("JointInstance") then
+							local p0, p1 = rg.Part0, rg.Part1
+							local handIsP1 = p1 and HAND_NAMES[p1.Name] and not (p0 and HAND_NAMES[p0.Name])
+							return rg, handIsP1 == true
+						end
+
+						if tool then
+							for _, desc in ipairs(char:GetDescendants()) do
+								if desc:IsA("JointInstance") then
+									local p0, p1 = desc.Part0, desc.Part1
+									if p0 and p1 then
+										local p0InTool = (p0 == tool or p0:IsDescendantOf(tool))
+										local p1InTool = (p1 == tool or p1:IsDescendantOf(tool))
+										if p0InTool and not p1InTool and not BODY_LIMBS[p0.Name] then
+											return desc, true
+										elseif p1InTool and not p0InTool and not BODY_LIMBS[p1.Name] then
+											return desc, false
+										end
+									end
+								end
+							end
+						end
+
+						return nil, false
+					end
+
+					-- token identification (texture id -> name) -----------------------------------------
+					local TOKEN_NAME_BY_ID = {}
+					local ALL_TOKEN_NAMES = {}
+					local KNOWN_TOKEN_NAME = {}
+					local ABILITY_TOKEN_SET = {}
+					local TREAT_TOKEN_SET = {}
+					local onNewTokenName = nil
+
+					local function registerToken(name, id, group)
+						if id then
+							TOKEN_NAME_BY_ID[tostring(id)] = name
+						end
+
+						if group == "ability" then
+							ABILITY_TOKEN_SET[name] = true
+						elseif group == "treat" then
+							TREAT_TOKEN_SET[name] = true
+						end
+
+						if not KNOWN_TOKEN_NAME[name] then
+							KNOWN_TOKEN_NAME[name] = true
+							ALL_TOKEN_NAMES[#ALL_TOKEN_NAMES + 1] = name
+
+							if onNewTokenName then
+								pcall(onNewTokenName, name)
+							end
+						end
+					end
+
+					for name, id in pairs({
+						["Blue Boost"] = "1442863423", ["Red Boost"] = "1442859163", Haste = "65867881",
+						Focus = "1629649299", ["Baby Love"] = "1472256444", Melody = "253828517",
+						["Inflate Balloon"] = "8083436978", ["Surprise Party"] = "8083943936",
+						["Fuzz Bombs"] = "4889322534", ["Pollen Haze"] = "4889470194",
+						["Target Practice"] = "8173559749", Inferno = "4519549299", ["Flame Fuel"] = "4528208186",
+						["Summon Frog"] = "4528414666", Triangulate = "4519523935", ["Pollen Mark"] = "2499540966",
+						["Honey Mark"] = "2499514197", ["Mark Surge"] = "4528379338", ["Festive Gift"] = "1874564120",
+						Tornado = "3582519526", ["Token Link"] = "1629547638",
+					}) do
+						registerToken(name, id, "ability")
+					end
+
+					for name, id in pairs({
+						Snowflake = "6087969886", ["Gingerbread Bear"] = "6077173317", ["Sunflower Seed"] = "1952682401",
+						Strawberry = "1952679735", Pineapple = "1952681305", Blueberry = "1952680613",
+						Coconut = "1952681863", Neonberry = "6087992633", Bitterberry = "6087985073",
+						Honey = "1952683491",
+					}) do
+						registerToken(name, id, "treat")
+					end
+
+					table.sort(ALL_TOKEN_NAMES)
+
+					local function identifyToken(token)
+						local cached = token:GetAttribute("AtlasTokenName")
+
+						if cached then
+							return cached, token:GetAttribute("AtlasTokenTex")
+						end
+
+						local tex = nil
+						local decal = token:FindFirstChild("FrontDecal") or token:FindFirstChildWhichIsA("Decal") or token:FindFirstChildWhichIsA("Texture")
+
+						if decal then
+							tex = decal.Texture
+						end
+
+						if not tex or tex == "" then
+							return "Token", nil
+						end
+
+						local numId = string.match(tex, "%d+")
+						local name = numId and TOKEN_NAME_BY_ID[numId]
+
+						if not name then
+							name = "Token " .. (numId or "?")
+							registerToken(name, numId, nil)
+						end
+
+						token:SetAttribute("AtlasTokenName", name)
+						token:SetAttribute("AtlasTokenTex", tex)
+						return name, tex
+					end
+
+					-- world & configurable item physics --------------------------------------------------
 					feature("World", function()
+						local physFolder = tab.AddFolder("Item Physics")
 						local folder = tab.AddFolder("World")
-						local grounds = setmetatable({}, weak)
+						local tokenState = setmetatable({}, weak)
+						local tokenConns = setmetatable({}, weak)
+						local lockingToken = setmetatable({}, weak)
 						local hidden = {}
+						local spinAngle = 0
 						local rayParams = RaycastParams.new()
 						rayParams.FilterType = Enum.RaycastFilterType.Exclude
 
-						-- item physics: dropped tokens lie flat instead of floating and spinning
-						local function itemStep()
-							local container = workspace:FindFirstChild("Collectibles")
+						local ITEM_MODES = {
+							"Flat On Ground",
+							"Flat (Spawn Height)",
+							"Freeze Upright",
+							"Face Camera",
+							"Slow Spin Flat",
+							"Custom Angle",
+						}
 
-							if not container then
+						local ITEM_FILTERS = {
+							"All Tokens & Abilities",
+							"Abilities Only",
+							"Items & Treats Only",
+							"Rares Only",
+							"Selected Tokens Only",
+							"Exclude Selected Tokens",
+						}
+
+						local function shouldAffectToken(token)
+							local filter = cust.itemfilter or "All Tokens & Abilities"
+							if filter == "All Tokens & Abilities" then
+								return true
+							end
+							local tName, tex = identifyToken(token)
+							local selectedMap = type(cust.itemtokens) == "table" and cust.itemtokens or {}
+
+							if filter == "Abilities Only" then
+								return ABILITY_TOKEN_SET[tName] == true
+							elseif filter == "Items & Treats Only" then
+								return not ABILITY_TOKEN_SET[tName]
+							elseif filter == "Rares Only" then
+								if type(state.rares) == "table" and tex and state.rares[string.match(tex, "%d+") or ""] then
+									return true
+								end
+								return not ABILITY_TOKEN_SET[tName] and tName ~= "Honey" and tName ~= "Treat"
+							elseif filter == "Selected Tokens Only" then
+								return selectedMap[tName] == true
+							elseif filter == "Exclude Selected Tokens" then
+								return not selectedMap[tName]
+							end
+							return true
+						end
+
+						local function setTokenFx(token, disableFx)
+							for _, child in ipairs(token:GetDescendants()) do
+								if child:IsA("ParticleEmitter") or child:IsA("Sparkles") or child:IsA("Beam") or child:IsA("Trail") or child:IsA("Light") then
+									if disableFx then
+										if child:GetAttribute("AtlasTokFx0") == nil then
+											child:SetAttribute("AtlasTokFx0", child.Enabled)
+										end
+										child.Enabled = false
+									else
+										local orig = child:GetAttribute("AtlasTokFx0")
+										if orig ~= nil then
+											child.Enabled = orig
+											child:SetAttribute("AtlasTokFx0", nil)
+										end
+									end
+								end
+							end
+						end
+
+						local function computeTokenCFrame(token, info)
+							local mode = cust.itemmode or "Flat On Ground"
+							local useGround = (mode == "Flat On Ground" or mode == "Slow Spin Flat" or cust.itemground == true)
+							local offset = math.clamp(num("itemoffset", 2), -20, 50) * 0.1
+							local y = useGround and (info.groundY + offset) or (info.spawnPos.Y + offset)
+							local pos = Vector3.new(info.spawnPos.X, y, info.spawnPos.Z)
+
+							if mode == "Flat On Ground" or mode == "Flat (Spawn Height)" then
+								return CFrame.new(pos) * CFrame.Angles(math.rad(-90), math.rad(num("itemyaw", 0)), 0)
+							elseif mode == "Freeze Upright" then
+								return CFrame.new(pos) * CFrame.Angles(0, math.rad(num("itemyaw", 0)), 0)
+							elseif mode == "Face Camera" then
+								local cam = workspace.CurrentCamera
+								if cam then
+									local camPos = cam.CFrame.Position
+									local lookAt = Vector3.new(camPos.X, pos.Y, camPos.Z)
+									if (lookAt - pos).Magnitude > 0.05 then
+										return CFrame.lookAt(pos, lookAt)
+									end
+								end
+								return CFrame.new(pos)
+							elseif mode == "Slow Spin Flat" then
+								return CFrame.new(pos) * CFrame.Angles(math.rad(-90), spinAngle, 0)
+							elseif mode == "Custom Angle" then
+								return CFrame.new(pos) * CFrame.Angles(math.rad(num("itemtilt", -90)), math.rad(num("itemyaw", 0)), 0)
+							end
+
+							return CFrame.new(pos) * CFrame.Angles(math.rad(-90), 0, 0)
+						end
+
+						local function enforceToken(token)
+							if not on("itemphysics") or lockingToken[token] or not token.Parent then
+								return
+							end
+							if not shouldAffectToken(token) then
 								return
 							end
 
-							local drop = cust.itemground == true
-
-							if drop then
+							local info = tokenState[token]
+							if not info then
+								local curPos = token.Position
 								local char = localPlayer.Character
-								rayParams.FilterDescendantsInstances = { container, char or workspace.Terrain }
+								local collectibles = workspace:FindFirstChild("Collectibles")
+								local filterList = { token, workspace.Terrain }
+								if collectibles then
+									filterList[#filterList + 1] = collectibles
+								end
+								if char then
+									filterList[#filterList + 1] = char
+								end
+								rayParams.FilterDescendantsInstances = filterList
+								local hit = workspace:Raycast(curPos + Vector3.new(0, 6, 0), Vector3.new(0, -80, 0), rayParams)
+								local groundY = hit and hit.Position.Y or curPos.Y
+
+								info = {
+									spawnPos = curPos,
+									groundY = groundY,
+									baseSize = token.Size,
+								}
+								tokenState[token] = info
+								identifyToken(token)
+							else
+								-- If BSS moves a token horizontally (e.g. Token Link or Petal Shuriken), update X/Z while keeping Y locked
+								local curPos = token.Position
+								local dx = curPos.X - info.spawnPos.X
+								local dz = curPos.Z - info.spawnPos.Z
+								if (dx * dx + dz * dz) > 0.25 then
+									info.spawnPos = Vector3.new(curPos.X, info.spawnPos.Y, curPos.Z)
+								end
 							end
 
-							for _, token in ipairs(container:GetChildren()) do
-								if token:IsA("BasePart") then
-									local position = token.Position
+							lockingToken[token] = true
 
-									if drop then
-										local ground = grounds[token]
+							-- Lock CFrame so BSS CollectiblesAnimator (spin, bobbing, spawn bounce, collect jump) is completely suppressed
+							local targetCF = computeTokenCFrame(token, info)
+							if token.CFrame ~= targetCF then
+								token.CFrame = targetCF
+							end
 
-										if not ground then
-											local hit = workspace:Raycast(position, Vector3.new(0, -60, 0), rayParams)
-											ground = hit and hit.Position.Y + 0.15 or position.Y
-											grounds[token] = ground
+							-- Lock Size so BSS collect/spawn size pulse animation is suppressed & apply custom scale
+							local scalePct = math.clamp(num("itemscale", 100), 50, 200) / 100
+							local targetSize = info.baseSize * scalePct
+							if (token.Size - targetSize).Magnitude > 0.01 then
+								token.Size = targetSize
+							end
+
+							token.AssemblyLinearVelocity = Vector3.zero
+							token.AssemblyAngularVelocity = Vector3.zero
+
+							if cust.itemnofx == true then
+								setTokenFx(token, true)
+							end
+
+							lockingToken[token] = nil
+						end
+
+						local function hookToken(token)
+							if not token:IsA("BasePart") or tokenConns[token] then
+								return
+							end
+							-- Immediately lock the token's CFrame whenever the game script tries to animate it
+							local c1 = token:GetPropertyChangedSignal("CFrame"):Connect(function()
+								if on("itemphysics") and not lockingToken[token] then
+									pcall(enforceToken, token)
+								end
+							end)
+							local c2 = token:GetPropertyChangedSignal("Size"):Connect(function()
+								if on("itemphysics") and not lockingToken[token] then
+									pcall(enforceToken, token)
+								end
+							end)
+							tokenConns[token] = { c1, c2 }
+							pcall(enforceToken, token)
+						end
+
+						local function unhookAllTokens()
+							for token, list in pairs(tokenConns) do
+								for _, c in ipairs(list) do
+									pcall(function()
+										c:Disconnect()
+									end)
+								end
+								tokenConns[token] = nil
+							end
+							for token, info in pairs(tokenState) do
+								if token and token.Parent and info.baseSize then
+									pcall(function()
+										lockingToken[token] = true
+										token.Size = info.baseSize
+										setTokenFx(token, false)
+										lockingToken[token] = nil
+									end)
+								end
+								tokenState[token] = nil
+							end
+						end
+
+						local function itemStep(dt)
+							if type(dt) == "number" then
+								spinAngle = (spinAngle + dt * 1.8) % (math.pi * 2)
+							end
+
+							local container = workspace:FindFirstChild("Collectibles")
+							if container then
+								for _, token in ipairs(container:GetChildren()) do
+									if token:IsA("BasePart") then
+										if not tokenConns[token] then
+											hookToken(token)
+										else
+											enforceToken(token)
 										end
-
-										position = Vector3.new(position.X, ground, position.Z)
 									end
+								end
+							end
 
-									token.CFrame = CFrame.new(position) * CFrame.Angles(math.rad(-90), 0, 0)
+							if cust.itemduped == true then
+								local cam = workspace.CurrentCamera
+								local duped = cam and cam:FindFirstChild("DupedTokens")
+								if duped then
+									for _, token in ipairs(duped:GetChildren()) do
+										if token:IsA("BasePart") then
+											if not tokenConns[token] then
+												hookToken(token)
+											else
+												enforceToken(token)
+											end
+										end
+									end
 								end
 							end
 						end
@@ -69512,16 +70104,35 @@ more accurate dodging]],
 								if not hidden.itemBound then
 									hidden.itemBound = true
 
-									RunService:BindToRenderStep("AtlasItems", Enum.RenderPriority.Last.Value, function()
-										pcall(itemStep)
+									RunService:BindToRenderStep("AtlasItems", Enum.RenderPriority.Last.Value + 1000, function(dt)
+										pcall(itemStep, dt)
 									end)
+
+									connections:Add("customitems_hb", RunService.Heartbeat:Connect(function(dt)
+										pcall(itemStep, dt)
+									end))
+
+									local container = workspace:FindFirstChild("Collectibles")
+									if container then
+										connections:Add("customitems_add", container.ChildAdded:Connect(function(child)
+											if on("itemphysics") and child:IsA("BasePart") then
+												task.defer(function()
+													pcall(hookToken, child)
+												end)
+											end
+										end))
+									end
 								end
+								pcall(itemStep, 0)
 							elseif hidden.itemBound then
 								hidden.itemBound = nil
 
 								pcall(function()
 									RunService:UnbindFromRenderStep("AtlasItems")
 								end)
+								connections:Cancel("customitems_hb")
+								connections:Cancel("customitems_add")
+								unhookAllTokens()
 							end
 						end
 
@@ -69704,10 +70315,64 @@ more accurate dodging]],
 							apply()
 						end
 
-						addSwitch(folder, "Item Physics", "itemphysics", request, {
-							Tooltip = "Dropped tokens lie flat instead of floating and spinning.",
+						local syncingItemSwitch = false
+						local worldItemSwitch = nil
+						local physItemSwitch = nil
+
+						physItemSwitch = addSwitch(physFolder, "Enable Item Physics", "itemphysics", function(v)
+							if not syncingItemSwitch and worldItemSwitch then
+								syncingItemSwitch = true
+								worldItemSwitch.Set(v)
+								syncingItemSwitch = false
+							end
+							request()
+						end, {
+							Tooltip = "Disables dropped token/ability animations (bobbing, spinning, jump) and locks their physics.",
 						})
-						addSwitch(folder, "Drop Items To Ground", "itemground", request)
+
+						addDropdown(physFolder, "Behavior Mode", ITEM_MODES, "itemmode", request)
+						addDropdown(physFolder, "Apply To (Filter)", ITEM_FILTERS, "itemfilter", request)
+
+						local tokenDropdown = physFolder.AddDropdown("Select Tokens", ALL_TOKEN_NAMES, nil, function(sel)
+							cust.itemtokens = sel
+							request()
+						end, "customization", "itemtokens", { Multiple = true })
+
+						-- tokens seen on the field that are not in the built-in list get added automatically
+						onNewTokenName = function(name)
+							if tokenDropdown and tokenDropdown.Add then
+								local saved = type(cust.itemtokens) == "table" and cust.itemtokens[name] == true
+								tokenDropdown.Add(name, saved)
+							end
+						end
+
+						addSwitch(physFolder, "Drop Items To Ground", "itemground", request)
+						addSwitch(physFolder, "Disable Token Glow & Particles", "itemnofx", function(v)
+							if not v then
+								for token in pairs(tokenState) do
+									if token and token.Parent then
+										pcall(setTokenFx, token, false)
+									end
+								end
+							end
+							request()
+						end)
+						addSwitch(physFolder, "Include Duped Tokens", "itemduped", request)
+						addSlider(physFolder, "Height Offset (0.1 st)", "itemoffset", -20, 50, request)
+						addSlider(physFolder, "Tilt Angle (X)", "itemtilt", -90, 90, request)
+						addSlider(physFolder, "Rotation Angle (Y)", "itemyaw", 0, 360, request)
+						addSlider(physFolder, "Token Size (%)", "itemscale", 50, 200, request)
+
+						worldItemSwitch = folder.AddSwitch("Item Physics", function(v)
+							if not syncingItemSwitch and physItemSwitch then
+								syncingItemSwitch = true
+								physItemSwitch.Set(v)
+								syncingItemSwitch = false
+							end
+							request()
+						end, "customization", "itemphysics", {
+							Tooltip = "Configure full Item Physics settings in the Item Physics folder above.",
+						})
 						folder.AddLabel("No Render (Anti Lag does not do these)")
 						addSwitch(folder, "Hide Beams & Trails", "hidebeams", request)
 						addSwitch(folder, "Hide Fire, Smoke & Sparkles", "hidefx", request)
@@ -69989,6 +70654,15 @@ more accurate dodging]],
 						local STYLES = { "Line", "Stars", "Hearts", "Skulls", "Diamonds", "Bubbles", "Sparkles" }
 						local SHAPE_OF = { Stars = "Star", Hearts = "Heart", Skulls = "Skull", Diamonds = "Diamond", Bubbles = "Bubble", Sparkles = "Sparkle" }
 						local NAMES = { "AtlasTrail", "AtlasTrailA", "AtlasTrailB", "AtlasTrailFx" }
+						local trailHue = 0
+
+						local function getTrailColors()
+							if cust.trailrainbow == true then
+								local h = trailHue % 1
+								return Color3.fromHSV(h, 0.8, 1), Color3.fromHSV((h + 0.18) % 1, 0.8, 1)
+							end
+							return rgbOf("trail", 255, 140, 40), rgbOf("trail2", 255, 200, 80)
+						end
 
 						local function destroyTrail()
 							local char = localPlayer.Character
@@ -70032,9 +70706,10 @@ more accurate dodging]],
 								trail.Parent = root
 							end
 
+							local c1, c2 = getTrailColors()
 							a0.Position = Vector3.new(0, width / 2, 0)
 							a1.Position = Vector3.new(0, -width / 2, 0)
-							trail.Color = ColorSequence.new(rgbOf("trail", 255, 140, 40), rgbOf("trail2", 255, 200, 80))
+							trail.Color = ColorSequence.new(c1, c2)
 
 							trail.Transparency = NumberSequence.new({
 								NumberSequenceKeypoint.new(0, math.clamp(num("trailtrans", 20), 0, 100) / 100),
@@ -70058,10 +70733,11 @@ more accurate dodging]],
 								emitter.Parent = root
 							end
 
+							local c1, c2 = getTrailColors()
 							local texture = shapeAsset(shape, false) or "rbxasset://textures/particles/sparkles_main.dds"
 							local size = math.clamp(num("trailwidth", 10), 1, 40) / 10
 							emitter.Texture = texture
-							emitter.Color = ColorSequence.new(rgbOf("trail", 255, 140, 40), rgbOf("trail2", 255, 200, 80))
+							emitter.Color = ColorSequence.new(c1, c2)
 							emitter.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, size), NumberSequenceKeypoint.new(1, 0) })
 
 							emitter.Transparency = NumberSequence.new({
@@ -70121,6 +70797,23 @@ more accurate dodging]],
 
 								connections:Add("customtrail", RunService.Heartbeat:Connect(function(dt)
 									elapsed += dt
+									if cust.trailrainbow == true then
+										local rSpeed = math.clamp(num("trailrainbowspeed", 5), 1, 20)
+										trailHue = (trailHue + dt * rSpeed * 0.045) % 1
+										local c = localPlayer.Character
+										local r = c and c:FindFirstChild("HumanoidRootPart")
+										if r then
+											local c1, c2 = getTrailColors()
+											local tr = r:FindFirstChild("AtlasTrail")
+											local fx = r:FindFirstChild("AtlasTrailFx")
+											if tr then
+												tr.Color = ColorSequence.new(c1, c2)
+											end
+											if fx then
+												fx.Color = ColorSequence.new(c1, c2)
+											end
+										end
+									end
 
 									if elapsed >= 0.4 then
 										elapsed = 0
@@ -70141,6 +70834,16 @@ more accurate dodging]],
 						addDropdown(folder, "Style", STYLES, "trailstyle", request)
 						makeColorPicker(folder, "Color", "trail", { 255, 140, 40 }, request)
 						makeColorPicker(folder, "End Color", "trail2", { 255, 200, 80 }, request)
+						local trailRainbowSpeedSlider = nil
+						addSwitch(folder, "Rainbow", "trailrainbow", function(v)
+							if trailRainbowSpeedSlider then
+								trailRainbowSpeedSlider.SetVisible(v == true)
+								folder.Refresh()
+							end
+							request()
+						end)
+						trailRainbowSpeedSlider = addSlider(folder, "Rainbow Speed", "trailrainbowspeed", 1, 20, request)
+						trailRainbowSpeedSlider.SetVisible(cust.trailrainbow == true)
 						addSlider(folder, "Lifetime", "traillife", 1, 30, request)
 						addSlider(folder, "Size", "trailwidth", 1, 40, request)
 						addSlider(folder, "Transparency", "trailtrans", 0, 100, request)
@@ -70152,6 +70855,7 @@ more accurate dodging]],
 						local frame = nil
 						local originalIcon = nil
 						local tinted = {}
+						local cursorHue = 0
 
 						local IMAGE_STYLES = { "Pointer", "Dot", "Ring", "Crosshair", "Sniper", "Brackets", "Star", "Heart", "Diamond", "Triangle" }
 						local BASIC_STYLES = { "Basic Dot", "Basic Ring", "Basic Cross", "Basic Plus", "Basic X", "Basic Square" }
@@ -70326,7 +71030,7 @@ more accurate dodging]],
 							originalIcon = UserInputService.MouseIconEnabled
 							UserInputService.MouseIconEnabled = false
 
-							connections:Add("customcursor", RunService.RenderStepped:Connect(function()
+							connections:Add("customcursor", RunService.RenderStepped:Connect(function(dt)
 								local location = UserInputService:GetMouseLocation()
 								frame.Position = UDim2.new(0, location.X, 0, location.Y)
 
@@ -70335,7 +71039,9 @@ more accurate dodging]],
 								end
 
 								if cust.cursorrainbow == true then
-									paint(Color3.fromHSV((os.clock() * 0.25) % 1, 0.8, 1))
+									local rSpeed = math.clamp(num("cursorrainbowspeed", 5), 1, 20)
+									cursorHue = (cursorHue + (dt or 0.016) * rSpeed * 0.05) % 1
+									paint(Color3.fromHSV(cursorHue, 0.8, 1))
 								end
 							end))
 						end
@@ -70352,7 +71058,16 @@ more accurate dodging]],
 						makeColorPicker(folder, "Color", "cursor", { 255, 255, 255 }, request)
 						addSlider(folder, "Size", "cursorsize", 6, 64, request)
 						addSwitch(folder, "Outline", "cursoroutline", request)
-						addSwitch(folder, "Rainbow", "cursorrainbow", request)
+						local cursorRainbowSpeedSlider = nil
+						addSwitch(folder, "Rainbow", "cursorrainbow", function(v)
+							if cursorRainbowSpeedSlider then
+								cursorRainbowSpeedSlider.SetVisible(v == true)
+								folder.Refresh()
+							end
+							request()
+						end)
+						cursorRainbowSpeedSlider = addSlider(folder, "Rainbow Speed", "cursorrainbowspeed", 1, 20, request)
+						cursorRainbowSpeedSlider.SetVisible(cust.cursorrainbow == true)
 					end)
 
 					-- tool outline + hand position -------------------------------------------------
@@ -70362,28 +71077,29 @@ more accurate dodging]],
 						local highlights = {}
 						local toolRef = nil
 						local lastScan = 0
+						local toolHue = 0
 						local originals = setmetatable({}, weak)
 
 						local function currentTool()
-							local char = localPlayer.Character
-							return char and char:FindFirstChildOfClass("Tool")
+							return findEquippedTool(localPlayer.Character, localPlayer)
 						end
 
-						local function findGrip()
-							local char = localPlayer.Character
-							return char and char:FindFirstChild("RightGrip", true)
+						local function findGrip(tool)
+							return findToolGrip(localPlayer.Character, tool)
 						end
 
 						local function clearHighlights()
 							for _, highlight in ipairs(highlights) do
-								highlight:Destroy()
+								pcall(function()
+									highlight:Destroy()
+								end)
 							end
 
 							highlights = {}
 						end
 
-						-- one highlight per visible part, because a Tool is not always highlightable as a whole
-						local function outlineStep(tool)
+						-- one highlight per visible part, because a Tool/Collector model is not always highlightable as a whole
+						local function outlineStep(tool, dt)
 							if not on("toolol") or not tool then
 								if #highlights > 0 then
 									clearHighlights()
@@ -70400,21 +71116,36 @@ more accurate dodging]],
 								lastScan = os.clock()
 								clearHighlights()
 
+								local parts = {}
+								if tool:IsA("BasePart") then
+									parts[1] = tool
+								end
 								for _, descendant in ipairs(tool:GetDescendants()) do
-									if descendant:IsA("BasePart") and descendant.Transparency < 0.95 and #highlights < 12 then
+									if descendant:IsA("BasePart") then
+										parts[#parts + 1] = descendant
+									end
+								end
+
+								for _, part in ipairs(parts) do
+									if part.Transparency < 0.95 and #highlights < 20 then
 										local highlight = Instance.new("Highlight")
 										highlight.Name = "AtlasToolOutline"
-										highlight.Adornee = descendant
+										highlight.Adornee = part
 										highlight.FillTransparency = 1
 										highlight.OutlineTransparency = 0
 										highlight.DepthMode = Enum.HighlightDepthMode.Occluded
-										highlight.Parent = char
+										highlight.Parent = char or tool
 										highlights[#highlights + 1] = highlight
 									end
 								end
 							end
 
 							local color = rgbOf("toolol", 255, 140, 40)
+							if cust.toolrainbow == true then
+								local rSpeed = math.clamp(num("toolrainbowspeed", 5), 1, 20)
+								toolHue = (toolHue + (dt or 0.016) * rSpeed * 0.05) % 1
+								color = Color3.fromHSV(toolHue, 0.8, 1)
+							end
 
 							for _, highlight in ipairs(highlights) do
 								if highlight.OutlineColor ~= color then
@@ -70424,78 +71155,105 @@ more accurate dodging]],
 							end
 						end
 
-						-- move the tool to the left hand (and back)
-						local function handStep(weld)
+						-- move the tool to the left hand (and back), supporting both Part0 and Part1 hand joints
+						local function handStep(weld, handIsP1)
 							local char = localPlayer.Character
 							local wantLeft = not unloading and cust.toolhand == "Left Hand"
 							local saved = originals[weld]
 
 							if wantLeft then
 								local leftHand = char and (char:FindFirstChild("LeftHand") or char:FindFirstChild("Left Arm"))
+								local curHand = handIsP1 and weld.Part1 or weld.Part0
 
-								if leftHand and weld.Part0 ~= leftHand then
+								if leftHand and curHand ~= leftHand then
 									if not saved then
-										originals[weld] = { part = weld.Part0, c0 = weld.C0 }
+										originals[weld] = { part0 = weld.Part0, part1 = weld.Part1, c0 = weld.C0, c1 = weld.C1, handIsP1 = handIsP1 }
 									end
 
 									local attachment = leftHand:FindFirstChild("LeftGripAttachment")
-									weld.Part0 = leftHand
-									weld.C0 = attachment and attachment.CFrame or CFrame.new(0, -1, 0, 1, 0, 0, 0, 0, 1, 0, -1, 0)
+									if handIsP1 then
+										weld.Part1 = leftHand
+									else
+										weld.Part0 = leftHand
+										weld.C0 = attachment and attachment.CFrame or weld.C0
+									end
 									weld:SetAttribute("AtlasBaseC0", nil)
 								end
 							elseif saved then
-								weld.Part0 = saved.part
+								weld.Part0 = saved.part0
+								weld.Part1 = saved.part1
 								weld.C0 = saved.c0
+								weld.C1 = saved.c1
 								weld:SetAttribute("AtlasBaseC0", nil)
 								originals[weld] = nil
 							end
 						end
 
-						local function gripStep()
-							local weld = findGrip()
+						local function gripStep(tool)
+							local weld, handIsP1 = findGrip(tool)
 
-							if not weld then
+							if weld then
+								handStep(weld, handIsP1)
+
+								local base = weld:GetAttribute("AtlasBaseC0")
+
+								if on("toolpos") then
+									if typeof(base) ~= "CFrame" then
+										base = weld.C0
+										weld:SetAttribute("AtlasBaseC0", base)
+									end
+
+									local offset = CFrame.new(num("toolx", 0) / 25, num("tooly", 0) / 25, num("toolz", 0) / 25)
+									local tilt = CFrame.Angles(math.rad(num("toolrx", 0)), 0, 0)
+									local target = offset * base * tilt
+
+									if weld.C0 ~= target then
+										weld.C0 = target
+									end
+								elseif typeof(base) == "CFrame" then
+									weld.C0 = base
+									weld:SetAttribute("AtlasBaseC0", nil)
+								end
 								return
 							end
 
-							handStep(weld)
-
-							local base = weld:GetAttribute("AtlasBaseC0")
-
-							if on("toolpos") then
-								if typeof(base) ~= "CFrame" then
-									base = weld.C0
-									weld:SetAttribute("AtlasBaseC0", base)
+							-- Direct fallback when BSS attaches the collector without a standard JointInstance
+							if tool and (on("toolpos") or (not unloading and cust.toolhand == "Left Hand")) then
+								local char = localPlayer.Character
+								local wantLeft = not unloading and cust.toolhand == "Left Hand"
+								local hand = char and (wantLeft and (char:FindFirstChild("LeftHand") or char:FindFirstChild("Left Arm")) or (char:FindFirstChild("RightHand") or char:FindFirstChild("Right Arm")))
+								local mainPart = tool:IsA("BasePart") and tool or (tool:IsA("Model") and (tool.PrimaryPart or tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart"))) or tool:FindFirstChildWhichIsA("BasePart")
+								if hand and mainPart then
+									local offset = on("toolpos") and CFrame.new(num("toolx", 0) / 25, num("tooly", 0) / 25, num("toolz", 0) / 25) or CFrame.identity
+									local tilt = on("toolpos") and CFrame.Angles(math.rad(num("toolrx", 0)), 0, 0) or CFrame.identity
+									local targetCF = hand.CFrame * offset * tilt
+									if tool:IsA("Model") then
+										pcall(function()
+											tool:PivotTo(targetCF)
+										end)
+									else
+										mainPart.CFrame = targetCF
+									end
 								end
-
-								local offset = CFrame.new(num("toolx", 0) / 25, num("tooly", 0) / 25, num("toolz", 0) / 25)
-								local tilt = CFrame.Angles(math.rad(num("toolrx", 0)), 0, 0)
-								local target = offset * base * tilt
-
-								if weld.C0 ~= target then
-									weld.C0 = target
-								end
-							elseif typeof(base) == "CFrame" then
-								weld.C0 = base
-								weld:SetAttribute("AtlasBaseC0", nil)
 							end
 						end
 
-						local function step()
-							outlineStep(currentTool())
-							gripStep()
+						local function step(dt)
+							local tool = currentTool()
+							outlineStep(tool, dt)
+							gripStep(tool)
 						end
 
 						local function apply()
 							local needed = on("toolol") or on("toolpos") or (not unloading and cust.toolhand == "Left Hand")
 
 							if needed and not connections:Get("customtool") then
-								connections:Add("customtool", RunService.RenderStepped:Connect(function()
-									pcall(step)
+								connections:Add("customtool", RunService.RenderStepped:Connect(function(dt)
+									pcall(step, dt)
 								end))
 							end
 
-							pcall(step)
+							pcall(step, 0)
 
 							if not needed then
 								connections:Cancel("customtool")
@@ -70517,7 +71275,8 @@ more accurate dodging]],
 							local text = "No tool equipped"
 
 							if tool then
-								text = tool.Name .. (findGrip() and " - grip found" or " - no grip found")
+								local grip = findGrip(tool)
+								text = "Equipped: " .. tool.Name .. (grip and " (grip ready)" or " (direct mode)")
 							end
 
 							if statusLabel.Text ~= text then
@@ -70536,6 +71295,16 @@ more accurate dodging]],
 						addDropdown(folder, "Hand", { "Right Hand", "Left Hand" }, "toolhand", request)
 						addSwitch(folder, "Tool Outline", "toolol", request)
 						makeColorPicker(folder, "Outline Color", "toolol", { 255, 140, 40 }, request)
+						local toolRainbowSpeedSlider = nil
+						addSwitch(folder, "Rainbow Outline", "toolrainbow", function(v)
+							if toolRainbowSpeedSlider then
+								toolRainbowSpeedSlider.SetVisible(v == true)
+								folder.Refresh()
+							end
+							request()
+						end)
+						toolRainbowSpeedSlider = addSlider(folder, "Rainbow Speed", "toolrainbowspeed", 1, 20, request)
+						toolRainbowSpeedSlider.SetVisible(cust.toolrainbow == true)
 						addSwitch(folder, "Move Tool In Hand", "toolpos", request)
 						addSlider(folder, "Left / Right", "toolx", -100, 100, request)
 						addSlider(folder, "Up / Down", "tooly", -100, 100, request)
@@ -70593,11 +71362,18 @@ more accurate dodging]],
 							end
 						end
 
-						local function step()
+						local predHue = 0
+
+						local function step(dt)
 							local char = localPlayer.Character
 							local root = char and char:FindFirstChild("HumanoidRootPart")
 							local humanoid = char and char:FindFirstChildOfClass("Humanoid")
 							local color = rgbOf("pred", 255, 140, 40)
+							if cust.predrainbow == true then
+								local rSpeed = math.clamp(num("predrainbowspeed", 5), 1, 20)
+								predHue = (predHue + (dt or 0.016) * rSpeed * 0.05) % 1
+								color = Color3.fromHSV(predHue, 0.8, 1)
+							end
 							local index = 1
 							local landPoint = nil
 
@@ -70707,8 +71483,8 @@ more accurate dodging]],
 							local needed = on("predplayer") or on("predmob")
 
 							if needed and not connections:Get("custompred") then
-								connections:Add("custompred", RunService.Heartbeat:Connect(function()
-									pcall(step)
+								connections:Add("custompred", RunService.Heartbeat:Connect(function(dt)
+									pcall(step, dt)
 								end))
 							elseif not needed then
 								clear()
@@ -70730,13 +71506,24 @@ more accurate dodging]],
 							Tooltip = "Red lines show where nearby monsters are heading.",
 						})
 						makeColorPicker(folder, "Line Color", "pred", { 255, 140, 40 }, request)
+						local predRainbowSpeedSlider = nil
+						addSwitch(folder, "Rainbow", "predrainbow", function(v)
+							if predRainbowSpeedSlider then
+								predRainbowSpeedSlider.SetVisible(v == true)
+								folder.Refresh()
+							end
+							request()
+						end)
+						predRainbowSpeedSlider = addSlider(folder, "Rainbow Speed", "predrainbowspeed", 1, 20, request)
+						predRainbowSpeedSlider.SetVisible(cust.predrainbow == true)
 						addSlider(folder, "Path Length (sec)", "predlength", 1, 5, request)
 					end)
 
-					-- item timers: how long other players have been holding their item --------------------------
+					-- item timers: dropped field token timers + player held collector/item timers -------------
 					feature("Item Timers", function()
 						local folder = tab.AddFolder("Item Timers", true)
 						local records = {}
+						local tokenRecords = setmetatable({}, weak)
 
 						local function formatTime(seconds)
 							return string.format("%d:%02d", math.floor(seconds / 60), math.floor(seconds % 60))
@@ -70747,73 +71534,169 @@ more accurate dodging]],
 
 							if record then
 								if record.gui then
-									record.gui:Destroy()
+									pcall(function()
+										record.gui:Destroy()
+									end)
 								end
 
 								records[player] = nil
 							end
 						end
 
+						local function dropToken(token)
+							local rec = tokenRecords[token]
+							if rec then
+								if rec.gui then
+									pcall(function()
+										rec.gui:Destroy()
+									end)
+								end
+								tokenRecords[token] = nil
+							end
+						end
+
+						local function dropAllTokens()
+							for token in pairs(tokenRecords) do
+								dropToken(token)
+							end
+						end
+
+						local function makeTimerBillboard(adornee, studsOffset, width, height, textSize)
+							local gui = Instance.new("BillboardGui")
+							gui.Name = "AtlasItemTimer"
+							gui.Adornee = adornee
+							gui.AlwaysOnTop = true
+							gui.Size = UDim2.new(0, width, 0, height)
+							gui.StudsOffset = studsOffset
+							gui.ResetOnSpawn = false
+
+							local label = Instance.new("TextLabel")
+							label.BackgroundColor3 = Color3.fromRGB(14, 14, 18)
+							label.BackgroundTransparency = 0.2
+							label.Size = UDim2.new(1, 0, 1, 0)
+							label.Font = Enum.Font.GothamBold
+							label.TextSize = textSize
+							label.TextColor3 = Color3.fromRGB(248, 248, 252)
+							label.TextStrokeColor3 = Color3.new(0, 0, 0)
+							label.TextStrokeTransparency = 0.35
+							label.TextTruncate = Enum.TextTruncate.AtEnd
+							label:SetAttribute("AtlasIgnore", true)
+							addCorner(label, UDim.new(0, 6))
+							label.Parent = gui
+
+							local stroke = Instance.new("UIStroke")
+							stroke.Color = Color3.fromRGB(255, 160, 60)
+							stroke.Transparency = 0.45
+							stroke.Thickness = 1
+							stroke.Parent = label
+
+							gui.Parent = ScreenGui.Parent
+							return gui, label, stroke
+						end
+
 						local function step()
 							local myChar = localPlayer.Character
 							local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
 							local range = math.clamp(num("durrange", 200), 30, 600)
+							local now = os.clock()
 
-							for _, player in ipairs(Players:GetPlayers()) do
-								if player ~= localPlayer then
-									local char = player.Character
-									local head = char and char:FindFirstChild("Head")
-									local tool = char and char:FindFirstChildOfClass("Tool")
-									local record = records[player]
-									local near = head and myRoot and (head.Position - myRoot.Position).Magnitude <= range
+							-- 1. Dropped field token / ability timers
+							if cust.durtokens ~= false then
+								local activeTokens = {}
+								local containers = { workspace:FindFirstChild("Collectibles") }
+								local cam = workspace.CurrentCamera
+								if cam and cam:FindFirstChild("DupedTokens") then
+									containers[#containers + 1] = cam.DupedTokens
+								end
 
-									if tool and near then
-										if not record or record.name ~= tool.Name then
+								local shownTokens = 0
+								for _, container in ipairs(containers) do
+									for _, token in ipairs(container:GetChildren()) do
+										if token:IsA("BasePart") and token.Transparency < 0.9 then
+											activeTokens[token] = true
+											local dist = myRoot and (token.Position - myRoot.Position).Magnitude or 0
+											if dist <= range and shownTokens < 45 then
+												shownTokens += 1
+												local rec = tokenRecords[token]
+												if not rec then
+													local tName = identifyToken(token)
+													local estLife = ABILITY_TOKEN_SET[tName] and 8 or 15
+													rec = { name = tName, since = now, life = estLife }
+													tokenRecords[token] = rec
+												end
+
+												if not rec.gui or not rec.gui.Parent then
+													rec.gui, rec.label, rec.stroke = makeTimerBillboard(token, Vector3.new(0, 2.2, 0), 130, 24, 11)
+												end
+
+												local elapsed = now - rec.since
+												local rem = math.max(0, rec.life - elapsed)
+												if rem > 0 then
+													rec.label.Text = string.format("%s  %.1fs", rec.name, rem)
+													local ratio = math.clamp(rem / rec.life, 0, 1)
+													local col = ratio > 0.5 and Color3.fromRGB(110, 235, 130) or (ratio > 0.25 and Color3.fromRGB(250, 205, 70) or Color3.fromRGB(255, 85, 85))
+													rec.label.TextColor3 = col
+													if rec.stroke then
+														rec.stroke.Color = col
+													end
+												else
+													rec.label.Text = string.format("%s  %s", rec.name, formatTime(elapsed))
+													rec.label.TextColor3 = Color3.fromRGB(245, 245, 250)
+												end
+											elseif tokenRecords[token] then
+												dropToken(token)
+											end
+										end
+									end
+								end
+
+								for token in pairs(tokenRecords) do
+									if not activeTokens[token] or not token.Parent then
+										dropToken(token)
+									end
+								end
+							else
+								dropAllTokens()
+							end
+
+							-- 2. Player held collector / tool timers
+							if cust.durplayers ~= false then
+								for _, player in ipairs(Players:GetPlayers()) do
+									local allowPlayer = (player ~= localPlayer) or (cust.durself ~= false)
+									if allowPlayer then
+										local char = player.Character
+										local head = char and char:FindFirstChild("Head")
+										local tool = char and findEquippedTool(char, player)
+										local record = records[player]
+										local near = head and (player == localPlayer or (myRoot and (head.Position - myRoot.Position).Magnitude <= range))
+
+										if tool and near then
+											if not record or record.name ~= tool.Name then
+												drop(player)
+												record = { name = tool.Name, since = now }
+												records[player] = record
+											end
+
+											if not record.gui or not record.gui.Parent then
+												record.gui, record.label, record.stroke = makeTimerBillboard(head, Vector3.new(0, 3.2, 0), 165, 28, 12)
+											end
+
+											record.label.Text = record.name .. "  " .. formatTime(now - record.since)
+										elseif record then
 											drop(player)
-											record = { name = tool.Name, since = os.clock() }
-											records[player] = record
 										end
-
-										if not record.gui or not record.gui.Parent then
-											local gui = Instance.new("BillboardGui")
-											gui.Name = "AtlasItemTimer"
-											gui.Adornee = head
-											gui.AlwaysOnTop = true
-											gui.Size = UDim2.new(0, 160, 0, 34)
-											gui.StudsOffset = Vector3.new(0, 3.2, 0)
-											gui.ResetOnSpawn = false
-
-											local label = Instance.new("TextLabel")
-											label.BackgroundColor3 = Color3.new(0, 0, 0)
-											label.BackgroundTransparency = 0.25
-											label.Size = UDim2.new(1, 0, 1, 0)
-											label.Font = Enum.Font.GothamBold
-											label.TextSize = 13
-											label.TextColor3 = Color3.fromRGB(250, 250, 252)
-											label.TextStrokeColor3 = Color3.new(1, 1, 1)
-											label.TextStrokeTransparency = 0.8
-											addCorner(label, UDim.new(0, 8))
-											label.Parent = gui
-
-											local stroke = Instance.new("UIStroke")
-											stroke.Color = Color3.new(1, 1, 1)
-											stroke.Transparency = 0.88
-											stroke.Parent = label
-
-											gui.Parent = ScreenGui.Parent
-											record.gui = gui
-											record.label = label
-										end
-
-										record.label.Text = record.name .. "  " .. formatTime(os.clock() - record.since)
-									elseif record then
+									elseif records[player] then
 										drop(player)
 									end
 								end
-							end
 
-							for player in pairs(records) do
-								if not player.Parent then
+								for player in pairs(records) do
+									if not player.Parent then
+										drop(player)
+									end
+								end
+							else
+								for player in pairs(records) do
 									drop(player)
 								end
 							end
@@ -70827,18 +71710,20 @@ more accurate dodging]],
 									connections:Add("customdur", RunService.Heartbeat:Connect(function(dt)
 										elapsed += dt
 
-										if elapsed >= 0.4 then
+										if elapsed >= 0.15 then
 											elapsed = 0
 											pcall(step)
 										end
 									end))
 								end
+								pcall(step)
 							else
 								connections:Cancel("customdur")
 
 								for player in pairs(records) do
 									drop(player)
 								end
+								dropAllTokens()
 							end
 						end
 
@@ -70851,11 +71736,15 @@ more accurate dodging]],
 							for player in pairs(records) do
 								drop(player)
 							end
+							dropAllTokens()
 						end
 
 						addSwitch(folder, "Show Item Timers", "dur", request, {
-							Tooltip = "Shows above other players which item they hold and for how long.",
+							Tooltip = "Shows timers on dropped field tokens/abilities and held collectors/items.",
 						})
+						addSwitch(folder, "Dropped Token Timers", "durtokens", request)
+						addSwitch(folder, "Player Held Item Timers", "durplayers", request)
+						addSwitch(folder, "Show On Yourself", "durself", request)
 						addSlider(folder, "Range (studs)", "durrange", 30, 600, request)
 					end)
 
@@ -70869,6 +71758,14 @@ more accurate dodging]],
 						local startClock = os.clock()
 						local startHoney = nil
 						local tabHeld = false
+						local hudHue = 0
+
+						local function getHudAccent()
+							if cust.hudrainbow == true then
+								return Color3.fromHSV(hudHue % 1, 0.78, 1)
+							end
+							return rgbOf("hudacc", 90, 170, 255)
+						end
 
 						local WIDGETS = {
 							{ "name", "Script Name", "" },
@@ -70930,7 +71827,7 @@ more accurate dodging]],
 
 						local function styleStroke(widget)
 							local style = cust.hudstyle
-							local accent = rgbOf("hudacc", 90, 170, 255)
+							local accent = getHudAccent()
 
 							if editMode then
 								widget.stroke.Color = accent
@@ -70952,7 +71849,7 @@ more accurate dodging]],
 						local function buildWidget(id, label)
 							local style = cust.hudstyle
 							local size = math.clamp(num("hudsize", 14), 10, 26)
-							local accent = rgbOf("hudacc", 90, 170, 255)
+							local accent = getHudAccent()
 							local textColor = rgbOf("hudtext", 255, 255, 255)
 							local isList = id == "list" or id == "inspect"
 
@@ -71034,14 +71931,15 @@ more accurate dodging]],
 								return item
 							end
 
+							local titleLabel = nil
 							if label ~= "" then
-								local title = text(1, Enum.Font.GothamBold, size - 3, accent)
-								title.Text = label
+								titleLabel = text(1, Enum.Font.GothamBold, size - 3, accent)
+								titleLabel.Text = label
 							end
 
 							local value = text(2, Enum.Font.GothamBold, size, textColor)
 
-							local widget = { id = id, frame = frame, value = value, stroke = stroke }
+							local widget = { id = id, frame = frame, value = value, title = titleLabel, bar = frame:FindFirstChild("Accent"), stroke = stroke }
 							widgets[id] = widget
 							styleStroke(widget)
 
@@ -71141,7 +72039,7 @@ more accurate dodging]],
 
 									if target and target ~= localPlayer then
 										local char = target.Character
-										local tool = char and char:FindFirstChildOfClass("Tool")
+										local tool = char and findEquippedTool(char, target)
 										local gear = {}
 
 										if char then
@@ -71209,6 +72107,21 @@ more accurate dodging]],
 							connections:Add("customhud", RunService.RenderStepped:Connect(function(dt)
 								elapsed += dt
 								frames += 1
+
+								if cust.hudrainbow == true then
+									local rSpeed = math.clamp(num("hudrainbowspeed", 5), 1, 20)
+									hudHue = (hudHue + (dt or 0.016) * rSpeed * 0.045) % 1
+									local accCol = getHudAccent()
+									for _, w in pairs(widgets) do
+										if w.title then
+											w.title.TextColor3 = accCol
+										end
+										if w.bar then
+											w.bar.BackgroundColor3 = accCol
+										end
+										styleStroke(w)
+									end
+								end
 
 								if elapsed < 0.4 then
 									return
@@ -71348,6 +72261,16 @@ more accurate dodging]],
 						addDropdown(folder, "Style", STYLES, "hudstyle", request)
 						addSlider(folder, "Text Size", "hudsize", 10, 26, request)
 						makeColorPicker(folder, "Accent Color", "hudacc", { 255, 140, 40 }, request)
+						local hudRainbowSpeedSlider = nil
+						addSwitch(folder, "Rainbow Accent", "hudrainbow", function(v)
+							if hudRainbowSpeedSlider then
+								hudRainbowSpeedSlider.SetVisible(v == true)
+								folder.Refresh()
+							end
+							request()
+						end)
+						hudRainbowSpeedSlider = addSlider(folder, "Rainbow Speed", "hudrainbowspeed", 1, 20, request)
+						hudRainbowSpeedSlider.SetVisible(cust.hudrainbow == true)
 						makeColorPicker(folder, "Text Color", "hudtext", { 255, 255, 255 }, request)
 						addSwitch(folder, "Color FPS / Ping By Value", "hudsmart", nil)
 
@@ -71378,7 +72301,31 @@ more accurate dodging]],
 						local waypoints = {}
 						local pendingName = ""
 						local counter = 0
+						local wpHue = 0
 						local MAX_WAYPOINTS = 15
+						local WP_KEYS = { "Off", "N", "M", "B", "V", "G", "H", "J", "K", "L", "P", "T", "Y", "U", "Z", "X", "C", "F6", "F7", "F8", "Insert", "Home", "End" }
+
+						local function getWpColor()
+							if cust.wprainbow == true then
+								return Color3.fromHSV(wpHue % 1, 0.8, 1)
+							end
+							return rgbOf("wp", 255, 200, 60)
+						end
+
+						local function recolorWaypoints()
+							local c = getWpColor()
+							for _, wp in ipairs(waypoints) do
+								if wp.dot then
+									wp.dot.BackgroundColor3 = c
+								end
+								if wp.title then
+									wp.title.TextColor3 = c
+								end
+								if wp.nameLabel then
+									wp.nameLabel.TextColor3 = c
+								end
+							end
+						end
 
 						local header = folder.AddLabel("Waypoints (0/" .. MAX_WAYPOINTS .. ")")
 						local box = header.Parent
@@ -71493,7 +72440,7 @@ more accurate dodging]],
 
 							counter += 1
 							local name = pendingName ~= "" and pendingName or ("Waypoint " .. counter)
-							local color = rgbOf("wp", 255, 200, 60)
+							local color = getWpColor()
 
 							local attachment = Instance.new("Attachment")
 							attachment.Name = "AtlasWaypoint"
@@ -71589,6 +72536,8 @@ more accurate dodging]],
 								name = name,
 								attachment = attachment,
 								gui = gui,
+								dot = dot,
+								title = title,
 								info = info,
 								info2 = info2,
 								nameLabel = nameLabel,
@@ -71614,6 +72563,12 @@ more accurate dodging]],
 								connections:Add("customwaypoints", RunService.Heartbeat:Connect(function(dt)
 									elapsed += dt
 
+									if cust.wprainbow == true then
+										local rSpeed = math.clamp(num("wprainbowspeed", 5), 1, 20)
+										wpHue = (wpHue + dt * rSpeed * 0.045) % 1
+										recolorWaypoints()
+									end
+
 									if elapsed >= 0.25 then
 										elapsed = 0
 										pcall(update)
@@ -71624,20 +72579,45 @@ more accurate dodging]],
 							update()
 						end
 
-						cleanups[#cleanups + 1] = clearAll
+						connections:Add("customwpkey", UserInputService.InputBegan:Connect(function(input, processed)
+							if processed or not cust.wpkey or cust.wpkey == "Off" or UserInputService:GetFocusedTextBox() then
+								return
+							end
+
+							if input.KeyCode.Name == cust.wpkey then
+								addWaypoint()
+								ui.Notify("Waypoints", "Added waypoint (" .. #waypoints .. "/" .. MAX_WAYPOINTS .. ")")
+							end
+						end))
+
+						cleanups[#cleanups + 1] = function()
+							connections:Cancel("customwpkey")
+							clearAll()
+						end
 
 						folder.AddTextBox("Waypoint name (optional)", function(text)
 							pendingName = type(text) == "string" and string.sub(text, 1, 24) or ""
 						end)
 
 						folder.AddButton("Add Waypoint Here", addWaypoint)
+						addDropdown(folder, "Add Waypoint Key", WP_KEYS, "wpkey", function() end)
 
 						folder.AddButton("Remove Last", function()
 							removeWaypoint(#waypoints)
 						end)
 
 						folder.AddButton("Clear All", clearAll)
-						makeColorPicker(folder, "Marker Color", "wp", { 255, 140, 40 }, nil)
+						makeColorPicker(folder, "Marker Color", "wp", { 255, 140, 40 }, recolorWaypoints)
+						local wpRainbowSpeedSlider = nil
+						addSwitch(folder, "Rainbow Markers", "wprainbow", function(v)
+							if wpRainbowSpeedSlider then
+								wpRainbowSpeedSlider.SetVisible(v == true)
+								folder.Refresh()
+							end
+							recolorWaypoints()
+						end)
+						wpRainbowSpeedSlider = addSlider(folder, "Rainbow Speed", "wprainbowspeed", 1, 20, recolorWaypoints)
+						wpRainbowSpeedSlider.SetVisible(cust.wprainbow == true)
 						addSwitch(folder, "Show Distance", "wpdistance", nil)
 						addSlider(folder, "Auto Remove (min, 0 = never)", "wpexpire", 0, 60, nil)
 					end)
@@ -71646,8 +72626,16 @@ more accurate dodging]],
 					feature("Animations", function()
 						local folder = tab.AddFolder("Animations", true)
 						local busy = false
+						local toggleToken = 0
+						local targetVisible = nil
+						local activeWindowTween = nil
+						local activeScaleTween = nil
+						local savedWindowPos = nil
+						local lastWindowToggle = 0
 						local candidates = {}
 						local shownBefore = setmetatable({}, weak)
+						local basePositions = setmetatable({}, weak)
+						local activeObjTweens = setmetatable({}, weak)
 						local lastScan = 0
 						local pollElapsed = 0
 
@@ -71679,89 +72667,167 @@ more accurate dodging]],
 							return TweenInfo.new(duration() * 1.4, Enum.EasingStyle.Quint, opening and Enum.EasingDirection.Out or Enum.EasingDirection.InOut)
 						end
 
-						-- show animation for any object
+						-- show animation for any object (without position drift)
 						local function play(object)
+							if not object or not object.Parent then
+								return
+							end
+
+							local prev = activeObjTweens[object]
+							if prev then
+								pcall(function()
+									prev:Cancel()
+								end)
+								activeObjTweens[object] = nil
+							end
+
+							if not basePositions[object] then
+								basePositions[object] = object.Position
+							end
+							local base = basePositions[object]
+							local scale = getScale(object)
+
 							if cust.animstyle == "Slide" then
-								local base = object.Position
-								object.Position = base + UDim2.new(0, 0, 0, 24)
-								TweenService:Create(object, TweenInfo.new(duration(), Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = base }):Play()
+								scale.Scale = 1
+								object.Position = base + UDim2.new(0, 0, 0, 18)
+								local tw = TweenService:Create(object, TweenInfo.new(duration(), Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Position = base })
+								activeObjTweens[object] = tw
+								tw.Completed:Once(function()
+									if activeObjTweens[object] == tw then
+										object.Position = base
+										activeObjTweens[object] = nil
+									end
+								end)
+								tw:Play()
 							else
-								local scale = getScale(object)
-								scale.Scale = 0.9
-								TweenService:Create(scale, TweenInfo.new(duration(), Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+								object.Position = base
+								scale.Scale = 0.92
+								local tw = TweenService:Create(scale, TweenInfo.new(duration(), Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 })
+								activeObjTweens[object] = tw
+								tw.Completed:Once(function()
+									if activeObjTweens[object] == tw then
+										scale.Scale = 1
+										activeObjTweens[object] = nil
+									end
+								end)
+								tw:Play()
 							end
 						end
 
-						-- the script window: animated show / hide
+						-- the script window: smooth, non-glitchy animated show / hide
 						state.customToggle = function(nextVisible)
 							if not on("animwindow") then
 								return false
 							end
 
-							if busy then
-								return true
+							local window = mobileToggleButton
+							local scale = getScale(window)
+
+							-- Cancel any in-flight window animation cleanly
+							if activeWindowTween then
+								pcall(function()
+									activeWindowTween:Cancel()
+								end)
+								activeWindowTween = nil
+							end
+							if activeScaleTween then
+								pcall(function()
+									activeScaleTween:Cancel()
+								end)
+								activeScaleTween = nil
 							end
 
+							if not busy or not savedWindowPos then
+								savedWindowPos = window.Position
+							end
+
+							local basePos = savedWindowPos
 							busy = true
+							targetVisible = nextVisible
+							lastWindowToggle = os.clock()
+							toggleToken += 1
+							local myToken = toggleToken
 
-							local window = mobileToggleButton
 							local slide = cust.animstyle == "Slide"
-							local scale = getScale(window)
-							local basePos = window.Position
-							local size = window.AbsoluteSize
-							local small = 0.9
+							local dur = duration()
+							local small = 0.88
 
-							local function away()
-								if slide then
-									return basePos + UDim2.new(0, 0, 0, 24)
+							-- Sync shownBefore on all inner tab candidates so opening the window doesn't double-animate tabs
+							for _, obj in ipairs(candidates) do
+								if obj and obj:IsDescendantOf(ScreenGui) then
+									shownBefore[obj] = nextVisible
 								end
-
-								return UDim2.new(basePos.X.Scale, basePos.X.Offset + size.X * (1 - small) / 2, basePos.Y.Scale, basePos.Y.Offset + size.Y * (1 - small) / 2)
 							end
 
 							if nextVisible then
-								local info = TweenInfo.new(duration(), slide and Enum.EasingStyle.Quad or Enum.EasingStyle.Back, Enum.EasingDirection.Out)
-								scale.Scale = slide and 1 or small
-								window.Position = away()
+								window.Position = basePos
+								scale.Scale = 1
 								window.Visible = true
 
-								local tween = TweenService:Create(window, info, { Position = basePos })
+								local w = window.AbsoluteSize.X > 0 and window.AbsoluteSize.X or window.Size.X.Offset
+								local h = window.AbsoluteSize.Y > 0 and window.AbsoluteSize.Y or window.Size.Y.Offset
+								local startPos = slide
+									and (basePos + UDim2.new(0, 0, 0, 26))
+									or UDim2.new(basePos.X.Scale, basePos.X.Offset + w * (1 - small) * 0.5, basePos.Y.Scale, basePos.Y.Offset + h * (1 - small) * 0.5)
+
+								window.Position = startPos
+								scale.Scale = slide and 1 or small
+
+								local info = TweenInfo.new(dur, slide and Enum.EasingStyle.Quint or Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+								activeWindowTween = TweenService:Create(window, info, { Position = basePos })
 
 								if not slide then
-									TweenService:Create(scale, info, { Scale = 1 }):Play()
+									activeScaleTween = TweenService:Create(scale, info, { Scale = 1 })
+									activeScaleTween:Play()
 								end
 
-								tween.Completed:Once(function()
-									window.Position = basePos
-									scale.Scale = 1
-									busy = false
+								activeWindowTween.Completed:Once(function()
+									if toggleToken == myToken then
+										window.Position = basePos
+										scale.Scale = 1
+										busy = false
+									end
 								end)
 
-								tween:Play()
+								activeWindowTween:Play()
 							else
-								local info = TweenInfo.new(duration(), Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-								local tween = TweenService:Create(window, info, { Position = away() })
+								local w = window.AbsoluteSize.X > 0 and window.AbsoluteSize.X or window.Size.X.Offset
+								local h = window.AbsoluteSize.Y > 0 and window.AbsoluteSize.Y or window.Size.Y.Offset
+								local endPos = slide
+									and (basePos + UDim2.new(0, 0, 0, 24))
+									or UDim2.new(basePos.X.Scale, basePos.X.Offset + w * (1 - small) * 0.5, basePos.Y.Scale, basePos.Y.Offset + h * (1 - small) * 0.5)
+
+								local info = TweenInfo.new(dur * 0.85, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+								activeWindowTween = TweenService:Create(window, info, { Position = endPos })
 
 								if not slide then
-									TweenService:Create(scale, info, { Scale = small }):Play()
+									activeScaleTween = TweenService:Create(scale, info, { Scale = small })
+									activeScaleTween:Play()
 								end
 
-								tween.Completed:Once(function()
-									window.Visible = false
-									scale.Scale = 1
-									window.Position = basePos
-									busy = false
+								activeWindowTween.Completed:Once(function()
+									if toggleToken == myToken then
+										window.Visible = false
+										scale.Scale = 1
+										window.Position = basePos
+										busy = false
+									end
 								end)
 
-								tween:Play()
+								activeWindowTween:Play()
 							end
 
 							return true
 						end
 
 						local function toggleWindow()
-							local nextVisible = not mobileToggleButton.Visible
-							state.mobiletoggle = mobileToggleButton.Visible
+							local current = mobileToggleButton.Visible
+							if busy and targetVisible ~= nil then
+								-- pressed while animating: flip the animation target cleanly
+								current = targetVisible
+							end
+							local nextVisible = not current
+							state.mobiletoggle = current
 
 							if not (state.customToggle and state.customToggle(nextVisible)) then
 								mobileToggleButton.Visible = nextVisible
