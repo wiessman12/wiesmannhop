@@ -1613,8 +1613,8 @@ do
 		end
 	end))
 
-	local title = "KILLSWITCH"
-	local uicolor = _G.uicolor and _G.uicolor or Color3.fromRGB(41, 74, 122)
+	local title = "ANCHOR"
+	local uicolor = _G.uicolor and _G.uicolor or Color3.fromRGB(0, 190, 185)
 	-- Anti-Lag conflict guard: Custom features that fight Anti-Lag's lighting/quality
 	-- overrides cannot be switched on while Anti-Lag is on. Kept inside uiParts so the
 	-- main chunk does not get another top-level local.
@@ -1789,7 +1789,7 @@ do
 
 	isDesktop = _G.desktop or isDesktop
 
-	-- KILLSWITCH layout: sidebar on the left, header with breadcrumb, cards on the right
+	-- ANCHOR layout: sidebar on the left, header with breadcrumb, cards on the right
 	uiParts.layout = { sidebar = isDesktop and 200 or 150, header = 48, card = 58, cardSmall = 44 }
 
 	-- sidebar order and section headers
@@ -2376,7 +2376,7 @@ do
 
 		local clone = uiParts.bar:Clone()
 		local indicator = clone.Indicator
-		clone.Title.Text = "KILLSWITCH Console"
+		clone.Title.Text = "ANCHOR Console"
 		clone.Parent = Frame8
 
 		clone.InputBegan:Connect(function(n)
@@ -2389,12 +2389,33 @@ do
 			end
 		end)
 
+		-- the console keeps its own open/closed flag (it used to share `visible` with the main window)
+		do
+			local consoleOpen = true
+
 		indicator.MouseButton1Click:Connect(function()
-			visible = not visible
-			clone.Frame.Visible = visible
-			TweenService:Create(Frame8, TweenInfo.new(0.1, Enum.EasingStyle.Linear, Enum.EasingDirection.In), { Size = visible and UDim2.new(0, vector24.X, 0, vector24.Y) or UDim2.new(0, vector24.X, 0, 25) }):Play()
-			TweenService:Create(indicator, TweenInfo.new(0.1, Enum.EasingStyle.Linear, Enum.EasingDirection.In), { Rotation = visible and 90 or 180 }):Play()
+			consoleOpen = not consoleOpen
+			clone.Frame.Visible = consoleOpen
+
+			if not consoleOpen then
+				ScrollingFrame.Visible = false
+				Frame9.Visible = false
+			end
+
+			local sizeTween = TweenService:Create(Frame8, TweenInfo.new(0.1, Enum.EasingStyle.Linear, Enum.EasingDirection.In), { Size = consoleOpen and UDim2.new(0, vector24.X, 0, vector24.Y) or UDim2.new(0, vector24.X, 0, 25) })
+			sizeTween:Play()
+			TweenService:Create(indicator, TweenInfo.new(0.1, Enum.EasingStyle.Linear, Enum.EasingDirection.In), { Rotation = consoleOpen and 90 or 180 }):Play()
+
+			if consoleOpen then
+				sizeTween.Completed:Once(function(playbackState)
+					if consoleOpen and playbackState == Enum.PlaybackState.Completed then
+						ScrollingFrame.Visible = true
+						Frame9.Visible = true
+					end
+				end)
+			end
 		end)
+		end
 
 		logger.toggle = function(visible2)
 			logger.visible = visible2
@@ -2506,7 +2527,7 @@ do
 							threadCount += 1
 
 							threads:Add(threadCount, function()
-								discord.Send("KILLSWITCH Console", "```" .. table.concat(linesCopy, "\n") .. "```", true)
+								discord.Send("ANCHOR Console", "```" .. table.concat(linesCopy, "\n") .. "```", true)
 							end)
 						end
 					end
@@ -2614,7 +2635,7 @@ do
 		clone.Frame.Visible = false
 
 		uiParts.setCrumb = function(tabName)
-			local section = uiParts.tabSectionOf[tabName] or "KILLSWITCH"
+			local section = uiParts.tabSectionOf[tabName] or "ANCHOR"
 			clone.Title.Text = string.format('<font color="#7c7c84">%s  /</font>  %s', section, tabName)
 		end
 
@@ -2630,9 +2651,38 @@ do
 			end
 		end)
 
+		-- everything below the header (tab list, tab pages, resize grip) is switched off while
+		-- the window is collapsed, so nothing pokes out of the rounded 48px bar
+		local function setBodyVisible(show)
+			local side = ImageLabel:FindFirstChild("TabButtons")
+			local list = side and side:FindFirstChildOfClass("ScrollingFrame")
+			local grip = ImageLabel:FindFirstChild("Resize")
+
+			if list then
+				list.Visible = show
+			end
+
+			if grip then
+				grip.Visible = show
+			end
+
+			if activeTabFrame then
+				activeTabFrame.Visible = show
+			end
+
+			if activeTabFrame2 then
+				activeTabFrame2.Visible = show
+			end
+		end
+
 		indicator.MouseButton1Click:Connect(function()
 			visible = not visible
 			local smooth = state.collapseInfo and state.collapseInfo(visible)
+			local info = smooth or TweenInfo.new(0.1, Enum.EasingStyle.Linear, Enum.EasingDirection.In)
+
+			if not visible then
+				setBodyVisible(false)
+			end
 
 			if visible or not smooth then
 				clone.Frame.Visible = visible
@@ -2644,8 +2694,18 @@ do
 				end)
 			end
 
-			TweenService:Create(ImageLabel, (smooth or TweenInfo.new(0.1, Enum.EasingStyle.Linear, Enum.EasingDirection.In)), { Size = visible and UDim2.new(0, vector22.X, 0, vector22.Y) or UDim2.new(0, vector22.X, 0, uiParts.layout.header) }):Play()
-			TweenService:Create(indicator, (smooth or TweenInfo.new(0.1, Enum.EasingStyle.Linear, Enum.EasingDirection.In)), { Rotation = visible and 90 or 180 }):Play()
+			local sizeTween = TweenService:Create(ImageLabel, info, { Size = visible and UDim2.new(0, vector22.X, 0, vector22.Y) or UDim2.new(0, vector22.X, 0, uiParts.layout.header) })
+			sizeTween:Play()
+			TweenService:Create(indicator, info, { Rotation = visible and 90 or 180 }):Play()
+
+			if visible then
+				-- show the content again only once the window has reached full size
+				sizeTween.Completed:Once(function(playbackState)
+					if visible and playbackState == Enum.PlaybackState.Completed then
+						setBodyVisible(true)
+					end
+				end)
+			end
 		end)
 	end
 
@@ -2687,24 +2747,40 @@ do
 	local LogoMark = Instance.new("Frame")
 	LogoMark.Name = "Mark"
 	LogoMark.BackgroundColor3 = uicolor
+	LogoMark.BackgroundTransparency = 0.82
 	LogoMark.BorderSizePixel = 0
-	LogoMark.Position = UDim2.new(0, 0, 0.5, -9)
-	LogoMark.Size = UDim2.new(0, 18, 0, 18)
-	LogoMark.Rotation = 45
+	LogoMark.Position = UDim2.new(0, 0, 0.5, -13)
+	LogoMark.Size = UDim2.new(0, 26, 0, 26)
 	LogoMark.Parent = Logo
 	local LogoMarkCorner = Instance.new("UICorner")
-	LogoMarkCorner.CornerRadius = UDim.new(0, 5)
+	LogoMarkCorner.CornerRadius = UDim.new(0, 8)
 	LogoMarkCorner.Parent = LogoMark
+	do
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = uicolor
+		stroke.Transparency = 0.55
+		stroke.Thickness = 1
+		stroke.Parent = LogoMark
+		local icon = Instance.new("ImageLabel")
+		icon.Name = "Icon"
+		icon.BackgroundTransparency = 1
+		-- anchor avatar: swap this asset id for your own image if you prefer
+		icon.Image = "rbxassetid://10734887756"
+		icon.ImageColor3 = uicolor
+		icon.Position = UDim2.new(0.5, -9, 0.5, -9)
+		icon.Size = UDim2.new(0, 18, 0, 18)
+		icon.Parent = LogoMark
+	end
 	local LogoText = Instance.new("TextLabel")
 	LogoText.Name = "Text"
 	LogoText.BackgroundTransparency = 1
 	LogoText.Font = Enum.Font.GothamBlack
-	LogoText.Text = "KILLSWITCH"
+	LogoText.Text = "ANCHOR"
 	LogoText.TextColor3 = Color3.fromRGB(245, 245, 247)
 	LogoText.TextSize = 15
 	LogoText.TextXAlignment = Enum.TextXAlignment.Left
-	LogoText.Position = UDim2.new(0, 30, 0, 0)
-	LogoText.Size = UDim2.new(1, -30, 1, 0)
+	LogoText.Position = UDim2.new(0, 36, 0, 0)
+	LogoText.Size = UDim2.new(1, -36, 1, 0)
 	LogoText.Parent = Logo
 	local ScrollingFrame = Instance.new("ScrollingFrame")
 	ScrollingFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
@@ -73057,7 +73133,7 @@ more accurate dodging]],
 							end
 						end
 
-						-- watermark: KILLSWITCH | fps | ping | time, same look as the menu
+						-- watermark: ANCHOR | fps | ping | time, same look as the menu
 						local function buildWatermark()
 							local size = math.clamp(num("hudsize", 14), 10, 26)
 							local accent = getHudAccent()
@@ -73144,7 +73220,7 @@ more accurate dodging]],
 								line.Parent = content
 							end
 
-							local nameLabel = label("KILLSWITCH", Enum.Font.GothamBlack, textColor)
+							local nameLabel = label("ANCHOR", Enum.Font.GothamBlack, textColor)
 							divider()
 							local fpsLabel = label("-- fps", Enum.Font.GothamMedium, Color3.fromRGB(200, 200, 205))
 							divider()
@@ -73300,7 +73376,7 @@ more accurate dodging]],
 								local color = textColor
 
 								if id == "name" then
-									value.Text = "KILLSWITCH"
+									value.Text = "ANCHOR"
 									color = rgbOf("hudtext", 255, 255, 255)
 
 									if widget.fps then
